@@ -53,14 +53,21 @@ function addMessage(role, content = "") {
     const text = document.createElement("div");
     text.textContent = content;
 
+    const telemetry = document.createElement("div");
+    telemetry.className = "telemetry";  
+
     container.appendChild(roleLabel);
     container.appendChild(text);
+
+    if (role === "assistant") {
+    container.appendChild(telemetry);
+    }
 
     chat.appendChild(container);
 
     chat.scrollTop = chat.scrollHeight;
 
-    return text;
+    return {text, telemetry};
 }
 
 async function sendMessage() {
@@ -83,8 +90,14 @@ async function sendMessage() {
         content: prompt
     });
 
+    const assistantMessage =
+        addMessage("assistant");
+
     const assistantElement =
-        addMessage("assistant", "");
+        assistantMessage.text;
+
+    const telemetryElement = 
+        assistantMessage.telemetry;
 
     let assistantText = "";
 
@@ -160,6 +173,36 @@ async function sendMessage() {
                 try {
                     const chunk =
                         JSON.parse(data);
+
+                        if (chunk.timings) {
+                            const timings = chunk.timings;
+
+                            const generatedTokens =
+                                timings.predicted_n;
+
+                            const generationSpeed =
+                                timings.predicted_per_second;
+
+                            const generationSeconds =
+                                timings.predicted_ms / 1000;
+
+                            const contextTokens =
+                                timings.cache_n +
+                                timings.prompt_n +
+                                timings.predicted_n;
+
+                            const contextLimit = 10240;
+
+                            const contextPercent =
+                                (contextTokens / contextLimit) * 100;    
+
+                            telemetryElement.textContent =
+                                `${generatedTokens} tokens • ` +
+                                `${generationSpeed.toFixed(1)} t/s • ` +
+                                `${generationSeconds.toFixed(2)} s • ` +
+                                `Context ${contextTokens}/${contextLimit} ` +
+                                `(${contextPercent.toFixed(1)}%)`;
+                        }
 
                     const delta =
                         chunk.choices?.[0]?.delta;

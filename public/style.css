@@ -81,6 +81,17 @@ button {
     border-bottom: 1px solid #30343b;
 }
 
+.settings-row {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.setting-field input {
+    width: 12ch;
+}
+
 .settings label {
     display: block;
     margin-bottom: 8px;
@@ -130,6 +141,14 @@ textarea:focus {
     footer {
         padding: 10px;
     }
+
+    .settings {
+        padding: 12px;
+    }
+
+    .settings-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .message.assistant h1,
@@ -157,4 +176,12 @@ textarea:focus {
 
 .message.assistant p {
     line-height: 1.5;
+}
+
+.telemetry {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 6px 10px;
+    border: 1px solid #4b5563;
+    border-radius: 16px;
 }
