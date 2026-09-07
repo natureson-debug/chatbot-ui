@@ -1,0 +1,160 @@
+﻿* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #111318;
+    color: #e8e8e8;
+}
+
+.app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #30343b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 4px 0;
+}
+
+#status {
+    font-size: 12px;
+    color: #8f98a8;
+}
+
+.controls {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+}
+
+button {
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    cursor: pointer;
+}
+
+#chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+}
+
+.message {
+    max-width: 850px;
+    margin: 0 auto 22px auto;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.user {
+    background: #252a33;
+    padding: 14px 18px;
+    border-radius: 12px;
+}
+
+.assistant {
+    padding: 4px 18px;
+}
+
+.role {
+    font-size: 11px;
+    color: #8f98a8;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.settings {
+    padding: 12px 24px;
+    border-bottom: 1px solid #30343b;
+}
+
+.settings label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.settings textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+footer {
+    padding: 18px 24px;
+    border-top: 1px solid #30343b;
+    display: flex;
+    gap: 12px;
+}
+
+textarea {
+    flex: 1;
+    resize: none;
+    background: #20242b;
+    color: white;
+    border: 1px solid #383e48;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 15px;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: #687386;
+}
+
+#send {
+    min-width: 90px;
+}
+
+@media (max-width: 600px) {
+    header {
+        padding: 12px;
+    }
+
+    #chat {
+        padding: 18px 10px;
+    }
+
+    footer {
+        padding: 10px;
+    }
+}
+
+.message.assistant h1,
+.message.assistant h2,
+.message.assistant h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.message.assistant ul,
+.message.assistant ol {
+    padding-left: 24px;
+}
+
+.message.assistant code {
+    font-family: monospace;
+}
+
+.message.assistant pre {
+    overflow-x: auto;
+    padding: 12px;
+    border: 1px solid #30343b;
+    border-radius: 8px;
+}
+
+.message.assistant p {
+    line-height: 1.5;
+}
