@@ -22,7 +22,23 @@ maxTokensInput.value =
 thinkingToggle.checked =
     localStorage.getItem("thinking") === "true";    
 
-let messages = [];
+let messages =
+    JSON.parse(
+        localStorage.getItem("chatMessages")
+    ) || [];
+
+    messages.forEach((message) => {
+        const restoredMessage =
+            addMessage(message.role, message.content);
+
+        if (message.role === "assistant") {
+            restoredMessage.text.innerHTML =
+                DOMPurify.sanitize(
+                    marked.parse(message.content)
+                );
+        }
+    });
+
 let generating = false;
 let controller = null;
 
@@ -89,6 +105,11 @@ async function sendMessage() {
         role: "user",
         content: prompt
     });
+
+    localStorage.setItem(
+        "chatMessages",
+        JSON.stringify(messages)
+    );
 
     const assistantMessage =
         addMessage("assistant");
@@ -191,7 +212,7 @@ async function sendMessage() {
                                 timings.prompt_n +
                                 timings.predicted_n;
 
-                            const contextLimit = 10240;
+                            const contextLimit = 49152;
 
                             const contextPercent =
                                 (contextTokens / contextLimit) * 100;
@@ -242,6 +263,11 @@ async function sendMessage() {
             content: assistantText
         });
 
+        localStorage.setItem(
+            "chatMessages",
+            JSON.stringify(messages)
+        );
+
         statusText.textContent = "Connected";
 
     } catch (error) {
@@ -255,6 +281,12 @@ async function sendMessage() {
                     role: "assistant",
                     content: assistantText
                 });
+
+            localStorage.setItem(
+                "chatMessages",
+                JSON.stringify(messages)
+            );
+
             }
             statusText.textContent = "Stopped";
         } else {
@@ -333,6 +365,7 @@ newChatButton.addEventListener(
     "click",
     () => {
         messages = [];
+        localStorage.removeItem("chatMessages");
         chat.innerHTML = "";
         promptBox.focus();
     }
