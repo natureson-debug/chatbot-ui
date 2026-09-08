@@ -185,3 +185,15 @@ textarea:focus {
     border: 1px solid #4b5563;
     border-radius: 16px;
 }
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+}

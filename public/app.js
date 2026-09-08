@@ -194,14 +194,22 @@ async function sendMessage() {
                             const contextLimit = 10240;
 
                             const contextPercent =
-                                (contextTokens / contextLimit) * 100;    
+                                (contextTokens / contextLimit) * 100;
+                                
+                            const cachedTokens =
+                                timings.cache_n;
+
+                            const promptTokens =
+                                timings.prompt_n;
 
                             telemetryElement.textContent =
-                                `${generatedTokens} tokens • ` +
+                                `Generated: ${generatedTokens} • ` +
                                 `${generationSpeed.toFixed(1)} t/s • ` +
-                                `${generationSeconds.toFixed(2)} s • ` +
-                                `Context ${contextTokens}/${contextLimit} ` +
-                                `(${contextPercent.toFixed(1)}%)`;
+                                `${generationSeconds.toFixed(2)} s | ` +
+                                `Context: ${contextTokens}/${contextLimit} ` +
+                                `(${contextPercent.toFixed(1)}%) • ` +
+                                `Cached: ${cachedTokens} • ` +
+                                `Prompt: ${promptTokens}`;
                         }
 
                     const delta =
