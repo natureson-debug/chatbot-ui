@@ -179,11 +179,20 @@ textarea:focus {
 }
 
 .telemetry {
-    display: inline-block;
+    display: block;
     margin-top: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+}
+
+.telemetry.active {
+    display: inline-block;
     padding: 6px 10px;
-    border: 1px solid #4b5563;
-    border-radius: 16px;
+    background-color: #31EFF8;
+    color: #0B1F33;
+    border-radius: 8px;
+    font-weight: bold;
 }
 
 .header-title {
@@ -196,4 +205,17 @@ textarea:focus {
     width: 46px;
     height: 46px;
     border-radius: 10px;
+}
+
+#chatList {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+}
+
+#chatList button.active {
+    background-color: #31EFF8;
+    color: #0B1F33;
+    font-weight: bold;
 }

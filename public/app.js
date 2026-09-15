@@ -2,12 +2,14 @@
 const promptBox = document.getElementById("prompt");
 const sendButton = document.getElementById("send");
 const stopButton = document.getElementById("stop");
+stopButton.disabled = true;
 const newChatButton = document.getElementById("newChat");
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
 const temperatureInput = document.getElementById("temperature");
 const maxTokensInput = document.getElementById("maxTokens");
 const statusText = document.getElementById("status");
+const chatList = document.getElementById("chatList");
 
 
 systemPromptBox.value =
@@ -22,10 +24,25 @@ maxTokensInput.value =
 thinkingToggle.checked =
     localStorage.getItem("thinking") === "true";    
 
-let messages =
+let chatStore =
     JSON.parse(
-        localStorage.getItem("chatMessages")
-    ) || [];
+        localStorage.getItem("chatStore")
+    ) || {
+        activeChatId: "chat-1",
+        chats: {
+            "chat-1": {
+                title: "Chat 1",
+                messages: JSON.parse(
+                    localStorage.getItem("chatMessages")
+                ) || []
+            }
+        }
+    };
+
+let messages =
+    chatStore.chats[
+        chatStore.activeChatId
+    ].messages;
 
     messages.forEach((message) => {
         const restoredMessage =
@@ -36,8 +53,22 @@ let messages =
                 DOMPurify.sanitize(
                     marked.parse(message.content)
                 );
+
+            if (message.telemetry) {
+                const t = message.telemetry;
+
+                restoredMessage.telemetry.textContent =
+                    `Generated: ${t.generatedTokens} • ` +
+                    `${t.generationSpeed.toFixed(1)} t/s • ` +
+                    `${t.generationSeconds.toFixed(2)} s | ` +
+                    `Context: ${t.contextTokens}/${t.contextLimit} • ` +
+                    `Cached: ${t.cachedTokens} • ` +
+                    `Prompt: ${t.promptTokens}`;
+            }
         }
     });
+
+renderChatList();
 
 let generating = false;
 let controller = null;
@@ -86,10 +117,81 @@ function addMessage(role, content = "") {
     return {text, telemetry};
 }
 
+function renderChatList() {
+        chatList.innerHTML = "";
+
+        Object.entries(chatStore.chats)
+            .forEach(([chatId, chatData]) => {
+                const button =
+                    document.createElement("button");
+
+                button.textContent =
+                    chatData.title;
+
+                button.dataset.chatId =
+                    chatId;
+
+                if (chatId === chatStore.activeChatId) {
+                    button.classList.add("active");
+                }
+
+                button.addEventListener("click", () => {
+                    chatStore.activeChatId = chatId;
+
+                        messages =
+                            chatStore.chats[chatId].messages;
+
+                        localStorage.setItem(
+                            "chatStore",
+                            JSON.stringify(chatStore)
+                        );
+
+                        renderChatList();
+
+                        chat.innerHTML = "";
+
+                        messages.forEach((message) => {
+                            const restoredMessage =
+                                addMessage(message.role, message.content);
+
+                            if (message.role === "assistant") {
+                                restoredMessage.text.innerHTML =
+                                    DOMPurify.sanitize(
+                                        marked.parse(message.content)
+                                    );
+
+                                if (message.telemetry) {
+                                    const t = message.telemetry;
+
+                                    restoredMessage.telemetry.textContent =
+                                        `Generated: ${t.generatedTokens} • ` +
+                                        `${t.generationSpeed.toFixed(1)} t/s • ` +
+                                        `${t.generationSeconds.toFixed(2)} s | ` +
+                                        `Context: ${t.contextTokens}/${t.contextLimit} • ` +
+                                        `Cached: ${t.cachedTokens} • ` +
+                                        `Prompt: ${t.promptTokens}`;
+                                }
+
+                            }
+                        });
+
+                    });
+
+                chatList.appendChild(button);
+            });
+}
+
+
 async function sendMessage() {
     const prompt = promptBox.value.trim();
 
     if (!prompt || generating) return;
+
+    document
+    .querySelectorAll(".telemetry.active")
+    .forEach((element) => {
+        element.classList.remove("active");
+    });
 
     generating = true;
     sendButton.disabled = true;
@@ -107,9 +209,11 @@ async function sendMessage() {
     });
 
     localStorage.setItem(
-        "chatMessages",
-        JSON.stringify(messages)
+        "chatStore",
+        JSON.stringify(chatStore)
     );
+
+    renderChatList();
 
     const assistantMessage =
         addMessage("assistant");
@@ -119,6 +223,8 @@ async function sendMessage() {
 
     const telemetryElement = 
         assistantMessage.telemetry;
+
+    let responseTelemetry = null;
 
     let assistantText = "";
 
@@ -223,6 +329,17 @@ async function sendMessage() {
                             const promptTokens =
                                 timings.prompt_n;
 
+                                responseTelemetry = {
+                                generatedTokens,
+                                generationSpeed,
+                                generationSeconds,
+                                contextTokens,
+                                contextLimit,
+                                cachedTokens,
+                                promptTokens,
+                                timestamp: new Date().toISOString()
+                                };
+
                             telemetryElement.textContent =
                                 `Generated: ${generatedTokens} • ` +
                                 `${generationSpeed.toFixed(1)} t/s • ` +
@@ -231,6 +348,9 @@ async function sendMessage() {
                                 `(${contextPercent.toFixed(1)}%) • ` +
                                 `Cached: ${cachedTokens} • ` +
                                 `Prompt: ${promptTokens}`;
+
+                            telemetryElement.classList.add("active");
+
                         }
 
                     const delta =
@@ -260,12 +380,13 @@ async function sendMessage() {
 
         messages.push({
             role: "assistant",
-            content: assistantText
+            content: assistantText,
+            telemetry: responseTelemetry
         });
 
         localStorage.setItem(
-            "chatMessages",
-            JSON.stringify(messages)
+            "chatStore",
+            JSON.stringify(chatStore)
         );
 
         statusText.textContent = "Connected";
@@ -279,12 +400,13 @@ async function sendMessage() {
             if (assistantText) {
                 messages.push({
                     role: "assistant",
-                    content: assistantText
+                    content: assistantText,
+                    telemetry: responseTelemetry
                 });
 
             localStorage.setItem(
-                "chatMessages",
-                JSON.stringify(messages)
+                "chatStore",
+                JSON.stringify(chatStore)
             );
 
             }
@@ -299,6 +421,7 @@ async function sendMessage() {
     } finally {
         generating = false;
         sendButton.disabled = false;
+        stopButton.disabled = true;
         promptBox.focus();
     }
 }
@@ -364,8 +487,27 @@ thinkingToggle.addEventListener(
 newChatButton.addEventListener(
     "click",
     () => {
-        messages = [];
-        localStorage.removeItem("chatMessages");
+        const newChatId =
+            `chat-${Date.now()}`;
+
+        chatStore.chats[newChatId] = {
+            title: "New Chat",
+            messages: []
+        };
+
+        chatStore.activeChatId =
+            newChatId;
+
+        messages =
+            chatStore.chats[newChatId].messages;
+
+        localStorage.setItem(
+            "chatStore",
+            JSON.stringify(chatStore)
+        );
+
+        renderChatList();
+
         chat.innerHTML = "";
         promptBox.focus();
     }
