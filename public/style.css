@@ -82,7 +82,7 @@ button {
 }
 
 .settings-row {
-    display: grid;
+    display: flex;
     grid-template-columns: max-content max-content;
     gap: 12px;
     margin-top: 12px;
@@ -218,4 +218,38 @@ textarea:focus {
     background-color: #31EFF8;
     color: #0B1F33;
     font-weight: bold;
+}
+
+.message p {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.message h1,
+.message h2,
+.message h3,
+.message h4 {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.message hr {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.message ul,
+.message ol {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.message li {
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#deleteChat {
+    margin-left: auto;
+    align-self: flex-end;
 }

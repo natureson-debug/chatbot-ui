@@ -4,6 +4,7 @@ const sendButton = document.getElementById("send");
 const stopButton = document.getElementById("stop");
 stopButton.disabled = true;
 const newChatButton = document.getElementById("newChat");
+const deleteChatButton = document.getElementById("deleteChat");
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
 const temperatureInput = document.getElementById("temperature");
@@ -136,6 +137,15 @@ function renderChatList() {
                 }
 
                 button.addEventListener("click", () => {
+                    
+                    const currentChat =
+                        chatStore.chats[
+                        chatStore.activeChatId
+                    ];
+
+                    currentChat.scrollTop =
+                    chat.scrollTop;
+                    
                     chatStore.activeChatId = chatId;
 
                         messages =
@@ -151,6 +161,7 @@ function renderChatList() {
                         chat.innerHTML = "";
 
                         messages.forEach((message) => {
+                            
                             const restoredMessage =
                                 addMessage(message.role, message.content);
 
@@ -174,6 +185,13 @@ function renderChatList() {
 
                             }
                         });
+
+                        const savedScrollTop =
+                            chatStore.chats[chatId].scrollTop;
+
+                        if (savedScrollTop !== undefined) {
+                            chat.scrollTop = savedScrollTop;
+                        }
 
                     });
 
@@ -490,8 +508,22 @@ newChatButton.addEventListener(
         const newChatId =
             `chat-${Date.now()}`;
 
+        let chatNumber = 1;
+
+            const existingTitles =
+                Object.values(chatStore.chats)
+                    .map((chat) => chat.title);
+
+            while (
+                existingTitles.includes(
+                    `Chat ${chatNumber}`
+        )
+) {
+    chatNumber++;
+}
+
         chatStore.chats[newChatId] = {
-            title: "New Chat",
+            title: `Chat ${chatNumber}`,
             messages: []
         };
 
@@ -510,6 +542,91 @@ newChatButton.addEventListener(
 
         chat.innerHTML = "";
         promptBox.focus();
+    }
+);
+
+deleteChatButton.addEventListener(
+    "click",
+    () => {
+        const chatIds =
+            Object.keys(chatStore.chats);
+
+        if (chatIds.length <= 1) {
+            alert("You cannot delete the only remaining chat.");
+            return;
+        }
+
+        const activeChatId =
+            chatStore.activeChatId;
+
+        const activeChat =
+            chatStore.chats[activeChatId];
+
+        const confirmed =
+            confirm(`Delete "${activeChat.title}"?`
+            );
+
+        if (!confirmed) {
+            return;
+        }    
+
+        delete chatStore.chats[activeChatId];
+
+        const remainingChatIds =
+            Object.keys(chatStore.chats);
+
+        chatStore.activeChatId =
+            remainingChatIds[0];
+
+        messages =
+            chatStore.chats[
+                chatStore.activeChatId
+            ].messages;
+
+        localStorage.setItem(
+            "chatStore",
+            JSON.stringify(chatStore)
+        );
+
+        chat.innerHTML = "";
+
+        messages.forEach((message) => {
+            const restoredMessage =
+                addMessage(
+                    message.role,
+                    message.content
+                );
+
+            if (message.role === "assistant") {
+                restoredMessage.text.innerHTML =
+                    DOMPurify.sanitize(
+                        marked.parse(message.content)
+                    );
+
+                if (message.telemetry) {
+                    const t = message.telemetry;
+
+                    restoredMessage.telemetry.textContent =
+                        `Generated: ${t.generatedTokens} • ` +
+                        `${t.generationSpeed.toFixed(1)} t/s • ` +
+                        `${t.generationSeconds.toFixed(2)} s | ` +
+                        `Context: ${t.contextTokens}/${t.contextLimit} • ` +
+                        `Cached: ${t.cachedTokens} • ` +
+                        `Prompt: ${t.promptTokens}`;
+                }
+            }
+        });
+
+                     const savedScrollTop =
+                        chatStore.chats[
+                        chatStore.activeChatId
+                        ].scrollTop;
+
+                    if (savedScrollTop !== undefined) {
+                        chat.scrollTop = savedScrollTop;
+                    }
+
+        renderChatList();
     }
 );
 
