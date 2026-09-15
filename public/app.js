@@ -20,7 +20,7 @@ temperatureInput.value =
     localStorage.getItem("temperature") || "0.7";
 
 maxTokensInput.value =
-    localStorage.getItem("maxTokens") || "512";
+    localStorage.getItem("maxTokens") || "4096";
 
 thinkingToggle.checked =
     localStorage.getItem("thinking") === "true";    
@@ -45,29 +45,7 @@ let messages =
         chatStore.activeChatId
     ].messages;
 
-    messages.forEach((message) => {
-        const restoredMessage =
-            addMessage(message.role, message.content);
-
-        if (message.role === "assistant") {
-            restoredMessage.text.innerHTML =
-                DOMPurify.sanitize(
-                    marked.parse(message.content)
-                );
-
-            if (message.telemetry) {
-                const t = message.telemetry;
-
-                restoredMessage.telemetry.textContent =
-                    `Generated: ${t.generatedTokens} • ` +
-                    `${t.generationSpeed.toFixed(1)} t/s • ` +
-                    `${t.generationSeconds.toFixed(2)} s | ` +
-                    `Context: ${t.contextTokens}/${t.contextLimit} • ` +
-                    `Cached: ${t.cachedTokens} • ` +
-                    `Prompt: ${t.promptTokens}`;
-            }
-        }
-    });
+restoreChat();
 
 renderChatList();
 
@@ -118,6 +96,46 @@ function addMessage(role, content = "") {
     return {text, telemetry};
 }
 
+function restoreChat() {
+    chat.innerHTML = "";
+
+    messages.forEach((message) => {
+        const restoredMessage =
+            addMessage(
+                message.role,
+                message.content
+            );
+
+        if (message.role === "assistant") {
+            restoredMessage.text.innerHTML =
+                DOMPurify.sanitize(
+                    marked.parse(message.content)
+                );
+
+            if (message.telemetry) {
+                const t = message.telemetry;
+
+                restoredMessage.telemetry.textContent =
+                    `Generated: ${t.generatedTokens} • ` +
+                    `${t.generationSpeed.toFixed(1)} t/s • ` +
+                    `${t.generationSeconds.toFixed(2)} s | ` +
+                    `Context: ${t.contextTokens}/${t.contextLimit} • ` +
+                    `Cached: ${t.cachedTokens} • ` +
+                    `Prompt: ${t.promptTokens}`;
+            }
+        }
+    });
+
+    const savedScrollTop =
+        chatStore.chats[
+            chatStore.activeChatId
+        ].scrollTop;
+
+    if (savedScrollTop !== undefined) {
+        chat.scrollTop = savedScrollTop;
+    }
+}
+
 function renderChatList() {
         chatList.innerHTML = "";
 
@@ -158,40 +176,7 @@ function renderChatList() {
 
                         renderChatList();
 
-                        chat.innerHTML = "";
-
-                        messages.forEach((message) => {
-                            
-                            const restoredMessage =
-                                addMessage(message.role, message.content);
-
-                            if (message.role === "assistant") {
-                                restoredMessage.text.innerHTML =
-                                    DOMPurify.sanitize(
-                                        marked.parse(message.content)
-                                    );
-
-                                if (message.telemetry) {
-                                    const t = message.telemetry;
-
-                                    restoredMessage.telemetry.textContent =
-                                        `Generated: ${t.generatedTokens} • ` +
-                                        `${t.generationSpeed.toFixed(1)} t/s • ` +
-                                        `${t.generationSeconds.toFixed(2)} s | ` +
-                                        `Context: ${t.contextTokens}/${t.contextLimit} • ` +
-                                        `Cached: ${t.cachedTokens} • ` +
-                                        `Prompt: ${t.promptTokens}`;
-                                }
-
-                            }
-                        });
-
-                        const savedScrollTop =
-                            chatStore.chats[chatId].scrollTop;
-
-                        if (savedScrollTop !== undefined) {
-                            chat.scrollTop = savedScrollTop;
-                        }
+                        restoreChat();
 
                     });
 
@@ -588,43 +573,7 @@ deleteChatButton.addEventListener(
             JSON.stringify(chatStore)
         );
 
-        chat.innerHTML = "";
-
-        messages.forEach((message) => {
-            const restoredMessage =
-                addMessage(
-                    message.role,
-                    message.content
-                );
-
-            if (message.role === "assistant") {
-                restoredMessage.text.innerHTML =
-                    DOMPurify.sanitize(
-                        marked.parse(message.content)
-                    );
-
-                if (message.telemetry) {
-                    const t = message.telemetry;
-
-                    restoredMessage.telemetry.textContent =
-                        `Generated: ${t.generatedTokens} • ` +
-                        `${t.generationSpeed.toFixed(1)} t/s • ` +
-                        `${t.generationSeconds.toFixed(2)} s | ` +
-                        `Context: ${t.contextTokens}/${t.contextLimit} • ` +
-                        `Cached: ${t.cachedTokens} • ` +
-                        `Prompt: ${t.promptTokens}`;
-                }
-            }
-        });
-
-                     const savedScrollTop =
-                        chatStore.chats[
-                        chatStore.activeChatId
-                        ].scrollTop;
-
-                    if (savedScrollTop !== undefined) {
-                        chat.scrollTop = savedScrollTop;
-                    }
+        restoreChat();
 
         renderChatList();
     }
@@ -638,6 +587,29 @@ stopButton.addEventListener(
         }
     }
 );
+
+let scrollSaveTimer;
+
+chat.addEventListener("scroll", () => {
+    const activeChat =
+        chatStore.chats[
+            chatStore.activeChatId
+        ];
+
+    if (!activeChat) return;
+
+    activeChat.scrollTop =
+        chat.scrollTop;
+
+    clearTimeout(scrollSaveTimer);
+
+    scrollSaveTimer = setTimeout(() => {
+        localStorage.setItem(
+            "chatStore",
+            JSON.stringify(chatStore)
+        );
+    }, 300);
+});
 
 checkHealth();
 promptBox.focus();

@@ -83,7 +83,6 @@ button {
 
 .settings-row {
     display: flex;
-    grid-template-columns: max-content max-content;
     gap: 12px;
     margin-top: 12px;
 }
@@ -252,4 +251,58 @@ textarea:focus {
 #deleteChat {
     margin-left: auto;
     align-self: flex-end;
+}
+
+@media (max-width: 768px) {
+
+
+    input,
+    textarea {
+        font-size: 16px;
+    }
+
+    html,
+    body {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+
+    *,
+    *::before,
+    *::after {
+        box-sizing: border-box;
+    }
+
+    header {
+        width: 100%;
+        padding: 12px 14px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .settings {
+        width: 100%;
+        padding: 12px 14px;
+    }
+
+    .settings-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 12px;
+        width: 100%;
+    }
+
+    #deleteChat {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .controls {
+        flex-shrink: 0;
+        width: 100%;
+        justify-content: flex-end;
+    }
 }
