@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Console</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin-page">
+    <div class="admin-shell">
+        <header class="admin-header">
+            <div class="header-title-wrap">
+                <span class="header-gear" aria-hidden="true">⚙</span>
+                <h1>Admin Console</h1>
+            </div>
+            <div class="header-side-label">User management</div>
+        </header>
+
+        <main class="admin-main">
+            <section class="admin-panel create-user-panel">
+                <h2>Create User</h2>
+
+                <form id="createUserForm" class="create-user-form">
+                    <div class="field-group username-field">
+                        <label for="newUsername">Username</label>
+                        <div class="input-wrap icon-left">
+                            <span class="field-icon" aria-hidden="true">👤</span>
+                            <input
+                                id="newUsername"
+                                type="text"
+                                autocomplete="off"
+                                placeholder="Enter username"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <div class="field-group password-field">
+                        <label for="newPassword">Temporary password</label>
+                        <div class="input-wrap icon-left">
+                            <span class="field-icon" aria-hidden="true">🔒</span>
+                            <input
+                                id="newPassword"
+                                type="password"
+                                autocomplete="new-password"
+                                minlength="12"
+                                placeholder="Generate or enter a temporary password"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <div class="field-group role-field">
+                        <label for="newUserRole">Account type</label>
+                        <div class="select-wrap">
+                            <select id="newUserRole" required>
+                                <option value="user" selected>Regular user</option>
+                                <option value="admin">Administrator</option>
+                            </select>
+                            <span class="select-caret" aria-hidden="true">▾</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="primary-btn create-user-btn">
+                        <span class="btn-plus" aria-hidden="true">＋</span>
+                        Create User
+                    </button>
+                </form>
+                <p id="createUserStatus" role="status" hidden></p>
+            </section>
+
+            <section class="admin-panel users-panel">
+                <div class="users-header">
+                    <h2>Users</h2>
+                    <span id="usersCount" class="users-count" aria-live="polite">0 users</span>
+                </div>
+
+                <div id="usersStatus" class="users-status">Loading users...</div>
+
+                <table id="usersTable" hidden>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody"></tbody>
+                </table>
+            </section>
+
+            <a href="/" class="back-link">← Back to Chatbot</a>
+        </main>
+    </div>
+
+    <script src="/admin.js" defer></script>
+</body>
+</html>

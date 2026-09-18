@@ -247,7 +247,10 @@ async function sendMessage() {
                         role: "system",
                         content: systemPromptBox.value.trim()
                     },
-                    ...messages
+                    ...messages.map((message) => ({
+                        role: message.role,
+                        content: message.content
+                }))
                 ],
                 enable_thinking: thinkingToggle.checked,
                 temperature: Number(temperatureInput.value),
@@ -613,3 +616,95 @@ chat.addEventListener("scroll", () => {
 
 checkHealth();
 promptBox.focus();
+
+async function checkLogin() {
+    try {
+        const response = await fetch("/api/me", {
+            credentials: "same-origin",
+            cache: "no-store"
+        });
+
+        loginScreen.hidden = response.ok;
+        if (response.ok) {
+    const user = await response.json();
+    adminConsoleButton.hidden = user.isAdmin !== true;
+} else {
+    adminConsoleButton.hidden = true;
+}
+    } catch (error) {
+        console.error("Authentication check failed:", error);
+        loginScreen.hidden = false;
+    }
+}
+
+checkLogin();
+
+const loginScreen = document.getElementById("loginScreen");
+const loginForm = document.getElementById("loginForm");
+const loginError = document.getElementById("loginError");
+const adminConsoleButton = document.getElementById("adminConsoleButton");
+
+adminConsoleButton.addEventListener("click", () => {
+    window.open("/admin", "_blank", "noopener");
+});
+
+loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    loginError.hidden = true;
+
+    const username = document.getElementById("loginUsername").value;
+    const passwordInput = document.getElementById("loginPassword");
+
+    try {
+        const response = await fetch("/api/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({
+                username,
+                password: passwordInput.value
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error("Invalid username or password");
+        }
+
+        const user = await response.json();
+
+        passwordInput.value = "";
+        loginScreen.hidden = true;
+        adminConsoleButton.hidden = user.isAdmin !== true;
+
+        console.log("Login successful:", user.username);
+    } catch (error) {
+        loginError.textContent = error.message;
+        loginError.hidden = false;
+        passwordInput.value = "";
+    }
+});
+
+const logoutButton = document.getElementById("logoutButton");
+
+logoutButton.addEventListener("click", async () => {
+    try {
+        const response = await fetch("/api/logout", {
+            method: "POST",
+            credentials: "same-origin"
+        });
+
+        if (!response.ok) {
+            throw new Error("Logout failed");
+        }
+
+        document.getElementById("loginPassword").value = "";
+        loginScreen.hidden = false;
+        adminConsoleButton.hidden = true;
+    } catch (error) {
+        console.error("Logout failed:", error);
+        alert("Could not log out. Please try again.");
+    }
+});

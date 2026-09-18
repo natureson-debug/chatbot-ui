@@ -13,6 +13,32 @@
 
 <body>
 
+<section id="loginScreen">
+    <form id="loginForm">
+        <h2>Local Chatbot</h2>
+        <p>Sign in to continue</p>
+
+        <label for="loginUsername">Username</label>
+        <input
+            id="loginUsername"
+            type="text"
+            autocomplete="username"
+            required
+        >
+
+        <label for="loginPassword">Password</label>
+        <input
+            id="loginPassword"
+            type="password"
+            autocomplete="current-password"
+            required
+        >
+
+        <button type="submit">Sign in</button>
+        <p id="loginError" role="alert" hidden></p>
+    </form>
+</section>
+
 <div class="app">
 
     <header>
@@ -32,6 +58,10 @@
             </label>
 
             <button id="newChat">New Chat</button>
+            <button id="logoutButton" type="button">Logout</button>
+            <button id="adminConsoleButton" type="button" hidden>
+    Console
+</button>
         </div>
     </header>
 
