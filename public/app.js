@@ -5,12 +5,45 @@ const stopButton = document.getElementById("stop");
 stopButton.disabled = true;
 const newChatButton = document.getElementById("newChat");
 const deleteChatButton = document.getElementById("deleteChat");
+const settingsToggle = document.getElementById("settingsToggle");
+const settingsPanel = document.getElementById("settingsPanel");
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
 const temperatureInput = document.getElementById("temperature");
 const maxTokensInput = document.getElementById("maxTokens");
 const statusText = document.getElementById("status");
 const chatList = document.getElementById("chatList");
+const activeChatTitle = document.getElementById("activeChatTitle");
+const chatContextMenu = document.getElementById("chatContextMenu");
+const renameChatAction = document.getElementById("renameChatAction");
+
+const chatActionsToggle = document.getElementById("chatActionsToggle");
+
+chatActionsToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+
+    if (!loginScreen.hidden || !chatStore.activeChatId) {
+        return;
+    }
+
+    contextMenuChatId = chatStore.activeChatId;
+
+    const rect = chatActionsToggle.getBoundingClientRect();
+    chatContextMenu.hidden = false;
+    const menuWidth = chatContextMenu.getBoundingClientRect().width;
+
+
+const left = Math.max(
+    8,
+    Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+);
+
+chatContextMenu.style.left = `${left}px`;
+chatContextMenu.style.top = `${rect.bottom}px`;
+    
+});
+
+let contextMenuChatId = null;
 
 
 systemPromptBox.value =
@@ -41,13 +74,10 @@ let chatStore =
     };
 
 let messages =
-    chatStore.chats[
-        chatStore.activeChatId
-    ].messages;
+    chatStore.chats[chatStore.activeChatId]?.messages ?? [];
 
-restoreChat();
-
-renderChatList();
+chat.innerHTML = "";
+chatList.innerHTML = "";
 
 let generating = false;
 let controller = null;
@@ -136,8 +166,83 @@ function restoreChat() {
     }
 }
 
+function updateDeleteChatButtonState() {
+    deleteChatButton.disabled = Object.keys(chatStore.chats).length === 0;
+    deleteChatButton.textContent = "Clear chat";
+}
+
+function updateActiveChatTitle() {
+    const activeChat = chatStore.chats[chatStore.activeChatId];
+
+    activeChatTitle.textContent = activeChat?.title || "";
+    activeChatTitle.title = activeChat?.title || "";
+}
+
+function closeChatContextMenu() {
+    chatContextMenu.hidden = true;
+    contextMenuChatId = null;
+}
+
+async function renameChat(chatId) {
+    const chatData = chatStore.chats[chatId];
+
+    if (!chatData) return;
+
+    const requestedTitle = prompt(
+        "Enter a chat name (maximum 100 characters):",
+        chatData.title
+    );
+
+    if (requestedTitle === null) return;
+
+    const trimmedTitle = requestedTitle.trim();
+
+    if (!trimmedTitle) {
+        alert("Chat name cannot be empty.");
+        return;
+    }
+
+    if (trimmedTitle.length > 100) {
+        alert("Chat name must be 100 characters or fewer.");
+        return;
+    }
+
+    chatData.title = trimmedTitle;
+
+    try {
+    const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatId)}`,
+        {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ title: trimmedTitle })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(`Rename failed: HTTP ${response.status}`);
+    }
+} catch (error) {
+    console.error("Could not rename chat:", error);
+    alert("Could not rename the chat. Please try again.");
+    return;
+}
+
+    localStorage.setItem(
+        "chatStore",
+        JSON.stringify(chatStore)
+    );
+
+    updateActiveChatTitle();
+    renderChatList();
+}
+
 function renderChatList() {
         chatList.innerHTML = "";
+
+        updateDeleteChatButtonState();
+        updateActiveChatTitle();
 
         Object.entries(chatStore.chats)
             .forEach(([chatId, chatData]) => {
@@ -146,6 +251,8 @@ function renderChatList() {
 
                 button.textContent =
                     chatData.title;
+
+                button.title = chatData.title;
 
                 button.dataset.chatId =
                     chatId;
@@ -184,8 +291,78 @@ function renderChatList() {
             });
 }
 
+renameChatAction.addEventListener("click", () => {
+    const chatId = contextMenuChatId;
+    closeChatContextMenu();
+    renameChat(chatId);
+});
+
+const clearChatAction = document.getElementById("clearChatAction");
+
+clearChatAction.addEventListener("click", () => {
+    closeChatContextMenu();
+    deleteChatButton.click();
+});
+
+const deleteChatAction = document.getElementById("deleteChatAction");
+
+deleteChatAction.addEventListener("click", async () => {
+    const chatId = chatStore.activeChatId;
+    const activeChat = chatStore.chats[chatId];
+
+    closeChatContextMenu();
+
+    if (!loginScreen.hidden || !activeChat) return;
+
+    if (!confirm(`Delete "${activeChat.title}" and all its messages?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}`,
+            { method: "DELETE", credentials: "same-origin" }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Delete chat failed: HTTP ${response.status}`);
+        }
+
+        delete chatStore.chats[chatId];
+
+        chatStore.activeChatId =
+            Object.keys(chatStore.chats)[0] ?? null;
+
+        messages = chatStore.activeChatId
+            ? chatStore.chats[chatStore.activeChatId].messages
+            : [];
+
+        renderChatList();
+
+        if (chatStore.activeChatId) {
+            restoreChat();
+        } else {
+            chat.innerHTML = "";
+        }
+    } catch (error) {
+        console.error("Could not delete chat:", error);
+        alert("Could not delete the chat. Please try again.");
+    }
+});
+
+document.addEventListener("click", (event) => {
+    if (!chatContextMenu.hidden && !chatContextMenu.contains(event.target)) {
+        closeChatContextMenu();
+    }
+});
+
+window.addEventListener("resize", closeChatContextMenu);
+
 
 async function sendMessage() {
+    if (!loginScreen.hidden || !chatStore.activeChatId) {
+    return;
+}
     const prompt = promptBox.value.trim();
 
     if (!prompt || generating) return;
@@ -210,6 +387,26 @@ async function sendMessage() {
         role: "user",
         content: prompt
     });
+
+try {
+    const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role: "user",
+                content: prompt
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+} catch (error) {
+    console.error("Could not save user message to SQLite:", error);
+}
 
     localStorage.setItem(
         "chatStore",
@@ -390,6 +587,27 @@ async function sendMessage() {
             telemetry: responseTelemetry
         });
 
+try {
+    const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role: "assistant",
+                content: assistantText,
+                telemetry: responseTelemetry
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+} catch (error) {
+    console.error("Could not save assistant message to SQLite:", error);
+}
+
         localStorage.setItem(
             "chatStore",
             JSON.stringify(chatStore)
@@ -409,6 +627,30 @@ async function sendMessage() {
                     content: assistantText,
                     telemetry: responseTelemetry
                 });
+
+try {
+    const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role: "assistant",
+                content: assistantText,
+                telemetry: responseTelemetry
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+} catch (saveError) {
+    console.error(
+        "Could not save stopped assistant message to SQLite:",
+        saveError
+    );
+}
 
             localStorage.setItem(
                 "chatStore",
@@ -490,28 +732,42 @@ thinkingToggle.addEventListener(
     }
 );
 
+settingsToggle.addEventListener("click", () => {
+    const isHidden = settingsPanel.hidden;
+    settingsPanel.hidden = !isHidden;
+    settingsToggle.setAttribute("aria-expanded", String(!isHidden));
+    settingsToggle.textContent = isHidden ? "Close settings" : "Settings";
+});
+
 newChatButton.addEventListener(
     "click",
-    () => {
-        const newChatId =
-            `chat-${Date.now()}`;
+    async () => {
+        if (!loginScreen.hidden) {
+    return;
+}
+        let newChatId;
+        let newChatTitle;
 
-        let chatNumber = 1;
+try {
+    const response = await fetch("/api/chats", {
+        method: "POST"
+    });
 
-            const existingTitles =
-                Object.values(chatStore.chats)
-                    .map((chat) => chat.title);
+    if (!response.ok) {
+        throw new Error(`Chat creation failed: HTTP ${response.status}`);
+    }
 
-            while (
-                existingTitles.includes(
-                    `Chat ${chatNumber}`
-        )
-) {
-    chatNumber++;
+    const createdChat = await response.json();
+    newChatId = createdChat.id;
+    newChatTitle = createdChat.title;
+} catch (error) {
+    console.error("Could not create chat:", error);
+    alert("Could not create a new chat. Please try again.");
+    return;
 }
 
         chatStore.chats[newChatId] = {
-            title: `Chat ${chatNumber}`,
+            title: newChatTitle,
             messages: []
         };
 
@@ -535,14 +791,12 @@ newChatButton.addEventListener(
 
 deleteChatButton.addEventListener(
     "click",
-    () => {
+    async () => {
+        if (!loginScreen.hidden || !chatStore.activeChatId) {
+    return;
+}
         const chatIds =
             Object.keys(chatStore.chats);
-
-        if (chatIds.length <= 1) {
-            alert("You cannot delete the only remaining chat.");
-            return;
-        }
 
         const activeChatId =
             chatStore.activeChatId;
@@ -550,13 +804,51 @@ deleteChatButton.addEventListener(
         const activeChat =
             chatStore.chats[activeChatId];
 
+        if (activeChat) {
+            const confirmed =
+                confirm(
+                    `Clear the history for "${activeChat.title}"?\n\nThis will remove all messages in this chat, but it will not delete the chat itself.`
+                );
+
+            if (!confirmed) {
+                return;
+            }
+
+try {
+    const response = await fetch(
+        `/api/chats/${encodeURIComponent(activeChatId)}/messages`,
+        { method: "DELETE", credentials: "same-origin" }
+    );
+
+    if (!response.ok) {
+        throw new Error(`Clear chat failed: HTTP ${response.status}`);
+    }
+} catch (error) {
+    console.error("Could not clear chat:", error);
+    alert("Could not clear the chat. Please try again.");
+    return;
+}
+
+            activeChat.messages = [];
+            messages = activeChat.messages;
+
+            localStorage.setItem(
+                "chatStore",
+                JSON.stringify(chatStore)
+            );
+
+            restoreChat();
+            renderChatList();
+            return;
+        }
+
         const confirmed =
             confirm(`Delete "${activeChat.title}"?`
             );
 
         if (!confirmed) {
             return;
-        }    
+        }
 
         delete chatStore.chats[activeChatId];
 
@@ -617,6 +909,60 @@ chat.addEventListener("scroll", () => {
 checkHealth();
 promptBox.focus();
 
+async function fetchServerChats() {
+    const response = await fetch("/api/chats", {
+        credentials: "same-origin",
+        cache: "no-store"
+    });
+
+    if (!response.ok) {
+        throw new Error(`Could not load chats: HTTP ${response.status}`);
+    }
+
+    return response.json();
+}
+
+async function prepareServerChatStore() {
+    const serverChats = await fetchServerChats();
+    const chats = {};
+
+    for (const serverChat of serverChats) {
+        const response = await fetch(
+            `/api/chats/${encodeURIComponent(serverChat.id)}/messages`,
+            {
+                credentials: "same-origin",
+                cache: "no-store"
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Could not load messages: HTTP ${response.status}`
+            );
+        }
+
+        chats[serverChat.id] = {
+            title: serverChat.title,
+            messages: await response.json(),
+            scrollTop: serverChat.scroll_top ?? 0
+        };
+    }
+
+    return { chats };
+}
+
+async function inspectServerChats() {
+    const chats = await fetchServerChats();
+
+    console.log(
+        "Server chats:",
+        chats.map(chat => ({
+            id: chat.id,
+            title: chat.title
+        }))
+    );
+}
+
 async function checkLogin() {
     try {
         const response = await fetch("/api/me", {
@@ -624,10 +970,36 @@ async function checkLogin() {
             cache: "no-store"
         });
 
-        loginScreen.hidden = response.ok;
+        loginScreen.hidden = false;
         if (response.ok) {
     const user = await response.json();
     adminConsoleButton.hidden = user.isAdmin !== true;
+    try {
+    const prepared = await prepareServerChatStore();
+    const chatIds = Object.keys(prepared.chats);
+
+    chatStore = {
+        activeChatId: chatIds[0] ?? null,
+        chats: prepared.chats
+    };
+
+    messages = chatStore.activeChatId
+        ? chatStore.chats[chatStore.activeChatId].messages
+        : [];
+
+    renderChatList();
+
+    if (chatStore.activeChatId) {
+        restoreChat();
+    } else {
+        chat.innerHTML = "";
+    }
+
+    loginScreen.hidden = true;
+} catch (error) {
+    console.error("Could not load server chats:", error);
+    loginScreen.hidden = false;
+}
 } else {
     adminConsoleButton.hidden = true;
 }
@@ -674,10 +1046,15 @@ loginForm.addEventListener("submit", async (event) => {
         }
 
         const user = await response.json();
+        chatStore = { activeChatId: null, chats: {} };
+        messages = [];
+        chat.innerHTML = "";
+        chatList.innerHTML = "";
+        updateActiveChatTitle();
+        updateDeleteChatButtonState();
 
         passwordInput.value = "";
-        loginScreen.hidden = true;
-        adminConsoleButton.hidden = user.isAdmin !== true;
+        await checkLogin();
 
         console.log("Login successful:", user.username);
     } catch (error) {
@@ -700,6 +1077,12 @@ logoutButton.addEventListener("click", async () => {
             throw new Error("Logout failed");
         }
 
+        chatStore = { activeChatId: null, chats: {} };
+        messages = [];
+        chat.innerHTML = "";
+        chatList.innerHTML = "";
+        updateActiveChatTitle();
+        updateDeleteChatButtonState();
         document.getElementById("loginPassword").value = "";
         loginScreen.hidden = false;
         adminConsoleButton.hidden = true;

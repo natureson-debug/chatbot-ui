@@ -1,7 +1,7 @@
 ﻿const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { getChats, createChat, getMessages, db, findUserByUsername, createUser } = require("./db");
+const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, deleteChat, renameChat: renameChatInDb } = require("./db");
 const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSession, deleteSession } =
     require("./auth");
 
@@ -66,6 +66,323 @@ const server = http.createServer(async (req, res) => {
 
         return;
     }
+
+// List chats belonging to the authenticated user
+if (req.method === "GET" && req.url === "/api/chats") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    const chats = getChats(user.id);
+
+    res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify(chats));
+    return;
+}
+
+// Create a chat for the authenticated user
+if (req.method === "POST" && req.url === "/api/chats") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    const chatId = `chat-${require("node:crypto").randomUUID()}`;
+
+    createChat(chatId, "New Chat", user.id);
+
+    res.writeHead(201, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify({
+        id: chatId,
+        title: "New Chat"
+    }));
+    return;
+}
+
+// List messages in a chat owned by the authenticated user
+if (req.method === "GET" && req.url.startsWith("/api/chats/")) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    const match = /^\/api\/chats\/([^/?]+)\/messages$/.exec(req.url);
+
+    if (!match) {
+        res.writeHead(404, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Not found" }));
+        return;
+    }
+
+    const chatId = decodeURIComponent(match[1]);
+    const chat = db.prepare(`
+        SELECT id FROM chats
+        WHERE id = ? AND user_id = ?
+    `).get(chatId, user.id);
+
+    if (!chat) {
+        res.writeHead(404, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Chat not found" }));
+        return;
+    }
+
+    const messages = getMessages(chatId, user.id);
+
+    res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify(messages));
+    return;
+}
+
+// Save a message to a chat owned by the authenticated user
+if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    try {
+        const match = /^\/api\/chats\/([^/?]+)\/messages$/.exec(req.url);
+        const chatId = decodeURIComponent(match[1]);
+
+        let body = "";
+        for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 1_000_000) {
+                res.writeHead(413, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Message too large" }));
+                return;
+            }
+        }
+
+        const { role, content, telemetry = null } = JSON.parse(body);
+
+        if (
+            !["user", "assistant"].includes(role) ||
+            typeof content !== "string" ||
+            (telemetry !== null &&
+                (typeof telemetry !== "object" || Array.isArray(telemetry)))
+        ) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid message" }));
+            return;
+        }
+
+        const chat = db.prepare(`
+            SELECT id FROM chats WHERE id = ? AND user_id = ?
+        `).get(chatId, user.id);
+
+        if (!chat) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Chat not found" }));
+            return;
+        }
+
+        const messageId = createMessage(
+            chatId, role, content, telemetry, user.id
+        );
+
+        res.writeHead(201, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ id: String(messageId) }));
+        return;
+    } catch (error) {
+        console.error("Message save failed:", error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid message request" }));
+        return;
+    }
+}
+
+// Clear messages from a chat owned by the authenticated user
+if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    try {
+        const match = /^\/api\/chats\/([^/?]+)\/messages$/.exec(req.url);
+        const chatId = decodeURIComponent(match[1]);
+
+        const chat = db.prepare(`
+            SELECT id FROM chats WHERE id = ? AND user_id = ?
+        `).get(chatId, user.id);
+
+        if (!chat) {
+            res.writeHead(404, {
+                "Content-Type": "application/json; charset=utf-8",
+                "Cache-Control": "no-store"
+            });
+            res.end(JSON.stringify({ error: "Chat not found" }));
+            return;
+        }
+
+        const deletedMessages = clearChatMessages(chatId, user.id);
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ deletedMessages }));
+        return;
+    } catch (error) {
+        console.error("Clear chat failed:", error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid clear chat request" }));
+        return;
+    }
+}
+
+// Delete a chat owned by the authenticated user
+if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    try {
+        const match = /^\/api\/chats\/([^/?]+)$/.exec(req.url);
+        const chatId = decodeURIComponent(match[1]);
+
+        const deletedChats = deleteChat(chatId, user.id);
+
+        if (deletedChats === 0) {
+            res.writeHead(404, {
+                "Content-Type": "application/json; charset=utf-8",
+                "Cache-Control": "no-store"
+            });
+            res.end(JSON.stringify({ error: "Chat not found" }));
+            return;
+        }
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ deletedChats }));
+        return;
+    } catch (error) {
+        console.error("Delete chat failed:", error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid delete chat request" }));
+        return;
+    }
+}
+
+// Rename a chat owned by the authenticated user
+if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    try {
+        const match = /^\/api\/chats\/([^/?]+)$/.exec(req.url);
+        const chatId = decodeURIComponent(match[1]);
+
+        let body = "";
+        for await (const chunk of req) {
+            body += chunk;
+
+            if (body.length > 1000) {
+                res.writeHead(413, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Request too large" }));
+                return;
+            }
+        }
+
+        const { title } = JSON.parse(body);
+
+        if (
+            typeof title !== "string" ||
+            !title.trim() ||
+            title.length > 100
+        ) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid chat title" }));
+            return;
+        }
+
+        const updatedChats = renameChatInDb(chatId, title, user.id);
+
+        if (updatedChats === 0) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Chat not found" }));
+            return;
+        }
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ title: title.trim() }));
+        return;
+    } catch (error) {
+        console.error("Rename chat failed:", error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid rename request" }));
+        return;
+    }
+}
 
     // Streaming chat proxy
     if (req.method === "POST" && req.url === "/api/chat") {

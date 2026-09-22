@@ -54,12 +54,17 @@ if (!chatColumns.some((column) => column.name === "user_id")) {
     `);
 }
 
-function getChats() {
+function getChats(userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
     return db.prepare(`
         SELECT id, title, scroll_top
         FROM chats
+        WHERE user_id = ?
         ORDER BY rowid
-    `).all();
+    `).all(userId);
 }
 
 function createChat(id, title, userId) {
@@ -73,7 +78,19 @@ function createChat(id, title, userId) {
     `).run(id, title, userId);
 }
 
-function createMessage(chatId, role, content, telemetry = null) {
+function createMessage(chatId, role, content, telemetry = null, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A message owner is required");
+    }
+
+    const chat = db.prepare(`
+        SELECT id FROM chats
+        WHERE id = ? AND user_id = ?
+    `).get(chatId, userId);
+
+    if (!chat) {
+        throw new Error("Chat not found");
+    }
     const result = db.prepare(`
         INSERT INTO messages (
             chat_id,
@@ -94,13 +111,73 @@ function createMessage(chatId, role, content, telemetry = null) {
     return result.lastInsertRowid;
 }
 
-function getMessages(chatId) {
-    const rows = db.prepare(`
-        SELECT id, role, content, telemetry_json
-        FROM messages
+function clearChatMessages(chatId, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
+    const result = db.prepare(`
+        DELETE FROM messages
         WHERE chat_id = ?
-        ORDER BY id ASC
-    `).all(chatId);
+          AND EXISTS (
+              SELECT 1
+              FROM chats
+              WHERE id = ?
+                AND user_id = ?
+          )
+    `).run(chatId, chatId, userId);
+
+    return result.changes;
+}
+
+function deleteChat(chatId, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
+    const result = db.prepare(`
+        DELETE FROM chats
+        WHERE id = ? AND user_id = ?
+    `).run(chatId, userId);
+
+    return result.changes;
+}
+
+function renameChat(chatId, title, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
+    if (
+        typeof title !== "string" ||
+        !title.trim() ||
+        title.length > 100
+    ) {
+        throw new Error("Invalid chat title");
+    }
+
+    const result = db.prepare(`
+        UPDATE chats
+        SET title = ?
+        WHERE id = ? AND user_id = ?
+    `).run(title.trim(), chatId, userId);
+
+    return result.changes;
+}
+
+function getMessages(chatId, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
+    const rows = db.prepare(`
+        SELECT m.id, m.role, m.content, m.telemetry_json
+        FROM messages AS m
+        JOIN chats AS c ON c.id = m.chat_id
+        WHERE m.chat_id = ?
+          AND c.user_id = ?
+        ORDER BY m.id ASC
+    `).all(chatId, userId);
 
     return rows.map((row) => ({
         id: row.id,
@@ -147,5 +224,8 @@ module.exports = {
     createMessage,
     getMessages,
     createUser,
-    findUserByUsername
+    findUserByUsername,
+    clearChatMessages,
+    deleteChat,
+    renameChat
 };
