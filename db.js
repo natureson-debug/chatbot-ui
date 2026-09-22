@@ -54,6 +54,17 @@ if (!chatColumns.some((column) => column.name === "user_id")) {
     `);
 }
 
+const messageColumns = db.prepare(`
+    PRAGMA table_info(messages)
+`).all();
+
+if (!messageColumns.some((column) => column.name === "display_content")) {
+    db.exec(`
+        ALTER TABLE messages
+        ADD COLUMN display_content TEXT
+    `);
+}
+
 function getChats(userId) {
     if (typeof userId !== "string" || !userId.trim()) {
         throw new Error("A chat owner is required");
@@ -78,7 +89,7 @@ function createChat(id, title, userId) {
     `).run(id, title, userId);
 }
 
-function createMessage(chatId, role, content, telemetry = null, userId) {
+function createMessage(chatId, role, content, telemetry = null, userId, displayContent = null) {
     if (typeof userId !== "string" || !userId.trim()) {
         throw new Error("A message owner is required");
     }
@@ -92,21 +103,23 @@ function createMessage(chatId, role, content, telemetry = null, userId) {
         throw new Error("Chat not found");
     }
     const result = db.prepare(`
-        INSERT INTO messages (
-            chat_id,
-            role,
-            content,
-            telemetry_json
-        )
-        VALUES (?, ?, ?, ?)
-    `).run(
-        chatId,
+    INSERT INTO messages (
+        chat_id,
         role,
         content,
-        telemetry === null
-            ? null
-            : JSON.stringify(telemetry)
-    );
+        telemetry_json,
+        display_content
+    )
+    VALUES (?, ?, ?, ?, ?)
+`).run(
+    chatId,
+    role,
+    content,
+    telemetry === null
+        ? null
+        : JSON.stringify(telemetry),
+    displayContent
+);
 
     return result.lastInsertRowid;
 }
@@ -143,6 +156,24 @@ function deleteChat(chatId, userId) {
     return result.changes;
 }
 
+function updateChatScrollTop(chatId, scrollTop, userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A chat owner is required");
+    }
+
+    if (!Number.isSafeInteger(scrollTop) || scrollTop < 0) {
+        throw new Error("Invalid scroll position");
+    }
+
+    const result = db.prepare(`
+        UPDATE chats
+        SET scroll_top = ?
+        WHERE id = ? AND user_id = ?
+    `).run(scrollTop, chatId, userId);
+
+    return result.changes;
+}
+
 function renameChat(chatId, title, userId) {
     if (typeof userId !== "string" || !userId.trim()) {
         throw new Error("A chat owner is required");
@@ -171,7 +202,7 @@ function getMessages(chatId, userId) {
     }
 
     const rows = db.prepare(`
-        SELECT m.id, m.role, m.content, m.telemetry_json
+        SELECT m.id, m.role, m.content, m.display_content, m.telemetry_json
         FROM messages AS m
         JOIN chats AS c ON c.id = m.chat_id
         WHERE m.chat_id = ?
@@ -183,6 +214,7 @@ function getMessages(chatId, userId) {
         id: row.id,
         role: row.role,
         content: row.content,
+        displayContent: row.display_content,
         telemetry: row.telemetry_json === null
             ? null
             : JSON.parse(row.telemetry_json)
@@ -227,5 +259,6 @@ module.exports = {
     findUserByUsername,
     clearChatMessages,
     deleteChat,
-    renameChat
+    renameChat,
+    updateChatScrollTop
 };

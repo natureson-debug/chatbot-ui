@@ -136,11 +136,31 @@
     <footer>
         <textarea
             id="prompt"
-            placeholder="Message me..."
+            placeholder="Message"
             rows="1"
         ></textarea>
 
+<label for="attachment" title="Attach a text file">📎 Attach</label>
+<input
+    id="attachment"
+    type="file"
+    accept=".txt,text/plain"
+    hidden
+>
+
+<span id="attachmentName" hidden></span>
+
+<button
+    id="removeAttachment"
+    type="button"
+    aria-label="Remove selected attachment"
+    title="Remove attachment"
+    hidden
+>✕</button>
+
         <button id="send">Send</button>
+
+        
         <button id="stop" disabled>Stop</button>
     </footer>
 

@@ -1,7 +1,8 @@
 ﻿const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, deleteChat, renameChat: renameChatInDb } = require("./db");
+const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, 
+    deleteChat, renameChat: renameChatInDb, updateChatScrollTop } = require("./db");
 const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSession, deleteSession } =
     require("./auth");
 
@@ -193,18 +194,19 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
             }
         }
 
-        const { role, content, telemetry = null } = JSON.parse(body);
+        const { role, content, telemetry = null, displayContent = null } = JSON.parse(body);
 
         if (
-            !["user", "assistant"].includes(role) ||
-            typeof content !== "string" ||
-            (telemetry !== null &&
-                (typeof telemetry !== "object" || Array.isArray(telemetry)))
-        ) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Invalid message" }));
-            return;
-        }
+    !["user", "assistant"].includes(role) ||
+    typeof content !== "string" ||
+    (displayContent !== null && typeof displayContent !== "string") ||
+    (telemetry !== null &&
+        (typeof telemetry !== "object" || Array.isArray(telemetry)))
+) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid message" }));
+    return;
+}
 
         const chat = db.prepare(`
             SELECT id FROM chats WHERE id = ? AND user_id = ?
@@ -217,7 +219,7 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
         }
 
         const messageId = createMessage(
-            chatId, role, content, telemetry, user.id
+            chatId, role, content, telemetry, user.id, displayContent
         );
 
         res.writeHead(201, {
@@ -380,6 +382,60 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
         console.error("Rename chat failed:", error);
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid rename request" }));
+        return;
+    }
+}
+
+// Save the scroll position of a chat owned by the authenticated user
+if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    try {
+        const match = /^\/api\/chats\/([^/?]+)\/scroll$/.exec(req.url);
+        const chatId = decodeURIComponent(match[1]);
+
+        let body = "";
+        for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 1000) {
+                res.writeHead(413, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Request too large" }));
+                return;
+            }
+        }
+
+        const { scrollTop } = JSON.parse(body);
+
+        if (!Number.isSafeInteger(scrollTop) || scrollTop < 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid scroll position" }));
+            return;
+        }
+
+        const updatedChats = updateChatScrollTop(chatId, scrollTop, user.id);
+
+        if (updatedChats === 0) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Chat not found" }));
+            return;
+        }
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ scrollTop }));
+        return;
+    } catch (error) {
+        console.error("Save chat scroll position failed:", error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid scroll request" }));
         return;
     }
 }

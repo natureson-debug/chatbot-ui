@@ -18,6 +18,46 @@ const chatContextMenu = document.getElementById("chatContextMenu");
 const renameChatAction = document.getElementById("renameChatAction");
 
 const chatActionsToggle = document.getElementById("chatActionsToggle");
+const attachmentInput = document.getElementById("attachment");
+const attachmentName = document.getElementById("attachmentName");
+const removeAttachmentButton = document.getElementById("removeAttachment");
+
+attachmentInput.addEventListener("change", () => {
+    const file = attachmentInput.files[0];
+
+    if (file && (
+        !file.name.toLowerCase().endsWith(".txt") ||
+        file.size > 100 * 1024
+    )) {
+        alert("Please select a .txt file no larger than 100 KB.");
+        attachmentInput.value = "";
+        attachmentName.textContent = "";
+        attachmentName.hidden = true;
+        removeAttachmentButton.hidden = true;
+        return;
+    }
+
+    attachmentName.textContent = file ? file.name : "";
+    attachmentName.hidden = !file;
+    removeAttachmentButton.hidden = !file;
+});
+
+removeAttachmentButton.addEventListener("click", () => {
+    attachmentInput.value = "";
+    attachmentName.textContent = "";
+    attachmentName.hidden = true;
+    removeAttachmentButton.hidden = true;
+});
+
+async function readSelectedAttachment() {
+    const file = attachmentInput.files[0];
+    if (!file) return null;
+
+    return {
+        name: file.name,
+        content: await file.text()
+    };
+}
 
 chatActionsToggle.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -131,10 +171,15 @@ function restoreChat() {
 
     messages.forEach((message) => {
         const restoredMessage =
-            addMessage(
-                message.role,
-                message.content
-            );
+    addMessage(
+        message.role,
+        message.displayContent ?? message.content
+    );
+
+            const savedScrollTop =
+    chatStore.chats[chatStore.activeChatId]?.scrollTop ?? 0;
+
+chat.scrollTop = savedScrollTop;
 
         if (message.role === "assistant") {
             restoredMessage.text.innerHTML =
@@ -367,6 +412,19 @@ async function sendMessage() {
 
     if (!prompt || generating) return;
 
+    const attachment = await readSelectedAttachment();
+
+    if (attachment) {
+        console.log("Attachment ready:", {
+            name: attachment.name,
+            characters: attachment.content.length
+    });
+}
+
+const messageContent = attachment
+    ? `${prompt}\n\nAttached file: ${attachment.name}\n\n${attachment.content}`
+    : prompt;
+
     document
     .querySelectorAll(".telemetry.active")
     .forEach((element) => {
@@ -380,12 +438,21 @@ async function sendMessage() {
     controller = new AbortController();
 
     promptBox.value = "";
+    attachmentInput.value = "";
+    attachmentName.textContent = "";
+    attachmentName.hidden = true;
+    removeAttachmentButton.hidden = true;
 
-    addMessage("user", prompt);
+    addMessage(
+    "user",
+    attachment
+        ? `${prompt}\n\nAttached file: ${attachment.name}`
+        : prompt
+    );
 
     messages.push({
         role: "user",
-        content: prompt
+        content: messageContent
     });
 
 try {
@@ -395,9 +462,12 @@ try {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                role: "user",
-                content: prompt
-            })
+    role: "user",
+    content: messageContent,
+    displayContent: attachment
+        ? `${prompt}\n\nAttached file: ${attachment.name}`
+        : null
+})
         }
     );
 
@@ -903,6 +973,22 @@ chat.addEventListener("scroll", () => {
             "chatStore",
             JSON.stringify(chatStore)
         );
+        fetch(
+    `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/scroll`,
+    {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            scrollTop: Math.round(activeChat.scrollTop)
+        })
+    }
+).then((response) => {
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+}).catch((error) => {
+    console.error("Could not save chat scroll position:", error);
+});
     }, 300);
 });
 
