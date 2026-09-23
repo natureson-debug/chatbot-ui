@@ -38,7 +38,17 @@ db.exec(`
         user_id TEXT NOT NULL,
         expires_at INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+        user_id TEXT PRIMARY KEY,
+        system_prompt TEXT NOT NULL DEFAULT '',
+        temperature REAL NOT NULL DEFAULT 0.7,
+        max_tokens INTEGER NOT NULL DEFAULT 4096,
+        thinking INTEGER NOT NULL DEFAULT 0
+            CHECK (thinking IN (0, 1)),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
 
 `);
 
@@ -249,6 +259,101 @@ function findUserByUsername(username) {
     `).get(username);
 }
 
+function getUserSettings(userId) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A user ID is required");
+    }
+
+    let settings = db.prepare(`
+        SELECT system_prompt, temperature, max_tokens, thinking
+        FROM user_settings
+        WHERE user_id = ?
+    `).get(userId);
+
+    if (!settings) {
+        db.prepare(`
+            INSERT INTO user_settings (user_id)
+            VALUES (?)
+        `).run(userId);
+
+        settings = db.prepare(`
+            SELECT system_prompt, temperature, max_tokens, thinking
+            FROM user_settings
+            WHERE user_id = ?
+        `).get(userId);
+    }
+
+    return {
+        systemPrompt: settings.system_prompt,
+        temperature: settings.temperature,
+        maxTokens: settings.max_tokens,
+        thinking: settings.thinking === 1
+    };
+}
+
+
+function saveUserSettings(
+    userId,
+    {
+        systemPrompt,
+        temperature,
+        maxTokens,
+        thinking
+    }
+) {
+    if (typeof userId !== "string" || !userId.trim()) {
+        throw new Error("A user ID is required");
+    }
+
+    if (typeof systemPrompt !== "string") {
+        throw new Error("Invalid system prompt");
+    }
+
+    if (
+        typeof temperature !== "number" ||
+        !Number.isFinite(temperature) ||
+        temperature < 0 ||
+        temperature > 2
+    ) {
+        throw new Error("Temperature must be between 0 and 2");
+    }
+
+    if (
+        !Number.isInteger(maxTokens) ||
+        maxTokens < 1 ||
+        maxTokens > 8192
+    ) {
+        throw new Error("Max Tokens must be between 1 and 8192");
+    }
+
+    if (typeof thinking !== "boolean") {
+        throw new Error("Invalid thinking setting");
+    }
+
+    db.prepare(`
+        INSERT INTO user_settings (
+            user_id,
+            system_prompt,
+            temperature,
+            max_tokens,
+            thinking
+        )
+        VALUES (?, ?, ?, ?, ?)
+
+        ON CONFLICT(user_id) DO UPDATE SET
+            system_prompt = excluded.system_prompt,
+            temperature = excluded.temperature,
+            max_tokens = excluded.max_tokens,
+            thinking = excluded.thinking
+    `).run(
+        userId,
+        systemPrompt,
+        temperature,
+        maxTokens,
+        thinking ? 1 : 0
+    );
+}
+
 module.exports = {
     db,
     getChats,
@@ -260,5 +365,7 @@ module.exports = {
     clearChatMessages,
     deleteChat,
     renameChat,
-    updateChatScrollTop
+    updateChatScrollTop,
+    getUserSettings,
+    saveUserSettings
 };

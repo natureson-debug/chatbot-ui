@@ -86,35 +86,40 @@ chatContextMenu.style.top = `${rect.bottom}px`;
 let contextMenuChatId = null;
 
 
-systemPromptBox.value =
-    localStorage.getItem("systemPrompt") || "";
-    
-temperatureInput.value =
-    localStorage.getItem("temperature") || "0.7";
+async function loadUserSettings() {
+    try {
+        const response = await fetch("/api/settings", {
+            cache: "no-store",
+            credentials: "same-origin"
+        });
 
-maxTokensInput.value =
-    localStorage.getItem("maxTokens") || "4096";
-
-thinkingToggle.checked =
-    localStorage.getItem("thinking") === "true";    
-
-let chatStore =
-    JSON.parse(
-        localStorage.getItem("chatStore")
-    ) || {
-        activeChatId: "chat-1",
-        chats: {
-            "chat-1": {
-                title: "Chat 1",
-                messages: JSON.parse(
-                    localStorage.getItem("chatMessages")
-                ) || []
-            }
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
-    };
 
-let messages =
-    chatStore.chats[chatStore.activeChatId]?.messages ?? [];
+        const settings = await response.json();
+
+        systemPromptBox.value = settings.systemPrompt;
+        temperatureInput.value = settings.temperature;
+        maxTokensInput.value = settings.maxTokens;
+        thinkingToggle.checked = settings.thinking;
+
+    } catch (error) {
+        console.error("Failed to load user settings:", error);
+
+        systemPromptBox.value = "";
+        temperatureInput.value = "0.7";
+        maxTokensInput.value = "4096";
+        thinkingToggle.checked = false;
+    }
+}    
+
+let chatStore = {
+    activeChatId: null,
+    chats: {}
+};
+
+let messages = [];
 
 chat.innerHTML = "";
 chatList.innerHTML = "";
@@ -274,11 +279,6 @@ async function renameChat(chatId) {
     return;
 }
 
-    localStorage.setItem(
-        "chatStore",
-        JSON.stringify(chatStore)
-    );
-
     updateActiveChatTitle();
     renderChatList();
 }
@@ -320,11 +320,6 @@ function renderChatList() {
 
                         messages =
                             chatStore.chats[chatId].messages;
-
-                        localStorage.setItem(
-                            "chatStore",
-                            JSON.stringify(chatStore)
-                        );
 
                         renderChatList();
 
@@ -477,11 +472,6 @@ try {
 } catch (error) {
     console.error("Could not save user message to SQLite:", error);
 }
-
-    localStorage.setItem(
-        "chatStore",
-        JSON.stringify(chatStore)
-    );
 
     renderChatList();
 
@@ -678,11 +668,6 @@ try {
     console.error("Could not save assistant message to SQLite:", error);
 }
 
-        localStorage.setItem(
-            "chatStore",
-            JSON.stringify(chatStore)
-        );
-
         statusText.textContent = "Connected";
 
     } catch (error) {
@@ -722,11 +707,6 @@ try {
     );
 }
 
-            localStorage.setItem(
-                "chatStore",
-                JSON.stringify(chatStore)
-            );
-
             }
             statusText.textContent = "Stopped";
         } else {
@@ -762,45 +742,40 @@ promptBox.addEventListener(
     }
 );
 
-systemPromptBox.addEventListener(
-    "input",
-    () => {
-        localStorage.setItem(
-            "systemPrompt",
-            systemPromptBox.value
-        );
-    }
-);
+async function saveUserSettings() {
+    const settings = {
+        systemPrompt: systemPromptBox.value,
+        temperature: Number(temperatureInput.value),
+        maxTokens: Number(maxTokensInput.value),
+        thinking: thinkingToggle.checked
+    };
 
-temperatureInput.addEventListener(
-    "input",
-    () => {
-        localStorage.setItem(
-            "temperature",
-            temperatureInput.value
-        );
-    }
-);
+    try {
+        const response = await fetch("/api/settings", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "same-origin",
+            body: JSON.stringify(settings)
+        });
 
-maxTokensInput.addEventListener(
-    "input",
-    () => {
-        localStorage.setItem(
-            "maxTokens",
-            maxTokensInput.value
-        );
-    }
-);
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(
+                result.error || `HTTP ${response.status}`
+            );
+        }
 
-thinkingToggle.addEventListener(
-    "change",
-    () => {
-        localStorage.setItem(
-            "thinking",
-            thinkingToggle.checked
-        );
+    } catch (error) {
+        console.error("Failed to save user settings:", error);
     }
-);
+}
+
+systemPromptBox.addEventListener("change", saveUserSettings);
+temperatureInput.addEventListener("change", saveUserSettings);
+maxTokensInput.addEventListener("change", saveUserSettings);
+thinkingToggle.addEventListener("change", saveUserSettings);
 
 settingsToggle.addEventListener("click", () => {
     const isHidden = settingsPanel.hidden;
@@ -846,11 +821,6 @@ try {
 
         messages =
             chatStore.chats[newChatId].messages;
-
-        localStorage.setItem(
-            "chatStore",
-            JSON.stringify(chatStore)
-        );
 
         renderChatList();
 
@@ -902,11 +872,6 @@ try {
             activeChat.messages = [];
             messages = activeChat.messages;
 
-            localStorage.setItem(
-                "chatStore",
-                JSON.stringify(chatStore)
-            );
-
             restoreChat();
             renderChatList();
             return;
@@ -932,11 +897,6 @@ try {
             chatStore.chats[
                 chatStore.activeChatId
             ].messages;
-
-        localStorage.setItem(
-            "chatStore",
-            JSON.stringify(chatStore)
-        );
 
         restoreChat();
 
@@ -969,10 +929,6 @@ chat.addEventListener("scroll", () => {
     clearTimeout(scrollSaveTimer);
 
     scrollSaveTimer = setTimeout(() => {
-        localStorage.setItem(
-            "chatStore",
-            JSON.stringify(chatStore)
-        );
         fetch(
     `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/scroll`,
     {
@@ -1060,8 +1016,11 @@ async function checkLogin() {
         if (response.ok) {
     const user = await response.json();
     adminConsoleButton.hidden = user.isAdmin !== true;
+
     try {
-    const prepared = await prepareServerChatStore();
+        await loadUserSettings();
+
+        const prepared = await prepareServerChatStore();
     const chatIds = Object.keys(prepared.chats);
 
     chatStore = {
@@ -1132,6 +1091,9 @@ loginForm.addEventListener("submit", async (event) => {
         }
 
         const user = await response.json();
+
+        await loadUserSettings();
+
         chatStore = { activeChatId: null, chats: {} };
         messages = [];
         chat.innerHTML = "";

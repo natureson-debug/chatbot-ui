@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, 
-    deleteChat, renameChat: renameChatInDb, updateChatScrollTop } = require("./db");
+    deleteChat, renameChat: renameChatInDb, updateChatScrollTop, getUserSettings, saveUserSettings } = require("./db");
 const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSession, deleteSession } =
     require("./auth");
 
@@ -122,6 +122,103 @@ if (req.method === "GET" && req.url === "/api/chats") {
         "Cache-Control": "no-store"
     });
     res.end(JSON.stringify(chats));
+    return;
+}
+
+// Authenticated user settings
+if (req.method === "GET" && req.url === "/api/settings") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({
+            error: "Authentication required"
+        }));
+        return;
+    }
+
+    try {
+        const settings = getUserSettings(user.id);
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify(settings));
+    } catch (error) {
+        console.error("Failed to load user settings:", error);
+
+        res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to load user settings"
+        }));
+    }
+
+    return;
+}
+
+// Authenticated user settings update
+if (req.method === "POST" && req.url === "/api/settings") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({
+            error: "Authentication required"
+        }));
+        return;
+    }
+
+    try {
+        let body = "";
+
+        for await (const chunk of req) {
+            body += chunk;
+
+            if (body.length > 16384) {
+                res.writeHead(413, {
+                    "Content-Type": "application/json; charset=utf-8"
+                });
+                res.end(JSON.stringify({
+                    error: "Request too large"
+                }));
+                return;
+            }
+        }
+
+        const settings = JSON.parse(body);
+
+        saveUserSettings(user.id, settings);
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            message: "Settings saved successfully"
+        }));
+
+    } catch (error) {
+        console.error("Failed to save user settings:", error);
+
+        res.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: error.message || "Invalid settings"
+        }));
+    }
+
     return;
 }
 
