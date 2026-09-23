@@ -10,10 +10,17 @@ const HOST = "0.0.0.0";
 const PORT = 3000;
 
 const LLAMA_URL = "http://192.168.100.1:8080/v1/chat/completions";
+const LLAMA_HEALTH_URL = "http://192.168.100.1:8080/health";
 const API_KEY_FILE = "C:\\AI\\config\\llama-api-key.txt";
 const PUBLIC_DIR = path.join(__dirname, "public");
+const AI_CONFIG_FILE = "C:\\AI\\config\\chatbot-ai-config.json";
 
 const apiKey = fs.readFileSync(API_KEY_FILE, "utf8").trim();
+
+const { spawn, execFile } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 
 const contentTypes = {
     ".html": "text/html; charset=utf-8",
@@ -49,6 +56,33 @@ function getAuthenticatedUser(req) {
     }
 
     return getSessionUser(db, token);
+}
+
+async function getLlamaServerPid() {
+    try {
+        const { stdout } = await execFileAsync(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_Process | " +
+                "Where-Object { $_.Name -eq 'llama-server.exe' } | " +
+                "Select-Object -First 1 -ExpandProperty ProcessId)"
+            ],
+            {
+                windowsHide: true
+            }
+        );
+
+        const pid = Number(stdout.trim());
+
+        return Number.isInteger(pid) && pid > 0
+            ? pid
+            : null;
+
+    } catch (error) {
+        return null;
+    }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -969,6 +1003,336 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
         "Cache-Control": "no-store"
     });
     res.end(JSON.stringify(users));
+    return;
+}
+
+// Administrator-only AI server status
+if (req.method === "GET" && req.url === "/api/admin/ai/status") {
+    const admin = getAuthenticatedUser(req);
+
+    if (!admin) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (admin.is_admin !== 1) {
+        res.writeHead(403, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    try {
+        const response = await fetch(LLAMA_HEALTH_URL, {
+            headers: {
+                "Authorization": `Bearer ${apiKey}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const health = await response.json();
+
+        const pid = await getLlamaServerPid();
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            running: health.status === "ok",
+            status: health.status,
+            pid
+        }));
+
+    } catch (error) {
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            running: false,
+            status: "unavailable",
+            pid: null
+        }));
+    }
+
+    return;
+}
+
+// Administrator-only AI server restart
+if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
+    const admin = getAuthenticatedUser(req);
+
+    if (!admin) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (admin.is_admin !== 1) {
+        res.writeHead(403, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    try {
+        const child = spawn(
+    "schtasks.exe",
+    [
+        "/Run",
+        "/TN",
+        "AI Chatbot - Admin Restart"
+    ],
+    {
+        windowsHide: true,
+        stdio: "ignore"
+    }
+);
+
+child.unref();
+
+        res.writeHead(202, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            message: "AI server restart initiated"
+        }));
+
+    } catch (error) {
+        console.error("Failed to restart AI server:", error);
+
+        res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to restart AI server"
+        }));
+    }
+
+    return;
+}
+
+// Administrator-only AI configuration
+if (req.method === "GET" && req.url === "/api/admin/ai/config") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (user.is_admin !== 1) {
+        res.writeHead(403, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    try {
+        const config = JSON.parse(
+            fs.readFileSync(AI_CONFIG_FILE, "utf8")
+        );
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify(config));
+    } catch (error) {
+        console.error("Failed to read AI configuration:", error);
+
+        res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to read AI configuration"
+        }));
+    }
+
+    return;
+}
+
+// Administrator-only AI configuration update
+if (req.method === "POST" && req.url === "/api/admin/ai/config") {
+    const admin = getAuthenticatedUser(req);
+
+    if (!admin) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (admin.is_admin !== 1) {
+        res.writeHead(403, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    try {
+        let body = "";
+
+        for await (const chunk of req) {
+            body += chunk;
+
+            if (body.length > 8192) {
+                res.writeHead(413, {
+                    "Content-Type": "application/json; charset=utf-8"
+                });
+                res.end(JSON.stringify({ error: "Request too large" }));
+                return;
+            }
+        }
+
+        const { model, parallel, contextSize } = JSON.parse(body);
+
+        // Validate model against GGUF files actually installed.
+        const availableModels = fs.readdirSync("C:\\AI\\models")
+            .filter(file => file.toLowerCase().endsWith(".gguf"));
+
+        if (
+            typeof model !== "string" ||
+            !availableModels.includes(model)
+        ) {
+            res.writeHead(400, {
+                "Content-Type": "application/json; charset=utf-8"
+            });
+            res.end(JSON.stringify({ error: "Invalid AI model" }));
+            return;
+        }
+
+        if (
+            !Number.isInteger(parallel) ||
+            parallel < 1 ||
+            parallel > 8
+        ) {
+            res.writeHead(400, {
+                "Content-Type": "application/json; charset=utf-8"
+            });
+            res.end(JSON.stringify({ error: "Invalid parallel slot count" }));
+            return;
+        }
+
+        if (
+            !Number.isInteger(contextSize) ||
+            contextSize < 1024 ||
+            contextSize > 131072 ||
+            contextSize % 1024 !== 0
+        ) {
+            res.writeHead(400, {
+                "Content-Type": "application/json; charset=utf-8"
+            });
+            res.end(JSON.stringify({ error: "Invalid context size" }));
+            return;
+        }
+
+        const config = {
+            model,
+            parallel,
+            contextSize
+        };
+
+        fs.writeFileSync(
+            AI_CONFIG_FILE,
+            JSON.stringify(config, null, 4) + "\n",
+            "utf8"
+        );
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            message: "AI configuration saved",
+            config
+        }));
+
+    } catch (error) {
+        console.error("Failed to save AI configuration:", error);
+
+        res.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to save AI configuration"
+        }));
+    }
+
+    return;
+}
+
+// Administrator-only AI model list
+if (req.method === "GET" && req.url === "/api/admin/ai/models") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (user.is_admin !== 1) {
+        res.writeHead(403, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    const modelsDir = "C:\\AI\\models";
+
+    try {
+        const models = fs.readdirSync(modelsDir)
+            .filter(file => file.toLowerCase().endsWith(".gguf"))
+            .sort((a, b) => a.localeCompare(b));
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify(models));
+    } catch (error) {
+        console.error("Failed to read AI models directory:", error);
+
+        res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to read AI models directory"
+        }));
+    }
+
     return;
 }
 

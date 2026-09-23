@@ -183,3 +183,259 @@ createUserForm.addEventListener("submit", async (event) => {
         submitButton.disabled = false;
     }
 });
+
+const aiParallel = document.getElementById("aiParallel");
+const aiContextSize = document.getElementById("aiContextSize");
+const aiContextPerSlot = document.getElementById("aiContextPerSlot");
+const aiServerStatus = document.getElementById("aiServerStatus");
+const aiServerStatusIndicator = document.getElementById("aiServerStatusIndicator");
+
+function updateContextPerSlot() {
+    const parallel = Number(aiParallel.value);
+    const totalContext = Number(aiContextSize.value);
+
+    if (parallel > 0 && totalContext > 0) {
+        aiContextPerSlot.value = Math.floor(totalContext / parallel);
+    } else {
+        aiContextPerSlot.value = "";
+    }
+}
+
+aiParallel.addEventListener("input", updateContextPerSlot);
+aiContextSize.addEventListener("input", updateContextPerSlot);
+
+updateContextPerSlot();
+
+const aiModel = document.getElementById("aiModel");
+
+async function loadAiModels() {
+    try {
+        const response = await fetch("/api/admin/ai/models", {
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const models = await response.json();
+
+        aiModel.innerHTML = "";
+
+        for (const model of models) {
+            const option = document.createElement("option");
+            option.value = model;
+            option.textContent = model;
+            aiModel.appendChild(option);
+        }
+
+    } catch (error) {
+        console.error("Failed to load AI models:", error);
+
+        aiModel.innerHTML = "";
+
+        const option = document.createElement("option");
+        option.textContent = "Failed to load models";
+        option.disabled = true;
+        option.selected = true;
+
+        aiModel.appendChild(option);
+    }
+}
+
+async function waitForAiServer(previousPid) {
+    const maxAttempts = 30;
+    const delayMs = 1000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            const response = await fetch("/api/admin/ai/status", {
+                cache: "no-store"
+            });
+
+            if (response.ok) {
+                const status = await response.json();
+
+                if (
+                    status.running &&
+                    status.pid &&
+                    status.pid !== previousPid
+                ) {
+                    return true;
+                }
+            }
+        } catch (error) {
+            // Temporary failure is expected while llama.cpp restarts.
+        }
+
+        await new Promise(resolve =>
+            setTimeout(resolve, delayMs)
+        );
+    }
+
+    return false;
+}
+
+async function loadAiServerStatus() {
+    try {
+        const response = await fetch("/api/admin/ai/status", {
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const status = await response.json();
+
+        if (status.running) {
+    aiServerStatus.textContent = "Running";
+    aiServerStatusIndicator.className =
+        "ai-status-indicator running";
+} else {
+    aiServerStatus.textContent = "Unavailable";
+    aiServerStatusIndicator.className =
+        "ai-status-indicator unavailable";
+}
+
+    } catch (error) {
+        console.error("Failed to load AI server status:", error);
+        aiServerStatus.textContent = "Unavailable";
+        aiServerStatusIndicator.className = "ai-status-indicator unavailable";
+    }
+}
+
+async function loadAiConfig() {
+    try {
+        const response = await fetch("/api/admin/ai/config", {
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const config = await response.json();
+
+        aiModel.value = config.model;
+        aiParallel.value = config.parallel;
+        aiContextSize.value = config.contextSize;
+
+        updateContextPerSlot();
+
+    } catch (error) {
+        console.error("Failed to load AI configuration:", error);
+    }
+}
+
+async function initializeAiConfig() {
+    await loadAiModels();
+    await loadAiConfig();
+    await loadAiServerStatus();
+}
+
+initializeAiConfig();
+
+const saveAiConfig = document.getElementById("saveAiConfig");
+const aiConfigStatus = document.getElementById("aiConfigStatus");
+
+const restartAiServer = document.getElementById("restartAiServer");
+
+saveAiConfig.addEventListener("click", async () => {
+    const config = {
+        model: aiModel.value,
+        parallel: Number(aiParallel.value),
+        contextSize: Number(aiContextSize.value)
+    };
+
+    saveAiConfig.disabled = true;
+    aiConfigStatus.hidden = false;
+    aiConfigStatus.textContent = "Saving configuration...";
+
+    try {
+        const response = await fetch("/api/admin/ai/config", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(config)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        aiConfigStatus.textContent = "Configuration saved successfully.";
+
+    } catch (error) {
+        console.error("Failed to save AI configuration:", error);
+        aiConfigStatus.textContent =
+            `Failed to save configuration: ${error.message}`;
+    } finally {
+        saveAiConfig.disabled = false;
+    }
+});
+
+restartAiServer.addEventListener("click", async () => {
+    let previousPid = null;
+
+try {
+    const statusResponse = await fetch("/api/admin/ai/status", {
+        cache: "no-store"
+    });
+
+    if (statusResponse.ok) {
+        const currentStatus = await statusResponse.json();
+        previousPid = currentStatus.pid;
+    }
+} catch (error) {
+    console.error("Failed to read current AI server PID:", error);
+}
+    aiServerStatus.textContent = "Restarting...";
+    aiServerStatusIndicator.className = "ai-status-indicator restarting";
+    restartAiServer.disabled = true;
+    aiConfigStatus.hidden = false;
+    aiConfigStatus.textContent = "Restarting AI server...";
+
+    try {
+        const response = await fetch("/api/admin/ai/restart", {
+            method: "POST"
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+
+        aiConfigStatus.textContent = "Waiting for AI server...";
+
+const running = await waitForAiServer(previousPid);
+
+if (running) {
+    aiServerStatus.textContent = "Running";
+    aiServerStatusIndicator.className =
+        "ai-status-indicator running";
+
+    aiConfigStatus.textContent =
+        "AI server restarted successfully.";
+} else {
+    aiServerStatus.textContent = "Unavailable";
+    aiServerStatusIndicator.className =
+        "ai-status-indicator unavailable";
+
+    aiConfigStatus.textContent =
+        "AI server did not become available.";
+}
+
+    } catch (error) {
+        console.error("Failed to restart AI server:", error);
+
+        aiConfigStatus.textContent =
+            `Failed to restart AI server: ${error.message}`;
+    } finally {
+        restartAiServer.disabled = false;
+    }
+});

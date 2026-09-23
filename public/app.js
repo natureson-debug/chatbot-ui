@@ -591,7 +591,7 @@ try {
                                 timings.prompt_n +
                                 timings.predicted_n;
 
-                            const contextLimit = 49152;
+                            const contextLimit = 8192;
 
                             const contextPercent =
                                 (contextTokens / contextLimit) * 100;

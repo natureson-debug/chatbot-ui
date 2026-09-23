@@ -13,81 +13,155 @@
                 <span class="header-gear" aria-hidden="true">⚙</span>
                 <h1>Admin Console</h1>
             </div>
-            <div class="header-side-label">User management</div>
+            
         </header>
 
         <main class="admin-main">
-            <section class="admin-panel create-user-panel">
-                <h2>Create User</h2>
+            <section class="admin-panel user-management-panel">
+                <h2>User management</h2>
 
-                <form id="createUserForm" class="create-user-form">
-                    <div class="field-group username-field">
-                        <label for="newUsername">Username</label>
-                        <div class="input-wrap icon-left">
-                            <span class="field-icon" aria-hidden="true">👤</span>
-                            <input
-                                id="newUsername"
-                                type="text"
-                                autocomplete="off"
-                                placeholder="Enter username"
-                                required
-                            >
+                <div class="create-user-panel">
+                    <form id="createUserForm" class="create-user-form">
+                        <div class="field-group username-field">
+                            <label for="newUsername">Username</label>
+                            <div class="input-wrap icon-left">
+                                <span class="field-icon" aria-hidden="true">👤</span>
+                                <input
+                                    id="newUsername"
+                                    type="text"
+                                    autocomplete="off"
+                                    placeholder="Enter username"
+                                    required
+                                >
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="field-group password-field">
-                        <label for="newPassword">Temporary password</label>
-                        <div class="input-wrap icon-left">
-                            <span class="field-icon" aria-hidden="true">🔒</span>
-                            <input
-                                id="newPassword"
-                                type="password"
-                                autocomplete="new-password"
-                                minlength="12"
-                                placeholder="Generate or enter a temporary password"
-                                required
-                            >
+                        <div class="field-group password-field">
+                            <label for="newPassword">Temporary password</label>
+                            <div class="input-wrap icon-left">
+                                <span class="field-icon" aria-hidden="true">🔒</span>
+                                <input
+                                    id="newPassword"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    minlength="12"
+                                    placeholder="Generate or enter a temporary password"
+                                    required
+                                >
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="field-group role-field">
-                        <label for="newUserRole">Account type</label>
-                        <div class="select-wrap">
-                            <select id="newUserRole" required>
-                                <option value="user" selected>Regular user</option>
-                                <option value="admin">Administrator</option>
-                            </select>
-                            <span class="select-caret" aria-hidden="true">▾</span>
+                        <div class="field-group role-field">
+                            <label for="newUserRole">Account type</label>
+                            <div class="select-wrap">
+                                <select id="newUserRole" required>
+                                    <option value="user" selected>Regular user</option>
+                                    <option value="admin">Administrator</option>
+                                </select>
+                                <span class="select-caret" aria-hidden="true">▾</span>
+                            </div>
                         </div>
-                    </div>
 
-                    <button type="submit" class="primary-btn create-user-btn">
-                        <span class="btn-plus" aria-hidden="true">＋</span>
-                        Create User
-                    </button>
-                </form>
-                <p id="createUserStatus" role="status" hidden></p>
-            </section>
-
-            <section class="admin-panel users-panel">
-                <div class="users-header">
-                    <h2>Users</h2>
-                    <span id="usersCount" class="users-count" aria-live="polite">0 users</span>
+                        <button type="submit" class="primary-btn create-user-btn">
+                            <span class="btn-plus" aria-hidden="true">＋</span>
+                            Create User
+                        </button>
+                    </form>
+                    <p id="createUserStatus" role="status" hidden></p>
                 </div>
 
-                <div id="usersStatus" class="users-status">Loading users...</div>
+                <div class="users-panel">
+                    <div class="users-header">
+                        <h2>Users</h2>
+                        <span id="usersCount" class="users-count" aria-live="polite">0 users</span>
+                    </div>
 
-                <table id="usersTable" hidden>
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Role</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="usersTableBody"></tbody>
-                </table>
+                    <div id="usersStatus" class="users-status">Loading users...</div>
+
+                    <table id="usersTable" hidden>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
             </section>
+
+<section class="admin-panel ai-config-panel">
+    <div class="users-header">
+        <h2>AI Server Configuration</h2>
+        <span class="ai-status">
+    <span id="aiServerStatusIndicator" class="ai-status-indicator"></span>
+    <span id="aiServerStatus"></span>
+</span>
+    </div>
+
+    <div class="ai-config-form">
+
+        <div class="field-group">
+            <label for="aiModel">Model</label>
+            <div class="select-wrap">
+                <select id="aiModel">
+                    <option value="Qwen3-8B-Q5_K_M.gguf" selected>
+                        Qwen3-8B-Q5_K_M.gguf
+                    </option>
+                </select>
+                <span class="select-caret" aria-hidden="true">▾</span>
+            </div>
+        </div>
+
+        <div class="field-group">
+            <label for="aiParallel">Parallel slots</label>
+            <input
+                id="aiParallel"
+                type="number"
+                min="1"
+                max="8"
+                value="2"
+            >
+        </div>
+
+        <div class="field-group">
+            <label for="aiContextSize">Total context size</label>
+            <input
+                id="aiContextSize"
+                type="number"
+                min="1024"
+                step="1024"
+                value="16384"
+            >
+        </div>
+
+        <div class="field-group">
+            <label>Context per slot</label>
+            <input
+                id="aiContextPerSlot"
+                type="text"
+                value="8192"
+                readonly
+            >
+        </div>
+
+        <button
+            id="saveAiConfig"
+            type="button"
+            class="primary-btn"
+        >
+            Save Configuration
+        </button>
+
+        <button id="restartAiServer" type="button">
+    Restart AI Server
+</button>
+
+    </div>
+
+    <p id="aiConfigStatus" role="status" hidden></p>
+</section>
 
             <a href="/" class="back-link">← Back to Chatbot</a>
         </main>
