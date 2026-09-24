@@ -1,11 +1,32 @@
 const path = require("path");
+const os = require("os");
 
-const AI_ROOT = "C:\\AI";
-const CONFIG_DIR = path.win32.join(AI_ROOT, "config");
+const homeOverride = process.env.CHATBOT_HOME;
+let chatbotRoot = homeOverride && homeOverride.trim() ? homeOverride : null;
+let platformPath;
 
-const API_KEY_FILE = path.win32.join(CONFIG_DIR, "llama-api-key.txt");
-const AI_CONFIG_FILE = path.win32.join(CONFIG_DIR, "chatbot-ai-config.json");
-const MODELS_DIR = path.win32.join(AI_ROOT, "models");
+switch (process.platform) {
+    case "win32":
+        platformPath = path.win32;
+        chatbotRoot = chatbotRoot || "C:\\AI";
+        break;
+    case "linux":
+        platformPath = path.posix;
+        chatbotRoot = chatbotRoot || platformPath.join(os.homedir(), ".chatbot");
+        break;
+    case "darwin":
+        platformPath = path.posix;
+        chatbotRoot = chatbotRoot || platformPath.join(os.homedir(), "Library", "Application Support", "Chatbot");
+        break;
+    default:
+        throw new Error(`Unsupported Chatbot paths platform: ${process.platform}`);
+}
+
+const CONFIG_DIR = platformPath.join(chatbotRoot, "config");
+
+const API_KEY_FILE = platformPath.join(CONFIG_DIR, "llama-api-key.txt");
+const AI_CONFIG_FILE = platformPath.join(CONFIG_DIR, "chatbot-ai-config.json");
+const MODELS_DIR = platformPath.join(chatbotRoot, "models");
 
 module.exports = {
     API_KEY_FILE,
