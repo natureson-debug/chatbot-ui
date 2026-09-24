@@ -499,6 +499,8 @@ try {
 
     renderChatList();
 
+    await loadAiRuntime();
+
     const assistantMessage =
         addMessage("assistant");
 
