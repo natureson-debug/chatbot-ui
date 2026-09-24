@@ -1,4 +1,4 @@
-﻿const http = require("http");
+const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, 
@@ -6,14 +6,10 @@ const { getChats, createChat, getMessages, db, findUserByUsername, createUser, c
 const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSession, deleteSession } =
     require("./auth");
 
-const HOST = "0.0.0.0";
-const PORT = 3000;
-
-const LLAMA_URL = "http://192.168.100.1:8080/v1/chat/completions";
-const LLAMA_HEALTH_URL = "http://192.168.100.1:8080/health";
-const API_KEY_FILE = "C:\\AI\\config\\llama-api-key.txt";
+const {
+    HOST, PORT, LLAMA_URL, LLAMA_HEALTH_URL, API_KEY_FILE, AI_CONFIG_FILE, MODELS_DIR
+} = require("./core/config");
 const PUBLIC_DIR = path.join(__dirname, "public");
-const AI_CONFIG_FILE = "C:\\AI\\config\\chatbot-ai-config.json";
 
 const apiKey = fs.readFileSync(API_KEY_FILE, "utf8").trim();
 
@@ -1358,7 +1354,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
         const { model, parallel, contextSize } = JSON.parse(body);
 
         // Validate model against GGUF files actually installed.
-        const availableModels = fs.readdirSync("C:\\AI\\models")
+        const availableModels = fs.readdirSync(MODELS_DIR)
             .filter(file => file.toLowerCase().endsWith(".gguf"));
 
         if (
@@ -1454,10 +1450,8 @@ if (req.method === "GET" && req.url === "/api/admin/ai/models") {
         return;
     }
 
-    const modelsDir = "C:\\AI\\models";
-
     try {
-        const models = fs.readdirSync(modelsDir)
+        const models = fs.readdirSync(MODELS_DIR)
             .filter(file => file.toLowerCase().endsWith(".gguf"))
             .sort((a, b) => a.localeCompare(b));
 
