@@ -86,6 +86,34 @@ chatContextMenu.style.top = `${rect.bottom}px`;
 let contextMenuChatId = null;
 
 
+async function loadAiRuntime() {
+    try {
+        const response = await fetch("/api/ai/runtime", {
+            cache: "no-store",
+            credentials: "same-origin"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const runtime = await response.json();
+
+        if (
+            Number.isInteger(runtime.contextLimit) &&
+            runtime.contextLimit > 0
+        ) {
+            contextLimit = runtime.contextLimit;
+        }
+
+    } catch (error) {
+        console.error(
+            "Failed to load AI runtime information:",
+            error
+        );
+    }
+}
+
 async function loadUserSettings() {
     try {
         const response = await fetch("/api/settings", {
@@ -126,6 +154,7 @@ chatList.innerHTML = "";
 
 let generating = false;
 let controller = null;
+let contextLimit = 8192;
 
 async function checkHealth() {
     try {
@@ -180,11 +209,6 @@ function restoreChat() {
         message.role,
         message.displayContent ?? message.content
     );
-
-            const savedScrollTop =
-    chatStore.chats[chatStore.activeChatId]?.scrollTop ?? 0;
-
-chat.scrollTop = savedScrollTop;
 
         if (message.role === "assistant") {
             restoredMessage.text.innerHTML =
@@ -581,8 +605,6 @@ try {
                                 timings.prompt_n +
                                 timings.predicted_n;
 
-                            const contextLimit = 8192;
-
                             const contextPercent =
                                 (contextTokens / contextLimit) * 100;
                                 
@@ -916,10 +938,12 @@ stopButton.addEventListener(
 let scrollSaveTimer;
 
 chat.addEventListener("scroll", () => {
+    const activeChatId = chatStore.activeChatId;
+
     const activeChat =
         chatStore.chats[
-            chatStore.activeChatId
-        ];
+            activeChatId
+    ];
 
     if (!activeChat) return;
 
@@ -930,7 +954,7 @@ chat.addEventListener("scroll", () => {
 
     scrollSaveTimer = setTimeout(() => {
         fetch(
-    `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/scroll`,
+    `/api/chats/${encodeURIComponent(activeChatId)}/scroll`,
     {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1019,8 +1043,9 @@ async function checkLogin() {
 
     try {
         await loadUserSettings();
+        await loadAiRuntime();
 
-        const prepared = await prepareServerChatStore();
+    const prepared = await prepareServerChatStore();
     const chatIds = Object.keys(prepared.chats);
 
     chatStore = {
@@ -1093,8 +1118,9 @@ loginForm.addEventListener("submit", async (event) => {
         const user = await response.json();
 
         await loadUserSettings();
+        await loadAiRuntime();
 
-        chatStore = { activeChatId: null, chats: {} };
+        chatStore = { activeChatId: null, chats: {} };  
         messages = [];
         chat.innerHTML = "";
         chatList.innerHTML = "";

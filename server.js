@@ -125,6 +125,55 @@ if (req.method === "GET" && req.url === "/api/chats") {
     return;
 }
 
+// Authenticated AI runtime information
+if (req.method === "GET" && req.url === "/api/ai/runtime") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+        res.end(JSON.stringify({
+            error: "Authentication required"
+        }));
+        return;
+    }
+
+    try {
+        const config = JSON.parse(
+            fs.readFileSync(AI_CONFIG_FILE, "utf8")
+        );
+
+        const contextLimit =
+            Math.floor(config.contextSize / config.parallel);
+
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+
+        res.end(JSON.stringify({
+            contextLimit
+        }));
+
+    } catch (error) {
+        console.error(
+            "Failed to read AI runtime information:",
+            error
+        );
+
+        res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8"
+        });
+
+        res.end(JSON.stringify({
+            error: "Failed to read AI runtime information"
+        }));
+    }
+
+    return;
+}
+
 // Authenticated user settings
 if (req.method === "GET" && req.url === "/api/settings") {
     const user = getAuthenticatedUser(req);
