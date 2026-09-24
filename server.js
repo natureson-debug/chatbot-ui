@@ -13,10 +13,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 
 const { createChatCompletion, getHealth } = require("./core/llama-client");
 
-const { spawn, execFile } = require("child_process");
-const { promisify } = require("util");
-
-const execFileAsync = promisify(execFile);
+const { getLlamaServerPid, restartLlamaServer } = require("./core/llama-runtime");
 
 const contentTypes = {
     ".html": "text/html; charset=utf-8",
@@ -52,33 +49,6 @@ function getAuthenticatedUser(req) {
     }
 
     return getSessionUser(db, token);
-}
-
-async function getLlamaServerPid() {
-    try {
-        const { stdout } = await execFileAsync(
-            "powershell.exe",
-            [
-                "-NoProfile",
-                "-Command",
-                "(Get-CimInstance Win32_Process | " +
-                "Where-Object { $_.Name -eq 'llama-server.exe' } | " +
-                "Select-Object -First 1 -ExpandProperty ProcessId)"
-            ],
-            {
-                windowsHide: true
-            }
-        );
-
-        const pid = Number(stdout.trim());
-
-        return Number.isInteger(pid) && pid > 0
-            ? pid
-            : null;
-
-    } catch (error) {
-        return null;
-    }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1214,20 +1184,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
     }
 
     try {
-        const child = spawn(
-    "schtasks.exe",
-    [
-        "/Run",
-        "/TN",
-        "AI Chatbot - Admin Restart"
-    ],
-    {
-        windowsHide: true,
-        stdio: "ignore"
-    }
-);
-
-child.unref();
+        restartLlamaServer();
 
         res.writeHead(202, {
             "Content-Type": "application/json; charset=utf-8",
