@@ -7,11 +7,11 @@ const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSes
     require("./auth");
 
 const {
-    HOST, PORT, LLAMA_URL, LLAMA_HEALTH_URL, API_KEY_FILE, AI_CONFIG_FILE, MODELS_DIR
+    HOST, PORT, LLAMA_URL, AI_CONFIG_FILE, MODELS_DIR
 } = require("./core/config");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const apiKey = fs.readFileSync(API_KEY_FILE, "utf8").trim();
+const { createChatCompletion, getHealth } = require("./core/llama-client");
 
 const { spawn, execFile } = require("child_process");
 const { promisify } = require("util");
@@ -668,14 +668,7 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 }
             };
 
-            const upstream = await fetch(LLAMA_URL, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(llamaRequest)
-            });
+            const upstream = await createChatCompletion(llamaRequest);
 
             if (!upstream.ok) {
                 const errorText = await upstream.text();
@@ -1169,17 +1162,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
     }
 
     try {
-        const response = await fetch(LLAMA_HEALTH_URL, {
-            headers: {
-                "Authorization": `Bearer ${apiKey}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const health = await response.json();
+        const health = await getHealth();
 
         const pid = await getLlamaServerPid();
 
