@@ -27,9 +27,13 @@ const CONFIG_DIR = platformPath.join(chatbotRoot, "config");
 const API_KEY_FILE = platformPath.join(CONFIG_DIR, "llama-api-key.txt");
 const AI_CONFIG_FILE = platformPath.join(CONFIG_DIR, "chatbot-ai-config.json");
 const MODELS_DIR = platformPath.join(chatbotRoot, "models");
+const LLAMA_CWD = platformPath.join(chatbotRoot, "llama.cpp");
+const LLAMA_EXECUTABLE = platformPath.join(LLAMA_CWD, "llama-server.exe");
 
 module.exports = {
     API_KEY_FILE,
     AI_CONFIG_FILE,
-    MODELS_DIR
+    MODELS_DIR,
+    LLAMA_CWD,
+    LLAMA_EXECUTABLE
 };
