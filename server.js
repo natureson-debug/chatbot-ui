@@ -7,7 +7,7 @@ const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSes
     require("./auth");
 
 const {
-    HOST, PORT, LLAMA_URL, AI_CONFIG_FILE, MODELS_DIR
+    HOST, PORT, LLAMA_URL, LLAMA_BIND_HOST, LLAMA_PORT, AI_CONFIG_FILE, MODELS_DIR
 } = require("./core/config");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
@@ -62,7 +62,7 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({
             status: "ok",
             backend: "chatbot-ui",
-            llama: "192.168.100.1:8080"
+            llama: `${LLAMA_BIND_HOST}:${LLAMA_PORT}`
         }));
 
         return;
