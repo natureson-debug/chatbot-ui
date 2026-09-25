@@ -625,8 +625,22 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 return;
             }
 
+            const aiConfig = JSON.parse(
+                fs.readFileSync(AI_CONFIG_FILE, "utf8")
+            );
+            const availableModels = fs.readdirSync(MODELS_DIR)
+                .filter(file => file.toLowerCase().endsWith(".gguf"));
+
+            if (
+                !aiConfig ||
+                typeof aiConfig.model !== "string" ||
+                !availableModels.includes(aiConfig.model)
+            ) {
+                throw new Error("Invalid AI model");
+            }
+
             const llamaRequest = {
-                model: "Qwen3-4B-Q4_K_M",
+                model: path.join(MODELS_DIR, aiConfig.model),
                 messages: clientRequest.messages,
                 temperature: clientRequest.temperature ?? 0.7,
                 max_tokens: clientRequest.max_tokens ?? 512,
