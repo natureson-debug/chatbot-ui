@@ -2,7 +2,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { getChats, createChat, getMessages, db, findUserByUsername, createUser, createMessage, clearChatMessages, 
-    deleteChat, renameChat: renameChatInDb, updateChatScrollTop, getUserSettings, saveUserSettings } = require("./db");
+    deleteChat, renameChat: renameChatInDb, updateChatScrollTop, getUserSettings, saveUserSettings,
+    getChatHistorySnapshot, withWriteTransaction, ChatRevisionConflictError } = require("./db");
 const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSession, deleteSession } =
     require("./auth");
 
@@ -260,7 +261,8 @@ if (req.method === "POST" && req.url === "/api/chats") {
     });
     res.end(JSON.stringify({
         id: chatId,
-        title: "New Chat"
+        title: "New Chat",
+        revision: 0
     }));
     return;
 }
@@ -303,18 +305,21 @@ if (req.method === "GET" && req.url.startsWith("/api/chats/")) {
         return;
     }
 
-    const messages = getMessages(chatId, user.id);
+    const snapshot = getChatHistorySnapshot(chatId, user.id);
 
+    res.setHeader("X-Chat-Revision", String(snapshot.revision));
     res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store"
     });
-    res.end(JSON.stringify(messages));
+    res.end(JSON.stringify(snapshot.messages));
     return;
 }
 
 // Save a message to a chat owned by the authenticated user
 if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
+    try {
+    const originalSessionToken = getSessionToken(req);
     const user = getAuthenticatedUser(req);
 
     if (!user) {
@@ -326,7 +331,6 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
         return;
     }
 
-    try {
         const match = /^\/api\/chats\/([^/?]+)\/messages$/.exec(req.url);
         const chatId = decodeURIComponent(match[1]);
 
@@ -340,7 +344,23 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
             }
         }
 
-        const { role, content, telemetry = null, displayContent = null } = JSON.parse(body);
+        let payload;
+        try {
+            payload = JSON.parse(body);
+        } catch (_) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid message request" }));
+            return;
+        }
+        const { role, content, telemetry = null, displayContent = null, expectedRevision } = payload || {};
+        if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+                error: "A nonnegative safe integer expectedRevision is required",
+                code: expectedRevision === undefined ? "EXPECTED_REVISION_REQUIRED" : "INVALID_REVISION"
+            }));
+            return;
+        }
 
         if (
     !["user", "assistant"].includes(role) ||
@@ -354,30 +374,46 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
     return;
 }
 
+        // Body parsing is complete. All final checks and insertion share this transaction.
+        const result = withWriteTransaction(() => {
+        const currentUser = getSessionUser(db, originalSessionToken);
+        if (!currentUser || currentUser.id !== user.id) {
+            return { status: 401, body: { error: "Authentication required" } };
+        }
+
         const chat = db.prepare(`
             SELECT id FROM chats WHERE id = ? AND user_id = ?
         `).get(chatId, user.id);
 
         if (!chat) {
-            res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Chat not found" }));
-            return;
+            return { status: 404, body: { error: "Chat not found" } };
         }
 
         const messageId = createMessage(
-            chatId, role, content, telemetry, user.id, displayContent
+            chatId, role, content, telemetry, user.id, displayContent, expectedRevision
         );
+        return { status: 201, body: { id: String(messageId) } };
+        });
 
-        res.writeHead(201, {
+        res.writeHead(result.status, {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "no-store"
         });
-        res.end(JSON.stringify({ id: String(messageId) }));
+        res.end(JSON.stringify(result.body));
         return;
     } catch (error) {
+        if (error instanceof ChatRevisionConflictError) {
+            res.writeHead(409, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+            res.end(JSON.stringify({
+                error: "Conversation was cleared; reload before sending.",
+                code: "CHAT_REVISION_CONFLICT",
+                currentRevision: error.currentRevision
+            }));
+            return;
+        }
         console.error("Message save failed:", error);
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid message request" }));
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Could not save message" }));
         return;
     }
 }
@@ -412,13 +448,13 @@ if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url))
             return;
         }
 
-        const deletedMessages = clearChatMessages(chatId, user.id);
+        const result = clearChatMessages(chatId, user.id);
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "no-store"
         });
-        res.end(JSON.stringify({ deletedMessages }));
+        res.end(JSON.stringify(result));
         return;
     } catch (error) {
         console.error("Clear chat failed:", error);

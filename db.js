@@ -47,10 +47,24 @@ db.exec(`
         max_tokens INTEGER NOT NULL DEFAULT 4096,
         thinking INTEGER NOT NULL DEFAULT 0
             CHECK (thinking IN (0, 1)),
+        theme TEXT NOT NULL DEFAULT 'dark'
+            CHECK (theme IN ('dark', 'light')),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
 `);
+
+const userSettingsColumns = db.prepare(`
+    PRAGMA table_info(user_settings)
+`).all();
+
+if (!userSettingsColumns.some((column) => column.name === "theme")) {
+    db.exec(`
+        ALTER TABLE user_settings
+        ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'
+            CHECK (theme IN ('dark', 'light'))
+    `);
+}
 
 const chatColumns = db.prepare(`
     PRAGMA table_info(chats)
@@ -75,13 +89,66 @@ if (!messageColumns.some((column) => column.name === "display_content")) {
     `);
 }
 
+// The revision migration is atomic and must succeed before this module loads.
+withWriteTransaction(() => {
+    const columns = db.prepare("PRAGMA table_info(chats)").all();
+    if (!columns.some((column) => column.name === "revision")) {
+        db.exec(`
+            ALTER TABLE chats ADD COLUMN revision INTEGER NOT NULL DEFAULT 0
+            CHECK (typeof(revision) = 'integer' AND revision BETWEEN 0 AND 9007199254740991)
+        `);
+    }
+    if (db.prepare(`
+        SELECT 1 FROM chats WHERE revision IS NULL OR typeof(revision) != 'integer'
+            OR revision < 0 OR revision > 9007199254740991 LIMIT 1
+    `).get()) {
+        throw new Error("Invalid stored chat revision");
+    }
+});
+
+function validateRevision(revision) {
+    if (!Number.isSafeInteger(revision) || revision < 0) {
+        throw new TypeError("A nonnegative safe integer revision is required");
+    }
+}
+
+class ChatRevisionConflictError extends Error {
+    constructor(currentRevision) {
+        super("Chat revision conflict");
+        this.name = "ChatRevisionConflictError";
+        this.code = "CHAT_REVISION_CONFLICT";
+        this.currentRevision = currentRevision;
+    }
+}
+
+// Callbacks must be synchronous. Nested calls use savepoints so an API layer
+// can enclose final session validation and createMessage in one write transaction.
+function withWriteTransaction(callback) {
+    if (typeof callback !== "function" || callback.constructor.name === "AsyncFunction") {
+        throw new TypeError("A synchronous transaction callback is required");
+    }
+    const nested = db.isTransaction;
+    db.exec(nested ? "SAVEPOINT chatbot_write" : "BEGIN IMMEDIATE");
+    try {
+        const result = callback();
+        if (result && typeof result.then === "function") {
+            throw new TypeError("Transaction callbacks must not return promises");
+        }
+        db.exec(nested ? "RELEASE chatbot_write" : "COMMIT");
+        return result;
+    } catch (error) {
+        db.exec(nested ? "ROLLBACK TO chatbot_write; RELEASE chatbot_write" : "ROLLBACK");
+        throw error;
+    }
+}
+
 function getChats(userId) {
     if (typeof userId !== "string" || !userId.trim()) {
         throw new Error("A chat owner is required");
     }
 
     return db.prepare(`
-        SELECT id, title, scroll_top
+        SELECT id, title, scroll_top, revision
         FROM chats
         WHERE user_id = ?
         ORDER BY rowid
@@ -99,18 +166,24 @@ function createChat(id, title, userId) {
     `).run(id, title, userId);
 }
 
-function createMessage(chatId, role, content, telemetry = null, userId, displayContent = null) {
+function createMessage(chatId, role, content, telemetry = null, userId, displayContent = null, expectedRevision) {
     if (typeof userId !== "string" || !userId.trim()) {
         throw new Error("A message owner is required");
     }
 
+    validateRevision(expectedRevision);
+    return withWriteTransaction(() => {
     const chat = db.prepare(`
-        SELECT id FROM chats
+        SELECT id, revision FROM chats
         WHERE id = ? AND user_id = ?
     `).get(chatId, userId);
 
     if (!chat) {
         throw new Error("Chat not found");
+    }
+    validateRevision(chat.revision);
+    if (chat.revision !== expectedRevision) {
+        throw new ChatRevisionConflictError(chat.revision);
     }
     const result = db.prepare(`
     INSERT INTO messages (
@@ -132,6 +205,7 @@ function createMessage(chatId, role, content, telemetry = null, userId, displayC
 );
 
     return result.lastInsertRowid;
+    });
 }
 
 function clearChatMessages(chatId, userId) {
@@ -139,18 +213,38 @@ function clearChatMessages(chatId, userId) {
         throw new Error("A chat owner is required");
     }
 
-    const result = db.prepare(`
-        DELETE FROM messages
-        WHERE chat_id = ?
-          AND EXISTS (
-              SELECT 1
-              FROM chats
-              WHERE id = ?
-                AND user_id = ?
-          )
-    `).run(chatId, chatId, userId);
+    return withWriteTransaction(() => {
+        const chat = db.prepare("SELECT revision FROM chats WHERE id = ? AND user_id = ?")
+            .get(chatId, userId);
+        if (!chat) throw new Error("Chat not found");
+        validateRevision(chat.revision);
+        if (chat.revision === Number.MAX_SAFE_INTEGER) throw new RangeError("Chat revision overflow");
+        const result = db.prepare("DELETE FROM messages WHERE chat_id = ?").run(chatId);
+        const revision = chat.revision + 1;
+        db.prepare("UPDATE chats SET revision = ? WHERE id = ? AND user_id = ?")
+            .run(revision, chatId, userId);
+        return { deletedMessages: result.changes, revision };
+    });
+}
 
-    return result.changes;
+function getChatHistorySnapshot(chatId, userId) {
+    if (typeof userId !== "string" || !userId.trim()) throw new Error("A chat owner is required");
+    // One statement supplies a consistent snapshot, including empty chats.
+    const rows = db.prepare(`
+        SELECT c.revision, m.id, m.role, m.content, m.display_content, m.telemetry_json
+        FROM chats AS c LEFT JOIN messages AS m ON m.chat_id = c.id
+        WHERE c.id = ? AND c.user_id = ? ORDER BY m.id ASC
+    `).all(chatId, userId);
+    if (!rows.length) throw new Error("Chat not found");
+    validateRevision(rows[0].revision);
+    return {
+        revision: rows[0].revision,
+        messages: rows.filter((row) => row.id !== null).map((row) => ({
+            id: row.id, role: row.role, content: row.content,
+            displayContent: row.display_content,
+            telemetry: row.telemetry_json === null ? null : JSON.parse(row.telemetry_json)
+        }))
+    };
 }
 
 function deleteChat(chatId, userId) {
@@ -265,7 +359,7 @@ function getUserSettings(userId) {
     }
 
     let settings = db.prepare(`
-        SELECT system_prompt, temperature, max_tokens, thinking
+        SELECT system_prompt, temperature, max_tokens, thinking, theme
         FROM user_settings
         WHERE user_id = ?
     `).get(userId);
@@ -277,7 +371,7 @@ function getUserSettings(userId) {
         `).run(userId);
 
         settings = db.prepare(`
-            SELECT system_prompt, temperature, max_tokens, thinking
+            SELECT system_prompt, temperature, max_tokens, thinking, theme
             FROM user_settings
             WHERE user_id = ?
         `).get(userId);
@@ -287,7 +381,8 @@ function getUserSettings(userId) {
         systemPrompt: settings.system_prompt,
         temperature: settings.temperature,
         maxTokens: settings.max_tokens,
-        thinking: settings.thinking === 1
+        thinking: settings.thinking === 1,
+        theme: settings.theme
     };
 }
 
@@ -298,7 +393,8 @@ function saveUserSettings(
         systemPrompt,
         temperature,
         maxTokens,
-        thinking
+        thinking,
+        theme
     }
 ) {
     if (typeof userId !== "string" || !userId.trim()) {
@@ -330,32 +426,42 @@ function saveUserSettings(
         throw new Error("Invalid thinking setting");
     }
 
+    if (theme !== "dark" && theme !== "light") {
+        throw new Error("Theme must be dark or light");
+    }
+
     db.prepare(`
         INSERT INTO user_settings (
             user_id,
             system_prompt,
             temperature,
             max_tokens,
-            thinking
+            thinking,
+            theme
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
 
         ON CONFLICT(user_id) DO UPDATE SET
             system_prompt = excluded.system_prompt,
             temperature = excluded.temperature,
             max_tokens = excluded.max_tokens,
-            thinking = excluded.thinking
+            thinking = excluded.thinking,
+            theme = excluded.theme
     `).run(
         userId,
         systemPrompt,
         temperature,
         maxTokens,
-        thinking ? 1 : 0
+        thinking ? 1 : 0,
+        theme
     );
 }
 
 module.exports = {
     db,
+    withWriteTransaction,
+    ChatRevisionConflictError,
+    getChatHistorySnapshot,
     getChats,
     createChat,
     createMessage,

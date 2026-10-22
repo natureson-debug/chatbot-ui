@@ -1,4 +1,4 @@
-﻿const chat = document.getElementById("chat");
+const chat = document.getElementById("chat");
 const promptBox = document.getElementById("prompt");
 const sendButton = document.getElementById("send");
 const stopButton = document.getElementById("stop");
@@ -9,6 +9,7 @@ const settingsToggle = document.getElementById("settingsToggle");
 const settingsPanel = document.getElementById("settingsPanel");
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
+const themeSelect = document.getElementById("theme");
 const temperatureInput = document.getElementById("temperature");
 const maxTokensInput = document.getElementById("maxTokens");
 const statusText = document.getElementById("status");
@@ -87,17 +88,20 @@ let contextMenuChatId = null;
 
 
 async function loadAiRuntime() {
+    const epoch = sessionEpoch;
     try {
         const response = await fetch("/api/ai/runtime", {
             cache: "no-store",
             credentials: "same-origin"
         });
+        if (epoch !== sessionEpoch) return;
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
 
         const runtime = await response.json();
+        if (epoch !== sessionEpoch) return;
 
         if (
             Number.isInteger(runtime.contextLimit) &&
@@ -107,6 +111,7 @@ async function loadAiRuntime() {
         }
 
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         console.error(
             "Failed to load AI runtime information:",
             error
@@ -115,32 +120,44 @@ async function loadAiRuntime() {
 }
 
 async function loadUserSettings() {
+    const epoch = sessionEpoch;
     try {
         const response = await fetch("/api/settings", {
             cache: "no-store",
             credentials: "same-origin"
         });
+        if (epoch !== sessionEpoch) return;
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
 
         const settings = await response.json();
+        if (epoch !== sessionEpoch) return;
 
         systemPromptBox.value = settings.systemPrompt;
+        themeSelect.value = settings.theme;
+        applyTheme(settings.theme);
         temperatureInput.value = settings.temperature;
         maxTokensInput.value = settings.maxTokens;
         thinkingToggle.checked = settings.thinking;
 
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         console.error("Failed to load user settings:", error);
 
         systemPromptBox.value = "";
+        themeSelect.value = "dark";
+        applyTheme("dark");
         temperatureInput.value = "0.7";
         maxTokensInput.value = "4096";
         thinkingToggle.checked = false;
     }
 }    
+
+function applyTheme(theme) {
+    document.body.dataset.theme = theme === "light" ? "light" : "dark";
+}
 
 let chatStore = {
     activeChatId: null,
@@ -153,6 +170,91 @@ chat.innerHTML = "";
 chatList.innerHTML = "";
 
 let generating = false;
+let sessionEpoch = 0;
+let nextGenerationId = 0;
+let activeGeneration = null;
+let historyLoadSequence = 0;
+function requireServerRevision(value) {
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error("Invalid server chat revision");
+    return value;
+}
+async function readHistorySnapshot(response) {
+    const header = response.headers.get("X-Chat-Revision");
+    if (header === null || !/^(0|[1-9][0-9]*)$/.test(header)) throw new Error("Missing or invalid chat revision");
+    const serverRevision = requireServerRevision(Number(header));
+    const history = await response.json();
+    if (!Array.isArray(history)) throw new Error("Invalid chat history");
+    return { serverRevision, messages: history };
+}
+async function reconcileConversation(chatId) {
+    const target = chatStore.chats[chatId];
+    if (!target) return;
+    const epoch = sessionEpoch;
+    const requestId = (target.reconciliationId || 0) + 1;
+    target.reconciliationId = requestId;
+    target.lifecyclePending = true;
+    target.historyRevision = (target.historyRevision || 0) + 1;
+    const revision = target.historyRevision;
+    invalidateGeneration(chatId);
+    delete target.transientResponse;
+    // Discard rejected/uncertain local output even if reconciliation fails.
+    target.messages = [];
+    const current = () => epoch === sessionEpoch && chatStore.chats[chatId] === target &&
+        target.reconciliationId === requestId && target.historyRevision === revision;
+    if (chatStore.activeChatId === chatId) { messages = target.messages; restoreChat(); }
+    try {
+        const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages`,
+            { credentials: "same-origin", cache: "no-store" });
+        if (!current()) return;
+        if (response.status === 404) {
+            delete chatStore.chats[chatId];
+            if (chatStore.activeChatId === chatId) {
+                chatStore.activeChatId = Object.keys(chatStore.chats)[0] ?? null;
+                messages = chatStore.activeChatId ? chatStore.chats[chatStore.activeChatId].messages : [];
+                if (chatStore.activeChatId) restoreChat(); else chat.innerHTML = "";
+            }
+            renderChatList();
+            return;
+        }
+        if (!response.ok) throw new Error(`History reload failed: HTTP ${response.status}`);
+        const snapshot = await readHistorySnapshot(response);
+        if (!current()) return;
+        target.messages = snapshot.messages;
+        target.serverRevision = snapshot.serverRevision;
+        target.lifecyclePending = false;
+        if (chatStore.activeChatId === chatId) { messages = target.messages; restoreChat(); }
+        renderChatList();
+    } catch (error) {
+        if (!current()) return;
+        console.error("Conversation reconciliation failed:", error);
+        if (chatStore.activeChatId === chatId) statusText.textContent = "History could not be verified. Reload before sending.";
+    }
+}
+const assistantViews = new WeakMap();
+function generationIsValid(g) {
+    return activeGeneration === g && !g.invalid && g.epoch === sessionEpoch &&
+        chatStore.chats[g.chatId] === g.chat &&
+        (g.chat.historyRevision || 0) === g.revision && g.chat.messages === g.messages;
+}
+function invalidateGeneration(chatId = null) {
+    const g = activeGeneration;
+    if (!g || (chatId !== null && g.chatId !== chatId)) return;
+    g.invalid = true;
+    g.controller.abort();
+    g.view?.container.remove();
+    if (activeGeneration === g) {
+        activeGeneration = null;
+        generating = false;
+        controller = null;
+        sendButton.disabled = false;
+        stopButton.disabled = true;
+    }
+}
+function replaceSession() {
+    sessionEpoch++;
+    invalidateGeneration();
+    return sessionEpoch;
+}
 let controller = null;
 let contextLimit = 8192;
 
@@ -171,7 +273,7 @@ async function checkHealth() {
     }
 }
 
-function addMessage(role, content = "") {
+function addMessage(role, content = "", mount = true) {
     const container = document.createElement("div");
     container.className = `message ${role}`;
 
@@ -187,23 +289,50 @@ function addMessage(role, content = "") {
     telemetry.className = "telemetry";  
 
     container.appendChild(roleLabel);
+    let thinking = null;
+    let reasoning = null;
+    const notice = document.createElement("div");
+    notice.className = "completion-notice";
+    notice.hidden = true;
+    notice.setAttribute("role", "status");
+    if (role === "assistant") {
+        thinking = document.createElement("details");
+        thinking.className = "message-thinking";
+        thinking.hidden = true;
+        const summary = document.createElement("summary");
+        summary.textContent = "Thinking";
+        reasoning = document.createElement("div");
+        reasoning.className = "message-reasoning";
+        thinking.appendChild(summary);
+        thinking.appendChild(reasoning);
+        container.appendChild(thinking);
+    }
     container.appendChild(text);
 
     if (role === "assistant") {
-    container.appendChild(telemetry);
+        container.appendChild(notice);
+        container.appendChild(telemetry);
     }
 
-    chat.appendChild(container);
+    if (mount) {
+        chat.appendChild(container);
+        chat.scrollTop = chat.scrollHeight;
+    }
 
-    chat.scrollTop = chat.scrollHeight;
-
-    return {text, telemetry};
+    return {container, text, telemetry, thinking, reasoning, notice};
 }
 
 function restoreChat() {
     chat.innerHTML = "";
 
     messages.forEach((message) => {
+        const retained = assistantViews.get(message);
+        if (retained) {
+            retained.thinking.hidden = !thinkingToggle.checked || !retained.reasoning.textContent;
+            if (!thinkingToggle.checked) retained.thinking.open = false;
+            chat.appendChild(retained.container);
+            return;
+        }
         const restoredMessage =
     addMessage(
         message.role,
@@ -215,7 +344,6 @@ function restoreChat() {
                 DOMPurify.sanitize(
                     marked.parse(message.content)
                 );
-
             if (message.telemetry) {
                 const t = message.telemetry;
 
@@ -229,6 +357,20 @@ function restoreChat() {
             }
         }
     });
+
+    if (activeGeneration && activeGeneration.chat === chatStore.chats[chatStore.activeChatId] && activeGeneration.view && !activeGeneration.saved) {
+        const view = activeGeneration.view;
+        view.thinking.hidden = !thinkingToggle.checked || !view.reasoning.textContent;
+        if (!thinkingToggle.checked) view.thinking.open = false;
+        chat.appendChild(view.container);
+    }
+
+    const transient = chatStore.chats[chatStore.activeChatId].transientResponse;
+    if (transient) {
+        transient.thinking.hidden = !thinkingToggle.checked || !transient.reasoning.textContent;
+        if (!thinkingToggle.checked) transient.thinking.open = false;
+        chat.appendChild(transient.container);
+    }
 
     const savedScrollTop =
         chatStore.chats[
@@ -364,24 +506,30 @@ renameChatAction.addEventListener("click", () => {
 const clearChatAction = document.getElementById("clearChatAction");
 
 clearChatAction.addEventListener("click", () => {
+    const chatId = contextMenuChatId;
     closeChatContextMenu();
-    deleteChatButton.click();
+    clearConversation(chatId);
 });
 
 const deleteChatAction = document.getElementById("deleteChatAction");
 
 deleteChatAction.addEventListener("click", async () => {
-    const chatId = chatStore.activeChatId;
+    const epoch = sessionEpoch;
+    const chatId = contextMenuChatId ?? chatStore.activeChatId;
     const activeChat = chatStore.chats[chatId];
 
     closeChatContextMenu();
 
-    if (!loginScreen.hidden || !activeChat) return;
+    if (!loginScreen.hidden || !activeChat || activeChat.lifecyclePending) return;
 
     if (!confirm(`Delete "${activeChat.title}" and all its messages?`)) {
         return;
     }
 
+    activeChat.lifecyclePending = true;
+    activeChat.historyRevision = (activeChat.historyRevision || 0) + 1;
+    invalidateGeneration(chatId);
+    delete activeChat.transientResponse;
     try {
         const response = await fetch(
             `/api/chats/${encodeURIComponent(chatId)}`,
@@ -392,9 +540,10 @@ deleteChatAction.addEventListener("click", async () => {
             throw new Error(`Delete chat failed: HTTP ${response.status}`);
         }
 
+        if (epoch !== sessionEpoch || chatStore.chats[chatId] !== activeChat) return;
         delete chatStore.chats[chatId];
 
-        chatStore.activeChatId =
+        if (chatStore.activeChatId === chatId) chatStore.activeChatId =
             Object.keys(chatStore.chats)[0] ?? null;
 
         messages = chatStore.activeChatId
@@ -409,7 +558,9 @@ deleteChatAction.addEventListener("click", async () => {
             chat.innerHTML = "";
         }
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         console.error("Could not delete chat:", error);
+        activeChat.lifecyclePending = false;
         alert("Could not delete the chat. Please try again.");
     }
 });
@@ -423,6 +574,53 @@ document.addEventListener("click", (event) => {
 window.addEventListener("resize", closeChatContextMenu);
 
 
+async function readAssistantStream(reader, onChunk) {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let buffer = "";
+    let dataLines = [];
+    let completed = false;
+    function dispatch() {
+        if (!dataLines.length || completed) return;
+        const data = dataLines.join("\n");
+        dataLines = [];
+        if (data.trim() === "[DONE]") {
+            completed = true;
+            return;
+        }
+        onChunk(JSON.parse(data));
+    }
+    function line(value) {
+        if (value.endsWith("\r")) value = value.slice(0, -1);
+        if (value === "") dispatch();
+        else if (value === "data" || value.startsWith("data:")) {
+            dataLines.push(value === "data" ? "" : value.slice(5).replace(/^ /, ""));
+        }
+    }
+    try {
+        while (!completed) {
+            const { done, value } = await reader.read();
+            buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+            let end;
+            while (!completed && (end = buffer.indexOf("\n")) !== -1) {
+                const next = buffer.slice(0, end);
+                buffer = buffer.slice(end + 1);
+                line(next);
+            }
+            if (done) {
+                if (!completed && buffer) line(buffer);
+                if (!completed) dispatch();
+                break;
+            }
+        }
+        if (!completed) throw new Error("Stream ended before completion.");
+    } finally {
+        if (completed) {
+            try { await reader.cancel(); } catch (_) { /* Completion already received. */ }
+        }
+        reader.releaseLock();
+    }
+}
+
 async function sendMessage() {
     if (!loginScreen.hidden || !chatStore.activeChatId) {
     return;
@@ -431,7 +629,48 @@ async function sendMessage() {
 
     if (!prompt || generating) return;
 
-    const attachment = await readSelectedAttachment();
+    const responseChatId = chatStore.activeChatId;
+    const originChat = chatStore.chats[responseChatId];
+    if (!originChat || originChat.lifecyclePending) return;
+    if (!Number.isSafeInteger(originChat.serverRevision) || originChat.serverRevision < 0) {
+        await reconcileConversation(responseChatId);
+        return;
+    }
+    const originMessages = originChat.messages;
+    const requestHistory = originMessages.map(({ role, content }) => ({ role, content }));
+    const thinkingEnabled = thinkingToggle.checked;
+    const generationSettings = {
+        systemPrompt: systemPromptBox.value.trim(),
+        temperature: Number(temperatureInput.value),
+        maxTokens: Number(maxTokensInput.value)
+    };
+    const isOriginVisible = () => chatStore.activeChatId === responseChatId && chatStore.chats[responseChatId] === originChat;
+    const generation = {
+        id: ++nextGenerationId, chatId: responseChatId, chat: originChat,
+        messages: originMessages, revision: originChat.historyRevision || 0,
+        epoch: sessionEpoch, controller: new AbortController(),
+        invalid: false, view: null, saved: false
+    };
+    Object.defineProperty(generation, "expectedRevision", { value: originChat.serverRevision, enumerable: true });
+    activeGeneration = generation;
+    generating = true;
+    sendButton.disabled = true;
+    controller = generation.controller;
+    stopButton.disabled = false;
+    let attachment;
+    try {
+        attachment = await readSelectedAttachment();
+        if (!generationIsValid(generation)) return;
+    } catch (error) {
+        if (!generationIsValid(generation)) return;
+        activeGeneration = null;
+        generating = false;
+        sendButton.disabled = false;
+        stopButton.disabled = true;
+        controller = null;
+        if (isOriginVisible()) statusText.textContent = "Could not read attachment.";
+        return;
+    }
 
     if (attachment) {
         console.log("Attachment ready:", {
@@ -444,45 +683,39 @@ const messageContent = attachment
     ? `${prompt}\n\nAttached file: ${attachment.name}\n\n${attachment.content}`
     : prompt;
 
-    document
-    .querySelectorAll(".telemetry.active")
-    .forEach((element) => {
-        element.classList.remove("active");
-    });
-
-    generating = true;
-    sendButton.disabled = true;
-
     stopButton.disabled = false;
-    controller = new AbortController();
+    controller = generation.controller;
+    if (isOriginVisible()) {
+        document.querySelectorAll(".telemetry.active").forEach((element) => {
+            element.classList.remove("active");
+        });
+        promptBox.value = "";
+        attachmentInput.value = "";
+        attachmentName.textContent = "";
+        attachmentName.hidden = true;
+        removeAttachmentButton.hidden = true;
+    }
 
-    promptBox.value = "";
-    attachmentInput.value = "";
-    attachmentName.textContent = "";
-    attachmentName.hidden = true;
-    removeAttachmentButton.hidden = true;
-
-    addMessage(
-    "user",
-    attachment
-        ? `${prompt}\n\nAttached file: ${attachment.name}`
-        : prompt
-    );
-
-    messages.push({
+    const userMessage = {
         role: "user",
-        content: messageContent
-    });
+        content: messageContent,
+        displayContent: attachment ? prompt + "\n\nAttached file: " + attachment.name : null
+    };
+    delete originChat.transientResponse;
+    originMessages.push(userMessage);
+    requestHistory.push({ role: "user", content: messageContent });
+    if (isOriginVisible()) restoreChat();
 
 try {
     const response = await fetch(
-        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
+        `/api/chats/${encodeURIComponent(responseChatId)}/messages`,
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
     role: "user",
     content: messageContent,
+    expectedRevision: generation.expectedRevision,
     displayContent: attachment
         ? `${prompt}\n\nAttached file: ${attachment.name}`
         : null
@@ -490,6 +723,11 @@ try {
         }
     );
 
+    if (!generationIsValid(generation)) return;
+    if (response.status === 409) {
+        await reconcileConversation(responseChatId);
+        return;
+    }
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
     }
@@ -497,25 +735,29 @@ try {
     console.error("Could not save user message to SQLite:", error);
 }
 
+    if (!generationIsValid(generation)) return;
     renderChatList();
 
     await loadAiRuntime();
+    if (!generationIsValid(generation)) return;
 
     const assistantMessage =
-        addMessage("assistant");
+        addMessage("assistant", "", isOriginVisible());
+    generation.view = assistantMessage;
 
     const assistantElement =
         assistantMessage.text;
 
     const telemetryElement = 
         assistantMessage.telemetry;
-
     let responseTelemetry = null;
 
     let assistantText = "";
+    let reasoningText = "";
+    let finishReason = null;
 
     try {
-        statusText.textContent = "Generating...";
+        if (isOriginVisible()) statusText.textContent = "Generating...";
 
         const response = await fetch("/api/chat", {
             method: "POST",
@@ -528,69 +770,32 @@ try {
                 messages: [
                     {
                         role: "system",
-                        content: systemPromptBox.value.trim()
+                        content: generationSettings.systemPrompt
                     },
-                    ...messages.map((message) => ({
-                        role: message.role,
-                        content: message.content
-                }))
+                    ...requestHistory
                 ],
-                enable_thinking: thinkingToggle.checked,
-                temperature: Number(temperatureInput.value),
-                max_tokens: Number(maxTokensInput.value)
+                enable_thinking: thinkingEnabled,
+                temperature: generationSettings.temperature,
+                max_tokens: generationSettings.maxTokens
             }),
-            signal: controller.signal,
+            signal: generation.controller.signal,
         });
 
+        if (!generationIsValid(generation)) return;
         if (!response.ok) {
             throw new Error(
                 await response.text()
             );
         }
 
-        const reader =
-            response.body.getReader();
-
-        const decoder =
-            new TextDecoder();
-
-        let buffer = "";
-
-        while (true) {
-            const { done, value } =
-                await reader.read();
-
-            if (done) break;
-
-            buffer += decoder.decode(
-                value,
-                { stream: true }
-            );
-
-            const lines =
-                buffer.split("\n");
-
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-
-                if (!trimmed.startsWith("data:")) {
-                    continue;
-                }
-
-                const data =
-                    trimmed.slice(5).trim();
-
-                if (data === "[DONE]") {
-                    continue;
-                }
-
-                try {
-                    const chunk =
-                        JSON.parse(data);
-
-                        if (chunk.timings) {
+        if (!generationIsValid(generation)) return;
+        await readAssistantStream(response.body.getReader(), (chunk) => {
+            if (!generationIsValid(generation)) throw new DOMException("Obsolete generation", "AbortError");
+            if (chunk.choices?.[0]?.finish_reason != null) {
+                finishReason = chunk.choices[0].finish_reason;
+            }
+                        if (chunk.timings && ["predicted_n", "predicted_per_second", "predicted_ms", "cache_n", "prompt_n"].every(
+                            key => Number.isFinite(chunk.timings[key]))) {
                             const timings = chunk.timings;
 
                             const generatedTokens =
@@ -643,6 +848,13 @@ try {
                     const delta =
                         chunk.choices?.[0]?.delta;
 
+                    if (thinkingEnabled && typeof delta?.reasoning_content === "string") {
+                        reasoningText += delta.reasoning_content;
+                        assistantMessage.reasoning.textContent = reasoningText;
+                        assistantMessage.thinking.hidden =
+                            !thinkingToggle.checked || !reasoningText;
+                    }
+
                     if (delta?.content) {
                         assistantText +=
                             delta.content;
@@ -652,95 +864,61 @@ try {
                                 marked.parse(assistantText)
                             );
 
-                        chat.scrollTop =
-                            chat.scrollHeight;
+                        if (isOriginVisible()) chat.scrollTop = chat.scrollHeight;
                     }
 
-                } catch (error) {
-                    console.error(
-                        "Invalid SSE chunk",
-                        error
-                    );
-                }
-            }
-        }
-
-        messages.push({
-            role: "assistant",
-            content: assistantText,
-            telemetry: responseTelemetry
         });
-
-try {
-    const response = await fetch(
-        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                role: "assistant",
-                content: assistantText,
-                telemetry: responseTelemetry
-            })
+        if (!generationIsValid(generation)) return;
+        if (finishReason === "length") {
+            assistantMessage.notice.textContent = assistantText.trim()
+                ? "Token limit reached. The answer may be incomplete."
+                : "Token limit reached before a final answer was produced.";
+        } else if (finishReason && finishReason !== "stop") {
+            assistantMessage.notice.textContent = "Response ended without normal completion.";
+        } else if (!assistantText.trim()) {
+            assistantMessage.notice.textContent = "No final answer was returned.";
         }
-    );
-
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-    }
-} catch (error) {
-    console.error("Could not save assistant message to SQLite:", error);
-}
-
-        statusText.textContent = "Connected";
-
+        if (isOriginVisible()) statusText.textContent = "Connected";
     } catch (error) {
-        if (error.name === "AbortError") {
-            assistantElement.innerHTML =
-                DOMPurify.sanitize(
-                    marked.parse(assistantText)
-                );
-            if (assistantText) {
-                messages.push({
-                    role: "assistant",
-                    content: assistantText,
-                    telemetry: responseTelemetry
-                });
-
-try {
-    const response = await fetch(
-        `/api/chats/${encodeURIComponent(chatStore.activeChatId)}/messages`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                role: "assistant",
-                content: assistantText,
-                telemetry: responseTelemetry
-            })
-        }
-    );
-
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-    }
-} catch (saveError) {
-    console.error(
-        "Could not save stopped assistant message to SQLite:",
-        saveError
-    );
-}
-
-            }
-            statusText.textContent = "Stopped";
-        } else {
-            assistantElement.textContent =
-                `Error: ${error.message}`;
-
-            statusText.textContent = "Error";
-        }
-
+        if (!generationIsValid(generation)) return;
+        const cancelled = error.name === "AbortError";
+        assistantMessage.notice.textContent = cancelled
+            ? "Generation stopped. The response may be incomplete."
+            : "Response interrupted: " + error.message;
+        if (isOriginVisible()) statusText.textContent = cancelled ? "Stopped" : "Error";
     } finally {
+        if (!generationIsValid(generation)) return;
+        assistantMessage.notice.hidden = !assistantMessage.notice.textContent;
+        try {
+            if (assistantText.trim()) {
+                const savedMessage = { role: "assistant", content: assistantText, telemetry: responseTelemetry };
+                originMessages.push(savedMessage);
+                assistantViews.set(savedMessage, assistantMessage);
+                generation.saved = true;
+                const saved = await fetch(
+                    "/api/chats/" + encodeURIComponent(responseChatId) + "/messages",
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ...savedMessage, expectedRevision: generation.expectedRevision })
+                    }
+                );
+                if (!generationIsValid(generation)) return;
+                if (saved.status === 409) {
+                    await reconcileConversation(responseChatId);
+                    return;
+                }
+                if (!saved.ok) throw new Error("HTTP " + saved.status);
+            }
+        } catch (saveError) {
+            if (!generationIsValid(generation)) return;
+            console.error("Could not save assistant message to SQLite:", saveError);
+        }
+        if (!generationIsValid(generation)) return;
+        if (!generation.saved && (reasoningText || assistantMessage.notice.textContent)) {
+            originChat.transientResponse = assistantMessage;
+        }
+        activeGeneration = null;
         generating = false;
         sendButton.disabled = false;
         stopButton.disabled = true;
@@ -769,6 +947,7 @@ promptBox.addEventListener(
 async function saveUserSettings() {
     const settings = {
         systemPrompt: systemPromptBox.value,
+        theme: themeSelect.value,
         temperature: Number(temperatureInput.value),
         maxTokens: Number(maxTokensInput.value),
         thinking: thinkingToggle.checked
@@ -797,9 +976,20 @@ async function saveUserSettings() {
 }
 
 systemPromptBox.addEventListener("change", saveUserSettings);
+themeSelect.addEventListener("change", () => {
+    applyTheme(themeSelect.value);
+    saveUserSettings();
+});
 temperatureInput.addEventListener("change", saveUserSettings);
 maxTokensInput.addEventListener("change", saveUserSettings);
-thinkingToggle.addEventListener("change", saveUserSettings);
+thinkingToggle.addEventListener("change", () => {
+    chat.querySelectorAll(".message-thinking").forEach((thinking) => {
+        const reasoning = thinking.querySelector(".message-reasoning");
+        thinking.hidden = !thinkingToggle.checked || !reasoning.textContent;
+        if (!thinkingToggle.checked) thinking.open = false;
+    });
+    saveUserSettings();
+});
 
 settingsToggle.addEventListener("click", () => {
     const isHidden = settingsPanel.hidden;
@@ -811,25 +1001,31 @@ settingsToggle.addEventListener("click", () => {
 newChatButton.addEventListener(
     "click",
     async () => {
+    const epoch = sessionEpoch;
         if (!loginScreen.hidden) {
     return;
 }
         let newChatId;
         let newChatTitle;
+        let serverRevision;
 
 try {
     const response = await fetch("/api/chats", {
         method: "POST"
     });
+        if (epoch !== sessionEpoch) return;
 
     if (!response.ok) {
         throw new Error(`Chat creation failed: HTTP ${response.status}`);
     }
 
     const createdChat = await response.json();
+        if (epoch !== sessionEpoch) return;
     newChatId = createdChat.id;
     newChatTitle = createdChat.title;
+    serverRevision = requireServerRevision(createdChat.revision);
 } catch (error) {
+        if (epoch !== sessionEpoch) return;
     console.error("Could not create chat:", error);
     alert("Could not create a new chat. Please try again.");
     return;
@@ -837,6 +1033,7 @@ try {
 
         chatStore.chats[newChatId] = {
             title: newChatTitle,
+            serverRevision,
             messages: []
         };
 
@@ -853,80 +1050,37 @@ try {
     }
 );
 
-deleteChatButton.addEventListener(
-    "click",
-    async () => {
-        if (!loginScreen.hidden || !chatStore.activeChatId) {
-    return;
-}
-        const chatIds =
-            Object.keys(chatStore.chats);
-
-        const activeChatId =
-            chatStore.activeChatId;
-
-        const activeChat =
-            chatStore.chats[activeChatId];
-
-        if (activeChat) {
-            const confirmed =
-                confirm(
-                    `Clear the history for "${activeChat.title}"?\n\nThis will remove all messages in this chat, but it will not delete the chat itself.`
-                );
-
-            if (!confirmed) {
-                return;
-            }
-
-try {
-    const response = await fetch(
-        `/api/chats/${encodeURIComponent(activeChatId)}/messages`,
-        { method: "DELETE", credentials: "same-origin" }
-    );
-
-    if (!response.ok) {
-        throw new Error(`Clear chat failed: HTTP ${response.status}`);
-    }
-} catch (error) {
-    console.error("Could not clear chat:", error);
-    alert("Could not clear the chat. Please try again.");
-    return;
-}
-
-            activeChat.messages = [];
-            messages = activeChat.messages;
-
+async function clearConversation(chatId) {
+    const epoch = sessionEpoch;
+    const target = chatStore.chats[chatId];
+    if (!loginScreen.hidden || !target || target.lifecyclePending) return;
+    if (!confirm('Clear the history for "' + target.title + '"?')) return;
+    target.lifecyclePending = true;
+    target.historyRevision = (target.historyRevision || 0) + 1;
+    invalidateGeneration(chatId);
+    delete target.transientResponse;
+    try {
+        const response = await fetch('/api/chats/' + encodeURIComponent(chatId) + '/messages',
+            { method: "DELETE", credentials: "same-origin" });
+        if (epoch !== sessionEpoch || chatStore.chats[chatId] !== target) return;
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const result = await response.json();
+        if (epoch !== sessionEpoch || chatStore.chats[chatId] !== target) return;
+        target.serverRevision = requireServerRevision(result.revision);
+        target.lifecyclePending = false;
+        target.messages = [];
+        if (chatStore.activeChatId === chatId) {
+            messages = target.messages;
             restoreChat();
-            renderChatList();
-            return;
         }
-
-        const confirmed =
-            confirm(`Delete "${activeChat.title}"?`
-            );
-
-        if (!confirmed) {
-            return;
-        }
-
-        delete chatStore.chats[activeChatId];
-
-        const remainingChatIds =
-            Object.keys(chatStore.chats);
-
-        chatStore.activeChatId =
-            remainingChatIds[0];
-
-        messages =
-            chatStore.chats[
-                chatStore.activeChatId
-            ].messages;
-
-        restoreChat();
-
         renderChatList();
+    } catch (error) {
+        if (epoch !== sessionEpoch || chatStore.chats[chatId] !== target) return;
+        console.error("Could not clear chat:", error);
+        await reconcileConversation(chatId);
     }
-);
+}
+deleteChatButton.addEventListener("click", () => clearConversation(chatStore.activeChatId));
 
 stopButton.addEventListener(
     "click",
@@ -991,10 +1145,27 @@ async function fetchServerChats() {
 }
 
 async function prepareServerChatStore() {
+    const epoch = sessionEpoch;
+    const sequence = ++historyLoadSequence;
+    const store = chatStore;
+    const initialState = Object.entries(store.chats).map(([id, c]) => ({
+        id, chat: c, historyRevision: c.historyRevision, serverRevision: c.serverRevision,
+        messages: c.messages, length: c.messages.length, pending: c.lifecyclePending,
+        title: c.title, scrollTop: c.scrollTop
+    }));
+    const isCurrent = () => epoch === sessionEpoch && sequence === historyLoadSequence &&
+        chatStore === store && Object.keys(store.chats).length === initialState.length &&
+        initialState.every(s => store.chats[s.id] === s.chat && s.chat.historyRevision === s.historyRevision &&
+            s.chat.serverRevision === s.serverRevision && s.chat.messages === s.messages &&
+            s.messages.length === s.length && s.chat.lifecyclePending === s.pending &&
+            s.chat.title === s.title && s.chat.scrollTop === s.scrollTop);
     const serverChats = await fetchServerChats();
+    if (epoch !== sessionEpoch) throw new Error("Session changed");
     const chats = {};
 
     for (const serverChat of serverChats) {
+        requireServerRevision(serverChat.revision);
+        if (epoch !== sessionEpoch) throw new Error("Session changed");
         const response = await fetch(
             `/api/chats/${encodeURIComponent(serverChat.id)}/messages`,
             {
@@ -1009,14 +1180,17 @@ async function prepareServerChatStore() {
             );
         }
 
+        const snapshot = await readHistorySnapshot(response);
         chats[serverChat.id] = {
             title: serverChat.title,
-            messages: await response.json(),
+            messages: snapshot.messages,
+            serverRevision: snapshot.serverRevision,
             scrollTop: serverChat.scroll_top ?? 0
         };
     }
 
-    return { chats };
+    if (!isCurrent()) throw new Error("Chat state changed while loading");
+    return { chats, isCurrent };
 }
 
 async function inspectServerChats() {
@@ -1032,22 +1206,29 @@ async function inspectServerChats() {
 }
 
 async function checkLogin() {
+    const epoch = sessionEpoch;
     try {
         const response = await fetch("/api/me", {
             credentials: "same-origin",
             cache: "no-store"
         });
+        if (epoch !== sessionEpoch) return;
 
         loginScreen.hidden = false;
         if (response.ok) {
     const user = await response.json();
+        if (epoch !== sessionEpoch) return;
     adminConsoleButton.hidden = user.isAdmin !== true;
 
     try {
         await loadUserSettings();
+        if (epoch !== sessionEpoch) return;
         await loadAiRuntime();
+        if (epoch !== sessionEpoch) return;
 
     const prepared = await prepareServerChatStore();
+        if (epoch !== sessionEpoch) return;
+    if (!prepared.isCurrent()) return;
     const chatIds = Object.keys(prepared.chats);
 
     chatStore = {
@@ -1069,6 +1250,7 @@ async function checkLogin() {
 
     loginScreen.hidden = true;
 } catch (error) {
+        if (epoch !== sessionEpoch) return;
     console.error("Could not load server chats:", error);
     loginScreen.hidden = false;
 }
@@ -1076,6 +1258,7 @@ async function checkLogin() {
     adminConsoleButton.hidden = true;
 }
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         console.error("Authentication check failed:", error);
         loginScreen.hidden = false;
     }
@@ -1094,6 +1277,8 @@ adminConsoleButton.addEventListener("click", () => {
 
 loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    replaceSession();
+    const epoch = sessionEpoch;
 
     loginError.hidden = true;
 
@@ -1112,15 +1297,19 @@ loginForm.addEventListener("submit", async (event) => {
                 password: passwordInput.value
             })
         });
+        if (epoch !== sessionEpoch) return;
 
         if (!response.ok) {
             throw new Error("Invalid username or password");
         }
 
         const user = await response.json();
+        if (epoch !== sessionEpoch) return;
 
         await loadUserSettings();
+        if (epoch !== sessionEpoch) return;
         await loadAiRuntime();
+        if (epoch !== sessionEpoch) return;
 
         chatStore = { activeChatId: null, chats: {} };  
         messages = [];
@@ -1131,9 +1320,11 @@ loginForm.addEventListener("submit", async (event) => {
 
         passwordInput.value = "";
         await checkLogin();
+        if (epoch !== sessionEpoch) return;
 
         console.log("Login successful:", user.username);
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         loginError.textContent = error.message;
         loginError.hidden = false;
         passwordInput.value = "";
@@ -1143,11 +1334,15 @@ loginForm.addEventListener("submit", async (event) => {
 const logoutButton = document.getElementById("logoutButton");
 
 logoutButton.addEventListener("click", async () => {
+    replaceSession();
+    loginScreen.hidden = false;
+    const epoch = sessionEpoch;
     try {
         const response = await fetch("/api/logout", {
             method: "POST",
             credentials: "same-origin"
         });
+        if (epoch !== sessionEpoch) return;
 
         if (!response.ok) {
             throw new Error("Logout failed");
@@ -1163,6 +1358,7 @@ logoutButton.addEventListener("click", async () => {
         loginScreen.hidden = false;
         adminConsoleButton.hidden = true;
     } catch (error) {
+        if (epoch !== sessionEpoch) return;
         console.error("Logout failed:", error);
         alert("Could not log out. Please try again.");
     }

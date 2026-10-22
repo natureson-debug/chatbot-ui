@@ -1,4 +1,4 @@
-﻿* {
+* {
     box-sizing: border-box;
 }
 
@@ -7,6 +7,99 @@ body {
     font-family: "Segoe UI", Arial, sans-serif;
     background: #111318;
     color: #e8e8e8;
+    color-scheme: dark;
+}
+
+body[data-theme="light"] {
+    background: #f5f7fb;
+    color: #202530;
+    color-scheme: light;
+}
+
+body[data-theme="light"] header,
+body[data-theme="light"] .settings,
+body[data-theme="light"] footer,
+body[data-theme="light"] .active-chat-header {
+    border-color: #d8dee9;
+}
+
+body[data-theme="light"] #status,
+body[data-theme="light"] .role {
+    color: #667085;
+}
+
+body[data-theme="light"] .thinking-toggle {
+    color: #202530;
+}
+
+body[data-theme="light"] .user {
+    background: #e9edf4;
+}
+
+body[data-theme="light"] .settings textarea,
+body[data-theme="light"] .settings input,
+body[data-theme="light"] .settings select,
+body[data-theme="light"] footer textarea {
+    background: #ffffff;
+    color: #202530;
+    border-color: #c7cfdb;
+}
+
+body[data-theme="light"] .settings textarea:focus,
+body[data-theme="light"] .settings input:focus,
+body[data-theme="light"] .settings select:focus,
+body[data-theme="light"] footer textarea:focus {
+    border-color: #687386;
+}
+
+body[data-theme="light"] .active-chat-header {
+    background: #edf1f6;
+}
+
+body[data-theme="light"] #activeChatTitle {
+    color: #202530;
+}
+
+body[data-theme="light"] #chatList {
+    background: #edf1f6;
+    border-color: #d8dee9;
+}
+
+body[data-theme="light"] #chatList button {
+    background: #ffffff;
+    color: #202530;
+}
+
+body:not([data-theme="light"]) #chatList button {
+    background: #20242b;
+    color: #e8e8e8;
+}
+
+body:not([data-theme="light"]) #chatList button:hover {
+    background: #303845;
+}
+
+body[data-theme="light"] #chatList button.active {
+    background: #31eff8;
+    color: #0b1f33;
+}
+
+body[data-theme="light"] .chat-context-menu {
+    background: #ffffff;
+    border-color: #c7cfdb;
+}
+
+body[data-theme="light"] .chat-context-menu button {
+    color: #202530;
+}
+
+body[data-theme="light"] .chat-context-menu button:hover {
+    background: #edf1f6;
+}
+
+body[data-theme="light"] .message.assistant pre {
+    border-color: #d8dee9;
+    background: #edf1f6;
 }
 
 .app {
@@ -112,6 +205,36 @@ button:active {
     padding: 4px 18px;
 }
 
+.completion-notice {
+    margin-top: 8px;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.completion-notice[hidden] {
+    display: none;
+}
+
+.message-thinking {
+    margin-bottom: 12px;
+}
+
+.message-thinking[hidden] {
+    display: none;
+}
+
+.message-thinking > summary {
+    cursor: pointer;
+}
+
+.message-reasoning {
+    margin-top: 8px;
+    padding-left: 12px;
+    border-left: 2px solid currentColor;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .role {
     font-size: 11px;
     color: #8f98a8;
@@ -141,6 +264,15 @@ button:active {
 
 .setting-field input {
     width: 12ch;
+}
+
+.setting-field select {
+    min-width: 12ch;
+    padding: 8px;
+    border: 1px solid #383e48;
+    border-radius: 6px;
+    background: #20242b;
+    color: #e8e8e8;
 }
 
 .settings label {
@@ -584,6 +716,27 @@ textarea:focus {
 
 #loginError {
     color: #ff9b9b;
+}
+
+body[data-theme="light"] #loginScreen:not([hidden]) {
+    background: #f5f7fb;
+}
+
+body[data-theme="light"] #loginForm {
+    border-color: #d8dee9;
+    background: #ffffff;
+    color: #202530;
+    box-shadow: 0 12px 32px rgba(32, 37, 48, 0.12);
+}
+
+body[data-theme="light"] #loginForm input {
+    border-color: #c7cfdb;
+    background: #ffffff;
+    color: #202530;
+}
+
+body[data-theme="light"] #loginError {
+    color: #b42318;
 }
 
 .admin-page {
