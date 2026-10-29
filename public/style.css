@@ -1266,3 +1266,14 @@ label[for="attachment"] {
     align-items: center;
     gap: 6px;
 }
+/* Read-only monitoring follows the current admin theme. */
+.monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr)); gap: 16px; }
+.monitor-card { border: 1px solid currentColor; border-radius: 10px; padding: 16px; min-width: 0; }
+.monitor-card h3 { margin-top: 0; }
+.monitor-card p { overflow-wrap: anywhere; margin: 9px 0; }
+.monitor-card span { opacity: .8; }
+.monitor-history { overflow-x: auto; max-height: 340px; }
+.monitor-history table { width: 100%; border-collapse: collapse; }
+.monitor-history th, .monitor-history td { text-align: left; padding: 10px; white-space: nowrap; border-bottom: 1px solid currentColor; }
+.monitor-panel .users-header { flex-wrap: wrap; gap: 12px; }
+@media (max-width: 600px) { .monitor-card { padding: 12px; } .monitor-panel { min-width: 0; } }

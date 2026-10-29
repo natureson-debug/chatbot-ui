@@ -16,6 +16,7 @@ const { createChatCompletion, getHealth, getReportedModel } = require("./core/ll
 
 const { getLlamaServerPid } = require("./core/llama-runtime");
 
+const { getAdminTelemetry } = require("./core/admin-telemetry");
 const { blockedActivation } = require("./core/ai-activation");
 const { createRequestTracker } = require("./core/request-tracker");
 const { withHttpErrorBoundary } = require("./core/http-error-boundary");
@@ -1225,6 +1226,26 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
         "Cache-Control": "no-store"
     });
     res.end(JSON.stringify(users));
+    return;
+}
+
+// Read-only telemetry; authorize before collecting or serving cached observations.
+if (req.method === "GET" && ["/api/admin/ai/telemetry", "/api/admin/ai/telemetry/status"].includes(req.url)) {
+    const token = getSessionToken(req);
+    const admin = getAuthenticatedUser(req);
+    const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
+    if (!admin || admin.is_admin !== 1) {
+        res.writeHead(admin ? 403 : 401, headers);
+        res.end(JSON.stringify({ error: "Administrator access required" })); return;
+    }
+    const sample = await getAdminTelemetry();
+    const current = getSessionUser(db, token);
+    if (!current || current.id !== admin.id || current.is_admin !== 1) {
+        res.writeHead(401, headers); res.end(JSON.stringify({ error: "Session no longer authorized" })); return;
+    }
+    if (res.destroyed || res.writableEnded) return;
+    res.writeHead(200, headers);
+    res.end(JSON.stringify(req.url.endsWith("/status") ? { sampledAt: sample.sampledAt, backend: sample.backend, gpuState: sample.gpu.state } : sample));
     return;
 }
 
