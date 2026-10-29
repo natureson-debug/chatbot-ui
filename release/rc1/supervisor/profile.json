@@ -1,0 +1,38 @@
+{
+    "schemaVersion":  1,
+    "activation":  "blocked",
+    "operator":  "DESKTOP-6513LCM\\Admin",
+    "sid":  "S-1-5-21-1162025873-2456272895-3354061701-1001",
+    "application":  {
+                        "executable":  "C:\\Program Files\\nodejs\\node.exe",
+                        "cwd":  "C:\\AI\\chatbot-ui",
+                        "args":  [
+                                     "C:\\AI\\chatbot-ui\\server.js"
+                                 ],
+                        "host":  "127.0.0.1",
+                        "port":  3000
+                    },
+    "backend":  {
+                    "platform":  "win32",
+                    "executable":  "C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4\\llama-server.exe",
+                    "cwd":  "C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4",
+                    "modelPath":  "C:\\AI\\models\\Qwen3-8B-Q5_K_M.gguf",
+                    "apiKeyFile":  "C:\\AI\\config\\llama-api-key.txt",
+                    "host":  "127.0.0.1",
+                    "port":  8080,
+                    "corsOrigin":  "http://127.0.0.1:8080",
+                    "device":  "CUDA0",
+                    "gpuLayers":  37,
+                    "contextSize":  32768,
+                    "parallel":  1,
+                    "verbosity":  4
+                },
+    "gpuUUID":  "GPU-4cc4e779-9cd5-695d-7afb-11c71c58f82e",
+    "blockers":  [
+                     "Windows retained-handle production adapter unavailable",
+                     "Graceful Windows shutdown not qualified for actual applications",
+                     "Installation-wide lifetime lock and orphan reconciliation unqualified",
+                     "RTX 3090 configuration not yet qualified",
+                     "Fresh protected-task verification required at activation"
+                 ]
+}

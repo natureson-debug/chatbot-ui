@@ -10,7 +10,10 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'db.js'), 'utf8');
 // Execute the actual module, but never open its production database or load auth.
 function load(db) {
     const context = { module: { exports: {} }, __dirname: '/isolated', require(name) {
-        if (name === 'node:sqlite') return { DatabaseSync: function () { return db; } };
+        if (name === './core/database-startup') return {
+            databasePath: () => ':memory:',
+            openExistingDatabase() { require('../core/database-schema').initializeSchema(db); return db; }
+        };
         if (name === './auth') return { hashPassword() { throw Error('Unused in tests'); } };
         return require(name);
     } };

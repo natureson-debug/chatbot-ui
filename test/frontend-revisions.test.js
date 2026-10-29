@@ -12,7 +12,7 @@ const done='data: [DONE]\n\n';
 function setup(){
  const c={console:{log(){},error(){}},TextDecoder,AbortController,sessionEpoch:0,nextGenerationId:0,historyLoadSequence:0,
  chatStore:{activeChatId:'A',chats:{A:{title:'A',messages:[],serverRevision:3},B:{title:'B',messages:[],serverRevision:9}}},
- loginScreen:{hidden:true},generating:false,activeGeneration:null,assistantViews:new WeakMap(),controller:null,contextLimit:32768,
+ loginScreen:{hidden:true},generating:false,activeGeneration:null,assistantViews:new WeakMap(),controller:null,contextLimit:32768,activeModelName:'Current-Model',
  document:{createElement:t=>new El(t),querySelectorAll:()=>[]},readSelectedAttachment:async()=>null,renderChatList(){},
  loadAiRuntime:async()=>{},saveUserSettings(){},marked:{parse:x=>x},DOMPurify:{sanitize:x=>x},confirm:()=>true,alert(){},
  updateActiveChatTitle(){},updateDeleteChatButtonState(){}};
@@ -33,6 +33,7 @@ function setup(){
  return {c,calls,fixtures,inferences:()=>inference,saves:()=>calls.filter(x=>x.body?.role)};
 }
 test('new chat gets revision zero',async()=>{const {c}=setup();await c.newChatButton.click();assert.equal(c.chatStore.chats.C.serverRevision,0)});
+test('assistant message label uses the active model name',()=>{const {c}=setup();const message=c.addMessage('assistant','answer',false);assert.equal(message.container.children[0].textContent,'Current-Model')});
 test('existing history uses snapshot revision instead of earlier list revision',async()=>{const {c}=setup();const p=await c.prepareServerChatStore();assert.equal(p.chats.A.serverRevision,4)});
 test('missing/invalid list and snapshot revisions rejected',async()=>{for(const rev of [null,'',-1,'x',9007199254740992]){const {c}=setup();c.intercept=(url)=>url.endsWith('/messages')?response([],200,rev):undefined;await assert.rejects(c.prepareServerChatStore())}const {c}=setup();c.intercept=()=>response([{id:'A',title:'A'}]);await assert.rejects(c.prepareServerChatStore())});
 test('both saves capture immutable revision; background state cannot change it',async()=>{const h=setup();h.c.streamHook=()=>{h.c.chatStore.chats.A.serverRevision=8;h.c.chatStore.activeChatId='B';h.c.messages=h.c.chatStore.chats.B.messages;h.c.restoreChat();};await h.c.sendMessage();assert.deepEqual(h.saves().map(x=>x.body.expectedRevision),[3,3]);assert.equal(h.c.chatStore.chats.B.messages.length,0);assert.equal(h.c.chat.children.length,0)});

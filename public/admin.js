@@ -1,3 +1,24 @@
+async function loadThemeSettings() {
+    try {
+        const response = await fetch("/api/settings", {
+            credentials: "same-origin",
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const settings = await response.json();
+        document.body.dataset.theme = settings.theme === "light" ? "light" : "dark";
+    } catch (error) {
+        console.error("Failed to load user theme:", error);
+        document.body.dataset.theme = "dark";
+    }
+}
+
+loadThemeSettings();
+
 async function loadUsers() {
     const status = document.getElementById("usersStatus");
     const table = document.getElementById("usersTable");
@@ -243,39 +264,6 @@ async function loadAiModels() {
     }
 }
 
-async function waitForAiServer(previousPid) {
-    const maxAttempts = 30;
-    const delayMs = 1000;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-            const response = await fetch("/api/admin/ai/status", {
-                cache: "no-store"
-            });
-
-            if (response.ok) {
-                const status = await response.json();
-
-                if (
-                    status.running &&
-                    status.pid &&
-                    status.pid !== previousPid
-                ) {
-                    return true;
-                }
-            }
-        } catch (error) {
-            // Temporary failure is expected while llama.cpp restarts.
-        }
-
-        await new Promise(resolve =>
-            setTimeout(resolve, delayMs)
-        );
-    }
-
-    return false;
-}
-
 async function loadAiServerStatus() {
     try {
         const response = await fetch("/api/admin/ai/status", {
@@ -287,6 +275,8 @@ async function loadAiServerStatus() {
         }
 
         const status = await response.json();
+        document.getElementById("aiModelState").textContent =
+            `Configured model: ${status.configuredModel || "Not available"}.`;
 
         if (status.running) {
     aiServerStatus.textContent = "Running";
@@ -299,6 +289,7 @@ async function loadAiServerStatus() {
 }
 
     } catch (error) {
+        document.getElementById("aiModelState").textContent = "Configured model information is unavailable.";
         console.error("Failed to load AI server status:", error);
         aiServerStatus.textContent = "Unavailable";
         aiServerStatusIndicator.className = "ai-status-indicator unavailable";
@@ -339,7 +330,6 @@ initializeAiConfig();
 const saveAiConfig = document.getElementById("saveAiConfig");
 const aiConfigStatus = document.getElementById("aiConfigStatus");
 
-const restartAiServer = document.getElementById("restartAiServer");
 
 saveAiConfig.addEventListener("click", async () => {
     const config = {
@@ -367,7 +357,8 @@ saveAiConfig.addEventListener("click", async () => {
             throw new Error(result.error || `HTTP ${response.status}`);
         }
 
-        aiConfigStatus.textContent = "Configuration saved successfully.";
+        aiConfigStatus.textContent = "Configuration saved. Changes apply the next time the backend starts.";
+        await loadAiServerStatus();
 
     } catch (error) {
         console.error("Failed to save AI configuration:", error);
@@ -375,67 +366,5 @@ saveAiConfig.addEventListener("click", async () => {
             `Failed to save configuration: ${error.message}`;
     } finally {
         saveAiConfig.disabled = false;
-    }
-});
-
-restartAiServer.addEventListener("click", async () => {
-    let previousPid = null;
-
-try {
-    const statusResponse = await fetch("/api/admin/ai/status", {
-        cache: "no-store"
-    });
-
-    if (statusResponse.ok) {
-        const currentStatus = await statusResponse.json();
-        previousPid = currentStatus.pid;
-    }
-} catch (error) {
-    console.error("Failed to read current AI server PID:", error);
-}
-    aiServerStatus.textContent = "Restarting...";
-    aiServerStatusIndicator.className = "ai-status-indicator restarting";
-    restartAiServer.disabled = true;
-    aiConfigStatus.hidden = false;
-    aiConfigStatus.textContent = "Restarting AI server...";
-
-    try {
-        const response = await fetch("/api/admin/ai/restart", {
-            method: "POST"
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.error || `HTTP ${response.status}`);
-        }
-
-        aiConfigStatus.textContent = "Waiting for AI server...";
-
-const running = await waitForAiServer(previousPid);
-
-if (running) {
-    aiServerStatus.textContent = "Running";
-    aiServerStatusIndicator.className =
-        "ai-status-indicator running";
-
-    aiConfigStatus.textContent =
-        "AI server restarted successfully.";
-} else {
-    aiServerStatus.textContent = "Unavailable";
-    aiServerStatusIndicator.className =
-        "ai-status-indicator unavailable";
-
-    aiConfigStatus.textContent =
-        "AI server did not become available.";
-}
-
-    } catch (error) {
-        console.error("Failed to restart AI server:", error);
-
-        aiConfigStatus.textContent =
-            `Failed to restart AI server: ${error.message}`;
-    } finally {
-        restartAiServer.disabled = false;
     }
 });

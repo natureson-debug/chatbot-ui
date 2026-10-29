@@ -12,9 +12,15 @@ const {
 } = require("./core/config");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const { createChatCompletion, getHealth } = require("./core/llama-client");
+const { createChatCompletion, getHealth, getReportedModel } = require("./core/llama-client");
 
-const { getLlamaServerPid, restartLlamaServer } = require("./core/llama-runtime");
+const { getLlamaServerPid } = require("./core/llama-runtime");
+
+const { blockedActivation } = require("./core/ai-activation");
+const { createRequestTracker } = require("./core/request-tracker");
+const { withHttpErrorBoundary } = require("./core/http-error-boundary");
+
+const requestTracker = createRequestTracker();
 
 const contentTypes = {
     ".html": "text/html; charset=utf-8",
@@ -23,22 +29,40 @@ const contentTypes = {
 };
 
 function serveFile(res, filePath) {
-    fs.readFile(filePath, (error, data) => {
-        if (error) {
-            res.writeHead(404, {
-                "Content-Type": "text/plain; charset=utf-8"
+    return new Promise((resolve, reject) => {
+        try {
+            fs.readFile(filePath, (error, data) => {
+                try {
+                    if (res.destroyed || res.writableEnded) {
+                        resolve();
+                        return;
+                    }
+
+                    if (error) {
+                        res.writeHead(404, {
+                            "Content-Type": "text/plain; charset=utf-8"
+                        });
+                        res.end("Not found");
+                    } else {
+                        const ext = path.extname(filePath).toLowerCase();
+
+                        res.writeHead(200, {
+                            "Content-Type":
+                                contentTypes[ext] ||
+                                "application/octet-stream"
+                        });
+
+                        res.end(data);
+                    }
+
+                    resolve();
+                } catch (callbackError) {
+                    reject(callbackError);
+                }
             });
-            res.end("Not found");
-            return;
+        } catch (readError) {
+            reject(readError);
         }
-
-        const ext = path.extname(filePath).toLowerCase();
-
-        res.writeHead(200, {
-            "Content-Type": contentTypes[ext] || "application/octet-stream"
-        });
-
-        res.end(data);
     });
 }
 
@@ -52,7 +76,9 @@ function getAuthenticatedUser(req) {
     return getSessionUser(db, token);
 }
 
-const server = http.createServer(async (req, res) => {
+const server = http.createServer(
+    withHttpErrorBoundary(
+        requestTracker.track(async (req, res) => {
 
     // Health check
     if (req.method === "GET" && req.url === "/health") {
@@ -120,7 +146,10 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
         });
 
         res.end(JSON.stringify({
-            contextLimit
+            contextLimit,
+            modelName: typeof config.model === "string"
+                ? path.basename(config.model).replace(/\.gguf$/i, "")
+                : null
         }));
 
     } catch (error) {
@@ -165,7 +194,7 @@ if (req.method === "GET" && req.url === "/api/settings") {
 
         res.end(JSON.stringify(settings));
     } catch (error) {
-        console.error("Failed to load user settings:", error);
+        console.error("Failed to load user settings:");
 
         res.writeHead(500, {
             "Content-Type": "application/json; charset=utf-8"
@@ -224,14 +253,14 @@ if (req.method === "POST" && req.url === "/api/settings") {
         }));
 
     } catch (error) {
-        console.error("Failed to save user settings:", error);
+        console.error("Failed to save user settings:");
 
         res.writeHead(400, {
             "Content-Type": "application/json; charset=utf-8"
         });
 
         res.end(JSON.stringify({
-            error: error.message || "Invalid settings"
+            error: "Invalid settings"
         }));
     }
 
@@ -411,7 +440,7 @@ if (req.method === "POST" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url)) {
             }));
             return;
         }
-        console.error("Message save failed:", error);
+        console.error("Message save failed:");
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Could not save message" }));
         return;
@@ -457,7 +486,7 @@ if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url))
         res.end(JSON.stringify(result));
         return;
     } catch (error) {
-        console.error("Clear chat failed:", error);
+        console.error("Clear chat failed:");
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid clear chat request" }));
         return;
@@ -499,7 +528,7 @@ if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
         res.end(JSON.stringify({ deletedChats }));
         return;
     } catch (error) {
-        console.error("Delete chat failed:", error);
+        console.error("Delete chat failed:");
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid delete chat request" }));
         return;
@@ -561,7 +590,7 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
         res.end(JSON.stringify({ title: title.trim() }));
         return;
     } catch (error) {
-        console.error("Rename chat failed:", error);
+        console.error("Rename chat failed:");
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid rename request" }));
         return;
@@ -615,7 +644,7 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
         res.end(JSON.stringify({ scrollTop }));
         return;
     } catch (error) {
-        console.error("Save chat scroll position failed:", error);
+        console.error("Save chat scroll position failed:");
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid scroll request" }));
         return;
@@ -688,39 +717,77 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 }
             };
 
-            const upstream = await createChatCompletion(llamaRequest);
+            const controller = new AbortController();
 
-            if (!upstream.ok) {
-                const errorText = await upstream.text();
+            const onDisconnect = () => {
+                if (!res.writableFinished) {
+                    controller.abort();
+                }
+            };
 
-                res.writeHead(upstream.status, {
-                    "Content-Type": "text/plain"
+            res.on("close", onDisconnect);
+
+            try {
+                const upstream = await createChatCompletion(llamaRequest, {
+                    signal: controller.signal
                 });
 
-                res.end(errorText);
-                return;
+                if (!upstream.ok) {
+                    await upstream.body?.cancel();
+                    const errorText = "Inference service rejected the request";
+
+                    if (!res.destroyed) {
+                        res.writeHead(upstream.status, {
+                            "Content-Type": "text/plain"
+                        });
+                        res.end(errorText);
+                    }
+                    return;
+                }
+
+                res.writeHead(200, {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive"
+                });
+
+                const reader = upstream.body.getReader();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) break;
+                    if (res.destroyed) break;
+
+                    res.write(Buffer.from(value));
+                }
+
+                if (!res.destroyed) {
+                    res.end();
+                }
+
+            } catch (error) {
+                if (!controller.signal.aborted) {
+                    console.error("INFERENCE_REQUEST_FAILED");
+
+                    if (!res.destroyed) {
+                        if (!res.headersSent) {
+                            res.writeHead(500, {
+                                "Content-Type": "application/json"
+                            });
+                        }
+
+                        res.end(JSON.stringify({
+                            error: "Inference service unavailable"
+                        }));
+                    }
+                }
+            } finally {
+                res.off("close", onDisconnect);
             }
-
-            res.writeHead(200, {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
-            });
-
-            const reader = upstream.body.getReader();
-
-            while (true) {
-                const { done, value } = await reader.read();
-
-                if (done) break;
-
-                res.write(Buffer.from(value));
-            }
-
-            res.end();
 
         } catch (error) {
-            console.error(error);
+            console.error("INFERENCE_REQUEST_FAILED");
 
             if (!res.headersSent) {
                 res.writeHead(500, {
@@ -729,7 +796,7 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
             }
 
             res.end(JSON.stringify({
-                error: error.message
+                error: "Inference service unavailable"
             }));
         }
 
@@ -820,7 +887,7 @@ if (req.method === "POST" && req.url === "/api/login") {
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
-            "Set-Cookie": `chatbot_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`,
+            "Set-Cookie": `chatbot_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`,
             "Cache-Control": "no-store"
         });
 
@@ -829,7 +896,7 @@ if (req.method === "POST" && req.url === "/api/login") {
             isAdmin: user.is_admin === 1
         }));
     } catch (error) {
-        console.error("Login failed:", error);
+        console.error("Login failed:");
 
         if (!res.headersSent) {
             res.writeHead(500);
@@ -857,7 +924,7 @@ if (req.method === "POST" && req.url === "/api/logout") {
 
     res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
-        "Set-Cookie": "chatbot_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+        "Set-Cookie": "chatbot_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0",
         "Cache-Control": "no-store"
     });
 
@@ -939,7 +1006,7 @@ try {
         });
         res.end(JSON.stringify({ message: "Password reset successfully" }));
     } catch (error) {
-        console.error("Password reset failed:", error);
+        console.error("Password reset failed:");
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unable to reset password" }));
     }
@@ -1040,11 +1107,11 @@ if (req.method === "DELETE" && req.url.startsWith("/api/admin/users/")) {
             try {
                 db.exec("ROLLBACK");
             } catch (rollbackError) {
-                console.error("Rollback failed:", rollbackError);
+                console.error("Rollback failed:");
             }
         }
 
-        console.error("User deletion failed:", error);
+        console.error("User deletion failed:");
 
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unable to delete user" }));
@@ -1181,8 +1248,20 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
         return;
     }
 
+    let configuredModel = null;
+    let runningModel = null;
     try {
-        const health = await getHealth();
+        const config = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, "utf8"));
+        if (typeof config.model === "string") configuredModel = config.model;
+    } catch (_) { /* Unknown configuration must remain unknown. */ }
+    try { runningModel = await getReportedModel(); } catch (_) { /* Observation unavailable. */ }
+    const modelState = {
+        configuredModel, runningModel,
+        pendingModelChange: configuredModel && runningModel ? path.join(MODELS_DIR, configuredModel) !== runningModel : null,
+        activation: blockedActivation()
+    };
+    try {
+        const health = await getHealth({ signal: AbortSignal.timeout(3000) });
 
         const pid = await getLlamaServerPid();
 
@@ -1192,6 +1271,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
         });
 
         res.end(JSON.stringify({
+            ...modelState,
             running: health.status === "ok",
             status: health.status,
             pid
@@ -1204,6 +1284,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
         });
 
         res.end(JSON.stringify({
+            ...modelState,
             running: false,
             status: "unavailable",
             pid: null
@@ -1233,29 +1314,11 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
         return;
     }
 
-    try {
-        restartLlamaServer();
-
-        res.writeHead(202, {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store"
-        });
-
-        res.end(JSON.stringify({
-            message: "AI server restart initiated"
-        }));
-
-    } catch (error) {
-        console.error("Failed to restart AI server:", error);
-
-        res.writeHead(500, {
-            "Content-Type": "application/json; charset=utf-8"
-        });
-
-        res.end(JSON.stringify({
-            error: "Failed to restart AI server"
-        }));
-    }
+    res.writeHead(503, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+    });
+    res.end(JSON.stringify(blockedActivation()));
 
     return;
 }
@@ -1292,7 +1355,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/config") {
 
         res.end(JSON.stringify(config));
     } catch (error) {
-        console.error("Failed to read AI configuration:", error);
+        console.error("Failed to read AI configuration:");
 
         res.writeHead(500, {
             "Content-Type": "application/json; charset=utf-8"
@@ -1406,7 +1469,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
         }));
 
     } catch (error) {
-        console.error("Failed to save AI configuration:", error);
+        console.error("Failed to save AI configuration:");
 
         res.writeHead(400, {
             "Content-Type": "application/json; charset=utf-8"
@@ -1452,7 +1515,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/models") {
 
         res.end(JSON.stringify(models));
     } catch (error) {
-        console.error("Failed to read AI models directory:", error);
+        console.error("Failed to read AI models directory:");
 
         res.writeHead(500, {
             "Content-Type": "application/json; charset=utf-8"
@@ -1482,7 +1545,7 @@ if (req.method === "GET" && req.url === "/admin") {
         return;
     }
 
-    serveFile(res, path.join(PUBLIC_DIR, "admin.html"));
+    await serveFile(res, path.join(PUBLIC_DIR, "admin.html"));
     return;
 }
 
@@ -1490,7 +1553,7 @@ if (req.method === "GET" && req.url === "/admin") {
     if (req.method === "GET") {
 
         // Prevent direct access to the Admin Console file
-        if (req.url.split("?")[0] === "/admin.html") {
+        if (req.url.split("?")[0].replace(/\\/g, "/").toLowerCase().replace(/\/+/g, "/") === "/admin.html") {
             res.writeHead(404);
             res.end("Not found");
             return;
@@ -1506,13 +1569,16 @@ if (req.method === "GET" && req.url === "/admin") {
 
         const filePath = path.join(PUBLIC_DIR, safePath);
 
-        if (!filePath.startsWith(PUBLIC_DIR)) {
+        if (path.relative(PUBLIC_DIR, filePath).startsWith("..") ||
+            path.isAbsolute(path.relative(PUBLIC_DIR, filePath)) ||
+            path.basename(filePath).toLowerCase().replace(/[. ]+$/, "") === "admin.html" ||
+            /[:\x00]/.test(requestedPath) || /%/.test(requestedPath)) {
             res.writeHead(403);
             res.end("Forbidden");
             return;
         }
 
-        serveFile(res, filePath);
+        await serveFile(res, filePath);
         return;
     }
 
@@ -1521,9 +1587,12 @@ if (req.method === "GET" && req.url === "/admin") {
     });
 
     res.end("Not found");
-});
+        })
+    )
+);
 
 server.listen(PORT, HOST, () => {
+    require("./core/application-lifecycle").installApplicationLifecycle({ server, requestTracker, db });
     console.log("");
     console.log("Local AI Chatbot");
     console.log("----------------");

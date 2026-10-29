@@ -1,0 +1,12 @@
+'use strict';
+const http=require('node:http');
+const [port,mode,report]=process.argv.slice(2);
+if(+port===8080||+port===3000||+port===18080)process.exit(90);
+if(mode==='fail')process.exit(7);
+const s=http.createServer((q,r)=>{r.writeHead(mode==='unhealthy'?503:200);r.end('{"status":"ok"}');});
+s.listen(+port,'127.0.0.1',()=>console.log('fixture ready'));
+process.on('SIGINT',()=>{if(mode!=='ignore'){require('node:fs').writeFileSync(report,'SIGINT');if(mode==='slow-stop')setTimeout(()=>s.close(()=>process.exit(0)),21000);else s.close(()=>process.exit(0));}});
+const life=setTimeout(()=>s.close(()=>process.exit(0)),mode==='slow-stop'?40000:12000);
+life.unref();
+if(mode==='crash')setTimeout(()=>process.exit(9),200);
+console.error('FAKE_API_KEY_DO_NOT_LOG Bearer synthetic-only');

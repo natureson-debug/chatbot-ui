@@ -1,0 +1,25 @@
+
+name: Local llama.cpp Coding Assistant
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Mistral Small 3.1 - llama.cpp
+    provider: openai
+    model: C:\AI\models\Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+    apiBase: http://127.0.0.1:8080/v1
+    apiKey: Hx6xv9Mt6xIbkq0eDE/jeSn7wmEMZeAPWshddeQGFAI=
+    roles:
+      - chat
+      - edit
+      - apply
+    defaultCompletionOptions:
+      contextLength: 32768
+      maxTokens: 2048
+      temperature: 0.2
+
+context:
+  - provider: code
+  - provider: diff
+  - provider: terminal
+  - provider: problems

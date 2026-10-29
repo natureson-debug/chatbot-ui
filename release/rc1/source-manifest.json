@@ -1,0 +1,359 @@
+{
+  "kind": "source-preparation-only",
+  "productionApproved": false,
+  "nodeMajor": 24,
+  "files": [
+    {
+      "file": "auth.js",
+      "sha256": "bf181eecd1cda424217c34ec6bc629df0ef0d62d33198f642f9f8fdc83aac348"
+    },
+    {
+      "file": "core/ai-activation.js",
+      "sha256": "00ffb3cfd686d835323fa104e9ea0b9dd4bb32466f428688402c088f90ad863e"
+    },
+    {
+      "file": "core/application-lifecycle.js",
+      "sha256": "7f9cd23a6101393e2b1d45882b113a4e1e587332aca13091b4932bae79eb2a5e"
+    },
+    {
+      "file": "core/config.js",
+      "sha256": "2c38a5434e2caf321352775ca48a14244b6735d6fedd12afd0b254b1b053b84f"
+    },
+    {
+      "file": "core/database-cleanup.js",
+      "sha256": "03c9cdf3a95a98d4a6ca0c0d6a73ef8cbc51ac52b36dabf1e667f176d0c10c14"
+    },
+    {
+      "file": "core/database-schema.js",
+      "sha256": "e40043e2080ffb70fe95ef1b0f088b0bebe3d2f6258c89bcc8c24f255c71a318"
+    },
+    {
+      "file": "core/database-startup.js",
+      "sha256": "2b5e35a73619c11aea929e92c4b63e13cc77849d90812e23e179b4e09e030bb7"
+    },
+    {
+      "file": "core/graceful-shutdown.js",
+      "sha256": "4c9ab97dd483da75c1d2246db2f5ac12854745c2c951797b0763d410d9d1c63a"
+    },
+    {
+      "file": "core/http-error-boundary.js",
+      "sha256": "1f2a07d30ed214ae06ea9bd4bb2aa993300ab8dbe93ee18ee0f6ea69c1290d5b"
+    },
+    {
+      "file": "core/lifecycle-orchestrator.js",
+      "sha256": "a9e2f763f66cface0ab5b9eeb9584a4c18392b3a9ea642e009a23d9823aaec50"
+    },
+    {
+      "file": "core/lifecycle-policy.js",
+      "sha256": "6b54522bfd1c738df2ee452aafd314f02d66cdeb6b8b436c8f0115ad77b105fd"
+    },
+    {
+      "file": "core/llama-client.js",
+      "sha256": "a606f4e7901d5819e484debffd1dd5c11bbc2c9d49358654ff0a49cd75000775"
+    },
+    {
+      "file": "core/llama-launch.js",
+      "sha256": "882697367b5876995ea5ad0a46cac88431c467a1233bfd5e2d4678c6d9457766"
+    },
+    {
+      "file": "core/llama-runtime.js",
+      "sha256": "a63d7e250183fcd693997eda8fced624639d954be68e7d76c190c8562ed1c21d"
+    },
+    {
+      "file": "core/paths.js",
+      "sha256": "cbf18ad6f40b43b00d315cc853d80bee60e672d7aadf0cdcbc0711228620ce11"
+    },
+    {
+      "file": "core/request-tracker.js",
+      "sha256": "a30119cd8bdfc968049fff35df181c30c28f892f5b7fe54f0b2c767a46d4d50a"
+    },
+    {
+      "file": "core/runtime/windows.js",
+      "sha256": "5aea25016382c5c50fe533c2739477b67ecbdabb12e5b14abb2fb94015ca16ea"
+    },
+    {
+      "file": "core/shutdown-coordinator.js",
+      "sha256": "0d6663cee06761790c284377d4522c96cf431c56981dda89283cf04070056175"
+    },
+    {
+      "file": "db.js",
+      "sha256": "fa9ff5c6c79f0e09694ccb173359b64a86bc4927664b7588d729bd0e68c21c6e"
+    },
+    {
+      "file": "package.json",
+      "sha256": "917e5fb3426be716bfb4e7dc0fc8e9e0bf125314015e9a62516488011eaa85ef"
+    },
+    {
+      "file": "public/admin.html",
+      "sha256": "1e2248e47c8ffce7035328fa4b389e51236fcf4aee0a387d04150aa291f3a08a"
+    },
+    {
+      "file": "public/admin.js",
+      "sha256": "7413a182fc82746b8a0359e166ff778d2be0e8fabc2af1e6d66f5ce3ca0945fc"
+    },
+    {
+      "file": "public/app.js",
+      "sha256": "936d1a67fc56c1323c08ef6c44fb33f4ec22bff756f9fb7527f7fc4e105ac33c"
+    },
+    {
+      "file": "public/index.html",
+      "sha256": "51a1631e01f36c387a94feb6747eb73bd1c40f0014eff180fb76391dad7e76a2"
+    },
+    {
+      "file": "public/style.css",
+      "sha256": "25ff6c0fc64f57c9fa32997df2c973d746614ee8d693c6e99b9882fcaae61507"
+    },
+    {
+      "file": "release/rc1/supervisor/QUALIFICATION.md",
+      "sha256": "7d9dc051e4ef31c6f8fa7ac75756ed1208f1a59ea04361075084539ffee9eaba"
+    },
+    {
+      "file": "release/rc1/supervisor/boot-task.cjs",
+      "sha256": "9e5643104b4cdbd138181f8171e3c6006257417b6b0c12c5e465663c3a4c679d"
+    },
+    {
+      "file": "release/rc1/supervisor/broker-client.cjs",
+      "sha256": "57844661f2dc51d7b4b35c932882e016715091a8e26b8d041a5e7a814e59864e"
+    },
+    {
+      "file": "release/rc1/supervisor/build.cjs",
+      "sha256": "2cc30555bb3f5879c7ee30f6adb653d51d74e509269e8b8adb6714ad9a50a5ae"
+    },
+    {
+      "file": "release/rc1/supervisor/observe.ps1",
+      "sha256": "7d98128f886bf8f8cbb53fae3fd4a29befb99dc73076346809da411ae66d4939"
+    },
+    {
+      "file": "release/rc1/supervisor/profile.json",
+      "sha256": "bb8a0730f03299476f3522a4a5a8f45fbca0429b62eb4485add2cafc5ea4c4c1"
+    },
+    {
+      "file": "release/rc1/supervisor/qualification.json",
+      "sha256": "bb08c436b59e866518d1429af7738670c423dd7b9c7107c5acda1292a38af8e5"
+    },
+    {
+      "file": "release/rc1/supervisor/readiness.cjs",
+      "sha256": "d44970450cb6d8fc2a1e4f7ecb7613b22425d8fb9c2df877c35b6269d2061347"
+    },
+    {
+      "file": "release/rc1/supervisor/recovery.cjs",
+      "sha256": "2399628a8cdc2291a5343ec342dee8933cae73c7c990c6669d0598c3195f0825"
+    },
+    {
+      "file": "release/rc1/supervisor/src/broker.cpp",
+      "sha256": "ea4be596f11f0adfd9ed1106cc66d92fd801d2a341a8d14ce686c340e01cf5cd"
+    },
+    {
+      "file": "release/rc1/supervisor/src/common.h",
+      "sha256": "2519710744e33047e149f58f4cde3ae9f80a67b97ef9dbd51a6b83f456e7396e"
+    },
+    {
+      "file": "release/rc1/supervisor/supervisor.cjs",
+      "sha256": "ff84d0fe78a8f5c985e6f0a631bc1ac1b883b1de4287ce0cf1f476290ff39d98"
+    },
+    {
+      "file": "release/rc1/supervisor/test/crash-driver.cjs",
+      "sha256": "3f5d625977eec041fa3e154e3e1ec9e0a09f9950222f719b154743c072bcab37"
+    },
+    {
+      "file": "release/rc1/supervisor/test/fixture.cjs",
+      "sha256": "428c48c3413cbf8571cf360cad77a7eb43836921b9e6f5af349b332e82d5e842"
+    },
+    {
+      "file": "release/rc1/supervisor/test/native.test.cjs",
+      "sha256": "cd53e9175aaadaeb4e206181db6c9656ca88d9c1b76b1e51dd86c911be6082aa"
+    },
+    {
+      "file": "release/rc1/supervisor/timeouts.cjs",
+      "sha256": "6a70788485fdb3f47298d37dc2a32c0da0485d5c7ac8d68b4f8a7118e2689d3d"
+    },
+    {
+      "file": "release/rc1/supervisor/verify-environment.ps1",
+      "sha256": "9631d23b5c6d69d19b29e475861e884daf3a68aa80aedf01ad1a7997e7a977bd"
+    },
+    {
+      "file": "scripts/initialize-database.cjs",
+      "sha256": "74e905905b16d885c62c895fdeb630d8bfa8b85b7b3eb4e19121eb66afa62c3f"
+    },
+    {
+      "file": "server.js",
+      "sha256": "3d7b576b859cae00885538e902bb23f0d2be9337fa8a11550eb13b530ecb4abc"
+    },
+    {
+      "file": "test/activation-contract.test.js",
+      "sha256": "e6ae245ebbdda9a78aec66931b8f3da7cdd0df3746d27635ccc2a557f2094a9d"
+    },
+    {
+      "file": "test/activation-coordinator-contract.md",
+      "sha256": "eac4d859d983937d8388b7933ca7d9d68d7fdf1593d542054b13bf0f6e3e24e9"
+    },
+    {
+      "file": "test/activation-coordinator.test.js",
+      "sha256": "45c453d717cc88ecd7aabfad86993d8be1fb769b8513e35bb765828c7f861750"
+    },
+    {
+      "file": "test/ai-activation.test.js",
+      "sha256": "4c5a7c8240ca5a9268d5a5b9c4647e10469c3e6f7feea3412f121100e891100c"
+    },
+    {
+      "file": "test/application-lifecycle.test.js",
+      "sha256": "70e4bf15e0ce96a0a230c8fdae233c6dbcf3b5c7e37421541b2cfd94f6f20033"
+    },
+    {
+      "file": "test/chat-revision-api.test.js",
+      "sha256": "9067d3887ad375ba17bff7ab6d08fce17743107583ed9cc769f6bd09de8cc458"
+    },
+    {
+      "file": "test/chat-revisions.test.js",
+      "sha256": "c22775563a2b80b46c4fea0805de7a76c189595abe2acca5b14d71ff8dfdc4c2"
+    },
+    {
+      "file": "test/chat-stream-cancellation.test.js",
+      "sha256": "a26e23eb3e8e10d937bcb66feec37260da1d79a833463b18d9b51c55ad2ab5bd"
+    },
+    {
+      "file": "test/database-cleanup.test.js",
+      "sha256": "3339a1c239dd894e9f8699d74fe2e206b647fa10d06ab10f9629944829061ef9"
+    },
+    {
+      "file": "test/fixture-replacement/README.md",
+      "sha256": "e5a6a73e3cba978074ccee88d02455c0aa791deb1b716ef0c24de00b259ba802"
+    },
+    {
+      "file": "test/fixture-replacement/broker-client.cjs",
+      "sha256": "fee403a2d542aaec7b8e9378c64f833739e461e3a1ef09a82b7644751285ad32"
+    },
+    {
+      "file": "test/fixture-replacement/fixture.cpp",
+      "sha256": "d819519b49f42c00e9eda9593a76d27ce3522b6cccf7d2393ab751cef35ed651"
+    },
+    {
+      "file": "test/fixture-replacement/qualify.cjs",
+      "sha256": "acafa7c6809d502e51f43de06542e5f32efdd93fcf1e4b8be9d54499c1f4aa8d"
+    },
+    {
+      "file": "test/frontend-revisions.test.js",
+      "sha256": "c38542550edfdfe5faad349c74831d223b059d845e3a2aee878624605dd5440b"
+    },
+    {
+      "file": "test/graceful-shutdown-http.test.js",
+      "sha256": "a19d920ab41040e9e08274caaedcf8ec2387a382d9fd8c9a2026af2599a684dc"
+    },
+    {
+      "file": "test/graceful-shutdown.test.js",
+      "sha256": "d81e72ae7fcaa9066f7998dc5ec74f4e9df61ac0108300f9ff8acdba8c2ec2cd"
+    },
+    {
+      "file": "test/http-error-boundary.test.js",
+      "sha256": "120d848ad2e7f222c3775c78524fcdd257450dc334e356367f004be441b13090"
+    },
+    {
+      "file": "test/lifecycle-integration.test.js",
+      "sha256": "af486c48f5809cd938786d169d63cbd5652d92dccd3553b8abde5221b967e6d3"
+    },
+    {
+      "file": "test/lifecycle-orchestrator.test.js",
+      "sha256": "a9b8f68f13dedf6b790302195dce36a4bc339242e8ee214b7c92e97cedcac6b8"
+    },
+    {
+      "file": "test/lifecycle-policy-contract.md",
+      "sha256": "4c4e9cf9f55f2dd54247076bd890f36da05e4a70f53a7bd0389fa2b86f0b9b80"
+    },
+    {
+      "file": "test/lifecycle-policy.test.js",
+      "sha256": "2aa3842b77c3969c6ad4440c0f4e9cee0f293ff178b0e56b9e8e1366667cf52c"
+    },
+    {
+      "file": "test/llama-launch.test.js",
+      "sha256": "61370b1d8c665d600a0bfc5e974bdbdfb0b60cccb0f848d54277e8e56aebf06e"
+    },
+    {
+      "file": "test/management-channel-contract.md",
+      "sha256": "e09c64e51c62505faf6507dca561ad7a95e9657f8c35496b6625fb31be7aff20"
+    },
+    {
+      "file": "test/management-channel.test.js",
+      "sha256": "40aa5a4f56de4d10e048b6d9d5f9612eb52fd02a14d8a9c8f3392d0593bdcf2b"
+    },
+    {
+      "file": "test/model-activation-contract.md",
+      "sha256": "ac737c6e0a3386e95c43b5fbb1c3205e05e0b6e657b380a14c165b38a346acd6"
+    },
+    {
+      "file": "test/native-process-broker/README.md",
+      "sha256": "5e83cf45b044ee0c52ba426e8ef5175435fbabfba4171d4c3d6e137b5837ac41"
+    },
+    {
+      "file": "test/native-process-broker/broker.cpp",
+      "sha256": "278262e2ccb33be74adb1d6186c66e90d1c82d0ea6b5898b7e157819f0c74fb2"
+    },
+    {
+      "file": "test/native-process-broker/common.h",
+      "sha256": "2519710744e33047e149f58f4cde3ae9f80a67b97ef9dbd51a6b83f456e7396e"
+    },
+    {
+      "file": "test/native-process-broker/fixture.cpp",
+      "sha256": "0877af93b942eb0e512d0de934e2f41d50c09fde0f4359b05e32c4da37e6f788"
+    },
+    {
+      "file": "test/native-process-broker/qualify.js",
+      "sha256": "701e9d1f3c3e0977b7ac88e00f0c56caafed7b3cacd6af99fb33471d7f97cb5a"
+    },
+    {
+      "file": "test/profile-store-contract.md",
+      "sha256": "8e44244916ce3dcf566508d899fb951b5ef0c1262ad79a89130e839e1d60607c"
+    },
+    {
+      "file": "test/profile-store.test.js",
+      "sha256": "b499b0a2d7f93294a3cc142d4165f8841c5c30530fdf42937adfb3e721e0b4b0"
+    },
+    {
+      "file": "test/rc1-db-startup.test.js",
+      "sha256": "3ef13347f90fc4d854ffc1e6313310d73fecab601f8922ceefd2e14ad213fef4"
+    },
+    {
+      "file": "test/rc1-supervisor.test.js",
+      "sha256": "2d7e14ef364ad6bc4a36b3937df463c06de199508b7492eacefcf23eb9e19c1d"
+    },
+    {
+      "file": "test/request-tracker-http.test.js",
+      "sha256": "5f92af22df72a8845197e6930a2196d867b98b795fae85a1e967d295fa932fc5"
+    },
+    {
+      "file": "test/request-tracker.test.js",
+      "sha256": "055f83cf493e6ed4cc82c783966740356485110c02e57bcc7d31fc6f354c3d99"
+    },
+    {
+      "file": "test/shutdown-coordinator-http.test.js",
+      "sha256": "c0805473a394d3014c3ccf2c60ac411ae2b6281e66c66219aaf00988c8431798"
+    },
+    {
+      "file": "test/shutdown-coordinator.test.js",
+      "sha256": "3a1ccc0de8e0943bec796f48c79178a6fe546fddf9921bee988bd1fe1d9e8526"
+    },
+    {
+      "file": "test/static-file-serving.test.js",
+      "sha256": "793ed31ece9ed4cc0e2dd6bf8830b919b2d2169e0267e53af71b9571413bf2cd"
+    },
+    {
+      "file": "test/support/activation-contract.cjs",
+      "sha256": "8556408dcada8fe331b0c6088610bc6ac0a3e653680a513c20b5fd4b43538b34"
+    },
+    {
+      "file": "test/support/activation-coordinator.cjs",
+      "sha256": "46c7516547982cf0f51a0fb7315e3425309b605989fcfde051ec477ccd23d75d"
+    },
+    {
+      "file": "test/support/management-channel.cjs",
+      "sha256": "c6853cb7f5a4dc2da83787295d126ecb63f1934eecce465ffce0ae5d86248b77"
+    },
+    {
+      "file": "test/support/profile-store.cjs",
+      "sha256": "802c78d9d0453a1bbfea33ed881ea452183b6030cb6758492de3f13c15ea535b"
+    },
+    {
+      "file": "test/windows-runtime-provenance.test.js",
+      "sha256": "09c04e8b3b8ec74fd0fd3c5b287e32dc82139917474c88824674b5857b593782"
+    }
+  ]
+}

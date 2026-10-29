@@ -1,6 +1,6 @@
 const { API_KEY_FILE, AI_CONFIG_FILE, MODELS_DIR } = require("./paths");
 
-const HOST = "0.0.0.0";
+const HOST = "127.0.0.1";
 const PORT = 3000;
 
 const LLAMA_BIND_HOST = "127.0.0.1";

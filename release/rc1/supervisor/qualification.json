@@ -1,0 +1,9 @@
+{
+    "activationApproved":  false,
+    "modelLoadPassed":  false,
+    "generationPassed":  false,
+    "gracefulBackendStopPassed":  false,
+    "gracefulNodeStopPassed":  false,
+    "gpuUUID":  "GPU-4cc4e779-9cd5-695d-7afb-11c71c58f82e",
+    "databaseStartupApproved":  false
+}

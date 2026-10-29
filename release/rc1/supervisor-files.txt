@@ -1,0 +1,17 @@
+release/rc1/supervisor/boot-task.cjs
+release/rc1/supervisor/broker-client.cjs
+release/rc1/supervisor/build.cjs
+release/rc1/supervisor/observe.ps1
+release/rc1/supervisor/profile.json
+release/rc1/supervisor/qualification.json
+release/rc1/supervisor/QUALIFICATION.md
+release/rc1/supervisor/readiness.cjs
+release/rc1/supervisor/recovery.cjs
+release/rc1/supervisor/src/broker.cpp
+release/rc1/supervisor/src/common.h
+release/rc1/supervisor/supervisor.cjs
+release/rc1/supervisor/test/crash-driver.cjs
+release/rc1/supervisor/test/fixture.cjs
+release/rc1/supervisor/test/native.test.cjs
+release/rc1/supervisor/timeouts.cjs
+release/rc1/supervisor/verify-environment.ps1

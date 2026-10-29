@@ -1,0 +1,50 @@
+﻿ M core/config.js
+ M core/llama-client.js
+ M db.js
+ M package.json
+ M public/admin.html
+ M public/admin.js
+ M public/style.css
+ M server.js
+ M test/chat-revision-api.test.js
+ M test/chat-revisions.test.js
+?? core/ai-activation.js
+?? core/application-lifecycle.js
+?? core/config.js.bak
+?? core/database-cleanup.js
+?? core/database-schema.js
+?? core/database-startup.js
+?? core/graceful-shutdown.js
+?? core/http-error-boundary.js
+?? core/lifecycle-orchestrator.js
+?? core/request-tracker.js
+?? core/shutdown-coordinator.js
+?? release/
+?? scripts/
+?? server.js.bak
+?? test/activation-contract.test.js
+?? test/activation-coordinator-contract.md
+?? test/activation-coordinator.test.js
+?? test/ai-activation.test.js
+?? test/application-lifecycle.test.js
+?? test/chat-stream-cancellation.test.js
+?? test/database-cleanup.test.js
+?? test/fixture-replacement/
+?? test/graceful-shutdown-http.test.js
+?? test/graceful-shutdown.test.js
+?? test/http-error-boundary.test.js
+?? test/lifecycle-integration.test.js
+?? test/lifecycle-orchestrator.test.js
+?? test/management-channel-contract.md
+?? test/management-channel.test.js
+?? test/model-activation-contract.md
+?? test/profile-store-contract.md
+?? test/profile-store.test.js
+?? test/rc1-db-startup.test.js
+?? test/rc1-supervisor.test.js
+?? test/request-tracker-http.test.js
+?? test/request-tracker.test.js
+?? test/shutdown-coordinator-http.test.js
+?? test/shutdown-coordinator.test.js
+?? test/static-file-serving.test.js
+?? test/support/

@@ -10,7 +10,10 @@ const root = path.join(__dirname, '..');
 function setup(t, fault) {
     const db = new DatabaseSync(':memory:'); t.after(() => db.close());
     const context = { module: { exports: {} }, __dirname: root, require(name) {
-        if (name === 'node:sqlite') return { DatabaseSync: function () { return db; } };
+        if (name === './core/database-startup') return {
+            databasePath: () => ':memory:',
+            openExistingDatabase() { require('../core/database-schema').initializeSchema(db); return db; }
+        };
         if (name === './auth') return auth;
         return require(name);
     } };
@@ -25,6 +28,8 @@ function setup(t, fault) {
             if (name === 'http') return { createServer(fn) { handler = fn; return { listen() {} }; } };
             if (name === './db') return api;
             if (name === './auth') return { ...auth, getSessionUser(...args) { if (fault) fault(db); return auth.getSessionUser(...args); } };
+            if (name === './core/request-tracker') return { createRequestTracker: () => ({ track: handler => handler }) };
+            if (name === './core/http-error-boundary') return { withHttpErrorBoundary: handler => handler };
             if (name.startsWith('./core/')) return {};
             if (name === 'fs') return new Proxy({}, { get() { throw Error('Filesystem access prohibited'); } });
             return require(name);

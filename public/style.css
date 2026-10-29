@@ -79,6 +79,12 @@ body:not([data-theme="light"]) #chatList button:hover {
     background: #303845;
 }
 
+body:not([data-theme="light"]) #chatList button.active {
+    background: #31eff8;
+    color: #0b1f33;
+    font-weight: bold;
+}
+
 body[data-theme="light"] #chatList button.active {
     background: #31eff8;
     color: #0b1f33;
@@ -899,20 +905,26 @@ body[data-theme="light"] #loginError {
 }
 
 .select-wrap {
-    padding-right: 38px;
+    padding-right: 0;
 }
 
 .select-wrap select {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    padding-left: 14px;
+    padding: 12px 38px 12px 14px;
     cursor: pointer;
 }
 
 .select-caret {
     position: absolute;
     right: 14px;
+    z-index: 2;
     color: rgba(233, 240, 255, 0.8);
     font-size: 1rem;
     pointer-events: none;
@@ -1087,6 +1099,78 @@ body[data-theme="light"] #loginError {
 
 .back-link:hover {
     text-decoration: underline;
+}
+
+body[data-theme="light"].admin-page {
+    background:
+        radial-gradient(circle at top left, rgba(71, 88, 110, 0.12), transparent 28%),
+        linear-gradient(180deg, #f5f7fb 0%, #edf1f6 100%);
+    color: #202530;
+}
+
+body[data-theme="light"] .admin-header {
+    border-color: #d8dee9;
+}
+
+body[data-theme="light"] .admin-panel {
+    background: rgba(255, 255, 255, 0.94);
+    border-color: #d8dee9;
+    box-shadow: 0 8px 24px rgba(32, 37, 48, 0.07);
+}
+
+body[data-theme="light"] .field-group label,
+body[data-theme="light"] #usersTable tbody td {
+    color: #202530;
+}
+
+body[data-theme="light"] .input-wrap,
+body[data-theme="light"] .select-wrap {
+    background: #ffffff;
+    border-color: #c7cfdb;
+    box-shadow: none;
+}
+
+body[data-theme="light"] .input-wrap input,
+body[data-theme="light"] .select-wrap select {
+    color: #202530;
+}
+
+body[data-theme="light"] .input-wrap input::placeholder {
+    color: #667085;
+}
+
+body[data-theme="light"] .field-icon,
+body[data-theme="light"] .select-caret,
+body[data-theme="light"] .header-side-label,
+body[data-theme="light"] .users-count,
+body[data-theme="light"] .users-status {
+    color: #667085;
+}
+
+body[data-theme="light"] #usersTable {
+    border-color: #d8dee9;
+}
+
+body[data-theme="light"] #usersTable th,
+body[data-theme="light"] #usersTable td {
+    border-bottom-color: #e4e8ef;
+}
+
+body[data-theme="light"] #usersTable th {
+    background: #edf1f6;
+    color: #202530;
+}
+
+body[data-theme="light"] #usersTable tbody tr:nth-child(odd) {
+    background: #ffffff;
+}
+
+body[data-theme="light"] #usersTable tbody tr:nth-child(even) {
+    background: #f8f9fb;
+}
+
+body[data-theme="light"] #createUserStatus {
+    color: #18794e;
 }
 
 @media (max-width: 980px) {

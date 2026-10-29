@@ -109,6 +109,9 @@ async function loadAiRuntime() {
         ) {
             contextLimit = runtime.contextLimit;
         }
+        if (typeof runtime.modelName === "string" && runtime.modelName.trim()) {
+            activeModelName = runtime.modelName.trim();
+        }
 
     } catch (error) {
         if (epoch !== sessionEpoch) return;
@@ -257,6 +260,7 @@ function replaceSession() {
 }
 let controller = null;
 let contextLimit = 8192;
+let activeModelName = "Assistant";
 
 async function checkHealth() {
     try {
@@ -280,7 +284,7 @@ function addMessage(role, content = "", mount = true) {
     const roleLabel = document.createElement("div");
     roleLabel.className = "role";
     roleLabel.textContent =
-        role === "user" ? "You" : "Qwen";
+        role === "user" ? "You" : activeModelName;
 
     const text = document.createElement("div");
     text.textContent = content;
