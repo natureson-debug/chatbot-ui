@@ -1,0 +1,38 @@
+﻿'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {parseGpu,parseMetrics,createTelemetry}=require('../core/admin-telemetry');
+const csv='GPU-abc-123, NVIDIA RTX 3090, 595.95, 12, 6000, 24576, 42, 99.4, 350\n';
+const response=(value,status=200)=>({status,text:JSON.stringify(value)});
+const request=async r=>r==='/health'?response({status:'ok'}):r==='/v1/models'?response({data:[{id:'model.gguf'}]}):r==='/props'?response({default_generation_settings:{n_ctx:32768,prompt:'DO_NOT_EXPOSE'},total_slots:1,chat_template:'PRIVATE'}):{status:200,text:'llamacpp:predicted_tokens_seconds 12.5\nllamacpp:tokens_predicted_total 45\nprivate_prompt 999'};
+test('real-format GPU CSV preserves units and zero',()=>{const g=parseGpu(csv.replace(', 12,',', 0,'))[0];assert.equal(g.utilizationPercent,0);assert.equal(g.memoryTotalMiB,24576);assert.equal(g.powerW,99.4);});
+test('unsupported GPU values are null, never fake zero',()=>{const g=parseGpu(csv.replace(', 12,',', [N/A],').replace(', 99.4,',', N/A,'))[0];assert.equal(g.utilizationPercent,null);assert.equal(g.powerW,null);});
+test('invalid GPU format rejected; multiple GPUs retained',()=>{assert.throws(()=>parseGpu('garbage'));assert.equal(parseGpu(csv+csv.replace('abc','def')).length,2);});
+test('metrics allowlist rejects labels, infinities, negatives, duplicate ambiguity',()=>{const m=parseMetrics('llamacpp:requests_processing 0\nllamacpp:predicted_tokens_seconds NaN\nllamacpp:prompt_tokens_total -1\nllamacpp:tokens_predicted_total 3\nllamacpp:tokens_predicted_total 5\nsecret{prompt="private"} 1');assert.equal(m.requestsProcessing,0);assert.equal(m.generatedTokensPerSecond,null);assert.equal(m.promptTokensTotal,null);assert.equal(m.generatedTokensTotal,null);assert(!JSON.stringify(m).includes('private'));});
+test('metrics parser accepts prometheus labels without leaking label values',()=>{const m=parseMetrics('llamacpp:predicted_tokens_seconds{model="secret"} 12.5\nllamacpp:requests_processing{model="secret"} 2');assert.equal(m.generatedTokensPerSecond,12.5);assert.equal(m.requestsProcessing,2);assert(!JSON.stringify(m).includes('secret'));});
+test('collector reports backend runtime values and strips unrelated data',async()=>{const sample=await createTelemetry({request,gpu:async()=>csv})();assert.equal(sample.backend.state,'ready');assert.equal(sample.backend.contextPerSlot,32768);assert.equal(sample.backend.parallelSlots,1);assert.equal(sample.backend.metrics.generatedTokensPerSecond,12.5);assert(!JSON.stringify(sample).includes('PRIVATE'));assert(!JSON.stringify(sample).includes('DO_NOT_EXPOSE'));});
+test('offline and missing GPU yield explicit unavailable without raw exceptions',async()=>{const sample=await createTelemetry({request:async()=>{throw Error('secret');},gpu:async()=>{throw Error('private');}})();assert.equal(sample.backend.state,'unavailable');assert.equal(sample.gpu.state,'unavailable');assert.equal(sample.backend.model,null);assert(!JSON.stringify(sample).includes('secret'));});
+for(const [code,state] of [[401,'authentication_failed'],[403,'authentication_failed'],[501,'unsupported'],[404,'unsupported'],[503,'loading_or_unavailable']])test('upstream status '+code+' represented explicitly',async()=>{const sample=await createTelemetry({request:async()=>response({},code),gpu:async()=>csv})();assert.equal(sample.backend.state,state);assert.equal(sample.backend.metricsState,state);});
+test('cache and concurrent polls share one bounded sample',async()=>{let calls=0,time=0,release;const blocked=new Promise(r=>release=r);const sample=createTelemetry({request:async r=>{calls++;await blocked;return request(r);},gpu:async()=>csv,now:()=>time});const a=sample(),b=sample();release();assert.deepEqual(await a,await b);await sample();assert.equal(calls,4);time=5000;await sample();assert.equal(calls,8);});
+test('malformed JSON and missing context do not become runtime defaults',async()=>{const s=await createTelemetry({request:async()=>({status:200,text:'invalid'}),gpu:async()=>csv})();assert.equal(s.backend.contextPerSlot,null);assert.equal(s.backend.state,'unavailable');});
+const source=fs.readFileSync(require.resolve('../server'),'utf8');const begin=source.indexOf('// Read-only telemetry;'),end=source.indexOf('// Administrator-only AI server status',begin);
+async function route(user,current=user,url='/api/admin/ai/telemetry'){
+ let code,body,calls=0,headers;
+ const run=vm.runInNewContext('(async()=>{'+source.slice(begin,end)+'})',{
+ req:{method:'GET',url},res:{writeHead(c,h){code=c;headers=h;},end(b){body=JSON.parse(b);}},getSessionToken:()=> 'synthetic',getAuthenticatedUser:()=>user,getSessionUser:()=>current,db:{},getAdminTelemetry:async()=>{calls++;return {sampledAt:'now',backend:{state:'ready'},gpu:{state:'available',devices:[]}};}
+ });await run();return {code,body,calls,headers};
+}
+test('actual telemetry route rejects anonymous and ordinary users before collection',async()=>{assert.equal((await route(null)).code,401);const r=await route({id:'u',is_admin:0});assert.equal(r.code,403);assert.equal(r.calls,0);});
+test('actual telemetry and status routes are admin-only and no-store',async()=>{for(const url of ['/api/admin/ai/telemetry','/api/admin/ai/telemetry/status']){const r=await route({id:'a',is_admin:1},undefined,url);assert.equal(r.code,200);assert.equal(r.headers['Cache-Control'],'no-store');assert.equal(r.calls,1);}});
+test('revoked or replaced session cannot receive collected telemetry',async()=>{for(const current of [null,{id:'other',is_admin:1},{id:'a',is_admin:0}])assert.equal((await route({id:'a',is_admin:1},current)).code,401);});
+test('bounded authenticated upstream reads accept only fixed GET resources',async()=>{
+ let options,url;const module={exports:{}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../core/llama-client'),'utf8'),{module,Buffer,URL,AbortSignal,fetch:async(u,o)=>{url=String(u);options=o;return new Response('{"status":"ok"}');},require:n=>n==='fs'?{readFileSync:()=> 'SYNTHETIC_KEY'}:{LLAMA_URL:'http://127.0.0.1:8080/v1/chat/completions',API_KEY_FILE:'synthetic'}});
+ assert.equal((await module.exports.readTelemetryResource('/health')).status,200);assert.equal(url,'http://127.0.0.1:8080/health');assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert(options.signal);assert.equal(options.headers.Authorization,'Bearer SYNTHETIC_KEY');await assert.rejects(module.exports.readTelemetryResource('https://outside.invalid/'));});
+test('oversized upstream observations are rejected',async()=>{
+ const module={exports:{}};vm.runInNewContext(fs.readFileSync(require.resolve('../core/llama-client'),'utf8'),{module,Buffer,URL,AbortSignal,fetch:async()=>new Response('x'.repeat(262145)),require:n=>n==='fs'?{readFileSync:()=> 'SYNTHETIC'}:{LLAMA_URL:'http://127.0.0.1:8080',API_KEY_FILE:'mock'}});await assert.rejects(module.exports.readTelemetryResource('/props'),/TOO_LARGE/);
+});
+test('NVIDIA execution is async, fixed-path, shell-free and bounded',async()=>{
+ const module={exports:{}};let command,args,options;
+ vm.runInNewContext(fs.readFileSync(require.resolve('../core/admin-telemetry'),'utf8'),{module,require(name){if(name==='node:child_process')return {execFile(c,a,o,cb){command=c;args=a;options=o;queueMicrotask(()=>cb(null,csv));}};return require(name);}});
+ const s=await module.exports.createTelemetry({request})();assert.equal(s.gpu.state,'available');assert.equal(command,'C:\\Windows\\System32\\nvidia-smi.exe');assert.equal(options.shell,false);assert.equal(options.windowsHide,true);assert.equal(options.timeout,2500);assert.equal(options.maxBuffer,32768);assert.equal(args.length,2);assert(args[0].startsWith('--query-gpu='));
+});

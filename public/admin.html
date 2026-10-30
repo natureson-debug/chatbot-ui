@@ -3,21 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin Console</title>
+    <title>ROBCO TERMLINK // System Admin</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="/style.css">
 </head>
 <body class="admin-page">
+
+    <div id="bootScreen" aria-hidden="true">
+        <pre id="bootLog"></pre>
+    </div>
+
+    <div id="crtFlicker" aria-hidden="true"></div>
+
     <div class="admin-shell">
         <header class="admin-header">
             <div class="header-title-wrap">
                 <span class="header-gear" aria-hidden="true">⚙</span>
-                <h1>Admin Console</h1>
+                <div class="admin-title-block">
+                    <h1>ROBCO TERMLINK // SYSTEM ADMIN</h1>
+                    <div class="admin-status-line">
+                        <span>RESTRICTED ACCESS</span>
+                        <span id="terminalClock" aria-label="Current time">--:--:--</span>
+                    </div>
+                </div>
             </div>
-            
+            <span class="header-side-label">SECURE TERMINAL</span>
         </header>
 
+        <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
+            <button
+                id="tab-users-tab"
+                class="admin-tab active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="tab-users"
+                data-tab="users"
+            >Users</button>
+
+            <button
+                id="tab-monitor-tab"
+                class="admin-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-monitor"
+                data-tab="monitor"
+            >Monitoring</button>
+
+            <button
+                id="tab-ai-tab"
+                class="admin-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-ai"
+                data-tab="ai"
+            >AI Server</button>
+        </nav>
+
         <main class="admin-main">
-            <section class="admin-panel user-management-panel">
+            <section
+                id="tab-users"
+                class="admin-panel user-management-panel"
+                role="tabpanel"
+                aria-labelledby="tab-users-tab"
+                data-admin-tabpanel
+            >
                 <h2>User management</h2>
 
                 <div class="create-user-panel">
@@ -91,7 +147,14 @@
                 </div>
             </section>
 
-<section class="admin-panel monitor-panel" aria-labelledby="monitorTitle">
+<section
+    id="tab-monitor"
+    class="admin-panel monitor-panel"
+    role="tabpanel"
+    aria-labelledby="tab-monitor-tab"
+    data-admin-tabpanel
+    hidden
+>
     <div class="users-header"><h2 id="monitorTitle">Server monitoring</h2><button id="monitorToggle" type="button">Pause monitoring</button></div>
     <p id="monitorStatus" role="status">Waiting for a real observation...</p>
     <div id="monitorCards" class="monitor-grid"></div>
@@ -102,7 +165,14 @@
     </div>
 </section>
 
-<section class="admin-panel ai-config-panel">
+<section
+    id="tab-ai"
+    class="admin-panel ai-config-panel"
+    role="tabpanel"
+    aria-labelledby="tab-ai-tab"
+    data-admin-tabpanel
+    hidden
+>
     <div class="users-header">
         <h2>AI Server Configuration</h2>
         <span class="ai-status">
@@ -157,6 +227,18 @@
             >
         </div>
 
+        <div class="field-group">
+            <label for="aiGpuLayers">GPU offload layers (0-999)</label>
+            <input id="aiGpuLayers" type="number" min="0" max="999" step="1" value="37">
+        </div>
+        <div class="field-group">
+            <label for="aiDevice">GPU device</label>
+            <select id="aiDevice"><option value="CUDA0">CUDA0</option></select>
+        </div>
+        <div class="field-group">
+            <label for="aiVerbosity">Verbosity (0-5)</label>
+            <input id="aiVerbosity" type="number" min="0" max="5" step="1" value="4">
+        </div>
         <button
             id="saveAiConfig"
             type="button"
@@ -164,18 +246,31 @@
         >
             Save Configuration
         </button>
+        <button id="restartAiServer" type="button">Restart Server</button>
 
     </div>
 
     <p id="aiModelState" role="status"></p>
     <p id="aiConfigStatus" role="status" hidden></p>
+    <p id="aiRestartStatus" role="status"></p>
 </section>
 
             <a href="/" class="back-link">← Back to Chatbot</a>
         </main>
     </div>
 
+    <div id="terminalDialog" class="terminal-dialog" hidden>
+        <div class="terminal-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="terminalDialogTitle">
+            <div id="terminalDialogTitle" class="terminal-dialog-title"></div>
+            <div id="terminalDialogMessage" class="terminal-dialog-message"></div>
+            <input id="terminalDialogInput" type="text" autocomplete="off" hidden>
+            <div id="terminalDialogButtons" class="terminal-dialog-buttons"></div>
+        </div>
+    </div>
+
+    <script src="/terminal.js" defer></script>
     <script src="/admin.js" defer></script>
     <script src="/admin-monitor.js" defer></script>
+    <script src="/admin-restart.js" defer></script>
 </body>
 </html>

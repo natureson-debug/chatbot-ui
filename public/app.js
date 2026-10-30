@@ -30,7 +30,11 @@ attachmentInput.addEventListener("change", () => {
         !file.name.toLowerCase().endsWith(".txt") ||
         file.size > 100 * 1024
     )) {
-        alert("Please select a .txt file no larger than 100 KB.");
+        if (typeof terminalAlert === "function") {
+            terminalAlert("Please select a .txt file no larger than 100 KB.", "ATTACHMENT ERROR");
+        } else {
+            alert("Please select a .txt file no larger than 100 KB.");
+        }
         attachmentInput.value = "";
         attachmentName.textContent = "";
         attachmentName.hidden = true;
@@ -408,22 +412,29 @@ async function renameChat(chatId) {
 
     if (!chatData) return;
 
-    const requestedTitle = prompt(
-        "Enter a chat name (maximum 100 characters):",
-        chatData.title
-    );
+    const requestedTitle = typeof terminalPrompt === "function"
+        ? await terminalPrompt("RENAME MEMORY FILE", chatData.title)
+        : prompt("Enter a chat name (maximum 100 characters):", chatData.title);
 
     if (requestedTitle === null) return;
 
     const trimmedTitle = requestedTitle.trim();
 
     if (!trimmedTitle) {
-        alert("Chat name cannot be empty.");
+        if (typeof terminalAlert === "function") {
+            await terminalAlert("Chat name cannot be empty.", "INVALID INPUT");
+        } else {
+            alert("Chat name cannot be empty.");
+        }
         return;
     }
 
     if (trimmedTitle.length > 100) {
-        alert("Chat name must be 100 characters or fewer.");
+        if (typeof terminalAlert === "function") {
+            await terminalAlert("Chat name must be 100 characters or fewer.", "INVALID INPUT");
+        } else {
+            alert("Chat name must be 100 characters or fewer.");
+        }
         return;
     }
 
@@ -445,7 +456,11 @@ async function renameChat(chatId) {
     }
 } catch (error) {
     console.error("Could not rename chat:", error);
-    alert("Could not rename the chat. Please try again.");
+    if (typeof terminalAlert === "function") {
+        await terminalAlert("Could not rename the chat. Please try again.", "LINK ERROR");
+    } else {
+        alert("Could not rename the chat. Please try again.");
+    }
     return;
 }
 
@@ -526,7 +541,11 @@ deleteChatAction.addEventListener("click", async () => {
 
     if (!loginScreen.hidden || !activeChat || activeChat.lifecyclePending) return;
 
-    if (!confirm(`Delete "${activeChat.title}" and all its messages?`)) {
+    const confirmedDelete = typeof terminalConfirm === "function"
+        ? await terminalConfirm(`Delete "${activeChat.title}" and all its messages?`, "DELETE MEMORY FILE")
+        : confirm(`Delete "${activeChat.title}" and all its messages?`);
+
+    if (!confirmedDelete) {
         return;
     }
 
@@ -565,7 +584,11 @@ deleteChatAction.addEventListener("click", async () => {
         if (epoch !== sessionEpoch) return;
         console.error("Could not delete chat:", error);
         activeChat.lifecyclePending = false;
-        alert("Could not delete the chat. Please try again.");
+        if (typeof terminalAlert === "function") {
+            await terminalAlert("Could not delete the chat. Please try again.", "LINK ERROR");
+        } else {
+            alert("Could not delete the chat. Please try again.");
+        }
     }
 });
 
@@ -1031,7 +1054,11 @@ try {
 } catch (error) {
         if (epoch !== sessionEpoch) return;
     console.error("Could not create chat:", error);
-    alert("Could not create a new chat. Please try again.");
+    if (typeof terminalAlert === "function") {
+        await terminalAlert("Could not create a new chat. Please try again.", "LINK ERROR");
+    } else {
+        alert("Could not create a new chat. Please try again.");
+    }
     return;
 }
 
@@ -1058,7 +1085,12 @@ async function clearConversation(chatId) {
     const epoch = sessionEpoch;
     const target = chatStore.chats[chatId];
     if (!loginScreen.hidden || !target || target.lifecyclePending) return;
-    if (!confirm('Clear the history for "' + target.title + '"?')) return;
+
+    const confirmedClear = typeof terminalConfirm === "function"
+        ? await terminalConfirm('Clear the history for "' + target.title + '"?', "CLEAR MEMORY FILE")
+        : confirm('Clear the history for "' + target.title + '"?');
+
+    if (!confirmedClear) return;
     target.lifecyclePending = true;
     target.historyRevision = (target.historyRevision || 0) + 1;
     invalidateGeneration(chatId);
@@ -1364,6 +1396,10 @@ logoutButton.addEventListener("click", async () => {
     } catch (error) {
         if (epoch !== sessionEpoch) return;
         console.error("Logout failed:", error);
-        alert("Could not log out. Please try again.");
+        if (typeof terminalAlert === "function") {
+            await terminalAlert("Could not log out. Please try again.", "LINK ERROR");
+        } else {
+            alert("Could not log out. Please try again.");
+        }
     }
 });

@@ -76,6 +76,7 @@ function setup(createChatCompletion) {
             getLlamaServerPid: () => null
         },
 
+        './core/admin-telemetry': {},
         './core/ai-activation': {
             blockedActivation: async () => ({
                 state: 'blocked'

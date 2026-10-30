@@ -1335,6 +1335,13 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
         return;
     }
 
+    if (!require("./core/restart-request").validRestartRequest(req)) {
+        res.writeHead(403, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ state: "blocked", code: "RESTART_ORIGIN_REJECTED", error: "Same-origin administrator confirmation required." }));
+        return;
+    }
+    // No qualified owner is connected. Do not invoke legacy tasks or adopt a PID.
+    console.info(JSON.stringify({ event: "ai-restart", outcome: "blocked", code: "LIFECYCLE_ACTIVATION_DISABLED" }));
     res.writeHead(503, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store"
@@ -1374,7 +1381,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/config") {
             "Cache-Control": "no-store"
         });
 
-        res.end(JSON.stringify(config));
+        res.end(JSON.stringify(require("./core/ai-settings").validateAiSettings(config)));
     } catch (error) {
         console.error("Failed to read AI configuration:");
 
@@ -1425,7 +1432,8 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
             }
         }
 
-        const { model, parallel, contextSize } = JSON.parse(body);
+        const payload = JSON.parse(body);
+        const { model, parallel, contextSize } = payload;
 
         // Validate model against GGUF files actually installed.
         const availableModels = fs.readdirSync(MODELS_DIR)
@@ -1467,17 +1475,30 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
             return;
         }
 
-        const config = {
-            model,
-            parallel,
-            contextSize
-        };
+        const previous = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, "utf8"));
+        const additions = {};
+        for (const key of ["gpuLayers", "device", "verbosity"]) {
+            if (Object.hasOwn(payload, key)) additions[key] = payload[key];
+        }
+        let config;
+        try {
+            const { validateAiSettings } = require("./core/ai-settings");
+            if (!previous || typeof previous !== "object" || Array.isArray(previous)) throw Error("Invalid AI configuration");
+            config = validateAiSettings({ ...previous, model, parallel, contextSize, ...additions });
+        } catch (error) {
+            res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: error.message }));
+            return;
+        }
 
-        fs.writeFileSync(
-            AI_CONFIG_FILE,
-            JSON.stringify(config, null, 4) + "\n",
-            "utf8"
-        );
+        // Replace only after a complete validated write; a failed write keeps the old file.
+        const temporaryConfig = AI_CONFIG_FILE + "." + require("node:crypto").randomUUID() + ".tmp";
+        try {
+            fs.writeFileSync(temporaryConfig, JSON.stringify(config, null, 4) + "\n", { encoding: "utf8", flag: "wx" });
+            fs.renameSync(temporaryConfig, AI_CONFIG_FILE);
+        } finally {
+            if (fs.existsSync(temporaryConfig)) fs.unlinkSync(temporaryConfig);
+        }
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",

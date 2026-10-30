@@ -50,6 +50,7 @@ function setup({ readFileError = null } = {}) {
         },
         './core/llama-client': {},
         './core/llama-runtime': {},
+        './core/admin-telemetry': {},
         './core/ai-activation': {},
 
         './core/request-tracker': {

@@ -6,17 +6,27 @@
 
 <link rel="icon" type="image/png" href="/favicon.png">
 
-<title>Local AI Chatbot</title>
+<title>ROBCO TERMLINK // Local AI</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
+<div id="bootScreen" aria-hidden="true">
+    <pre id="bootLog"></pre>
+</div>
+
+<div id="crtFlicker" aria-hidden="true"></div>
+
 <section id="loginScreen">
     <form id="loginForm">
-        <h2>Local Chatbot</h2>
-        <p>Sign in to continue</p>
+        <h2>ROBCO TERMLINK</h2>
+        <p>SECURE ACCESS TERMINAL</p>
 
         <label for="loginUsername">Username</label>
         <input
@@ -34,7 +44,7 @@
             required
         >
 
-        <button type="submit">Sign in</button>
+        <button type="submit">Initialize Access</button>
         <p id="loginError" role="alert" hidden></p>
     </form>
 </section>
@@ -46,8 +56,11 @@
             <img src="/favicon.png" alt="Chatbot" class="header-icon">
 
             <div class="brand-block">
-                <h1>Chatbot</h1>
-                <span id="status">Connecting...</span>
+                <h1>ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL</h1>
+                <div class="status-line">
+                    <span id="status">Connecting...</span>
+                    <span id="terminalClock" aria-label="Current time">--:--:--</span>
+                </div>
             </div>
 
             <label class="thinking-toggle">
@@ -81,8 +94,8 @@
             <div class="setting-field">
                 <label for="theme">Theme</label>
                 <select id="theme">
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
+                    <option value="dark">Green Phosphor</option>
+                    <option value="light">Amber Phosphor</option>
                 </select>
             </div>
 
@@ -142,11 +155,14 @@
 </div>
 
     <footer>
-        <textarea
-            id="prompt"
-            placeholder="Message"
-            rows="1"
-        ></textarea>
+        <div class="prompt-wrap">
+            <span class="prompt-marker" aria-hidden="true">&gt;</span>
+            <textarea
+                id="prompt"
+                placeholder="ENTER MESSAGE // SHIFT+ENTER FOR NEW LINE"
+                rows="1"
+            ></textarea>
+        </div>
 
 <label for="attachment" title="Attach a text file">📎 Attach</label>
 <input
@@ -174,8 +190,18 @@
 
 </div>
 
+<div id="terminalDialog" class="terminal-dialog" hidden>
+    <div class="terminal-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="terminalDialogTitle">
+        <div id="terminalDialogTitle" class="terminal-dialog-title"></div>
+        <div id="terminalDialogMessage" class="terminal-dialog-message"></div>
+        <input id="terminalDialogInput" type="text" autocomplete="off" hidden>
+        <div id="terminalDialogButtons" class="terminal-dialog-buttons"></div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<script src="/terminal.js"></script>
 <script src="/app.js"></script>
 
 </body>

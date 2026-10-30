@@ -1277,3 +1277,1399 @@ label[for="attachment"] {
 .monitor-history th, .monitor-history td { text-align: left; padding: 10px; white-space: nowrap; border-bottom: 1px solid currentColor; }
 .monitor-panel .users-header { flex-wrap: wrap; gap: 12px; }
 @media (max-width: 600px) { .monitor-card { padding: 12px; } .monitor-panel { min-width: 0; } }
+
+/* ============================================================
+   Fallout-style terminal theme (scoped to the chatbot UI only)
+   ============================================================ */
+
+body:not(.admin-page) {
+    --phos: #8affa0;
+    --phos-soft: #55d979;
+    --phos-dim: #35a35d;
+    --phos-faint: rgba(138, 255, 160, 0.12);
+    --phos-glow: rgba(85, 217, 121, 0.55);
+    --screen: #030704;
+    --panel: rgba(5, 16, 9, 0.82);
+    --panel-solid: #071309;
+    --line: rgba(138, 255, 160, 0.3);
+    --line-strong: rgba(138, 255, 160, 0.62);
+    --amber: #ffc15e;
+    --red: #ff7a6e;
+
+    margin: 0;
+    font-family: "Share Tech Mono", "VT323", "Consolas", monospace;
+    color: var(--phos);
+    color-scheme: dark;
+    background:
+        radial-gradient(circle at 50% -10%, rgba(85, 217, 121, 0.12), transparent 55%),
+        linear-gradient(180deg, #040804 0%, #020402 100%);
+}
+
+body:not(.admin-page)[data-theme="light"] {
+    --phos: #ffc56e;
+    --phos-soft: #f2a647;
+    --phos-dim: #c98131;
+    --phos-faint: rgba(255, 197, 110, 0.13);
+    --phos-glow: rgba(242, 166, 71, 0.5);
+    --screen: #080502;
+    --panel: rgba(18, 11, 3, 0.84);
+    --panel-solid: #150d04;
+    --line: rgba(255, 197, 110, 0.3);
+    --line-strong: rgba(255, 197, 110, 0.62);
+    --amber: #ffd894;
+    --red: #ff8a72;
+
+    background:
+        radial-gradient(circle at 50% -10%, rgba(242, 166, 71, 0.13), transparent 55%),
+        linear-gradient(180deg, #0b0702 0%, #030201 100%);
+}
+
+body:not(.admin-page)::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9980;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.24) 0px,
+        rgba(0, 0, 0, 0.24) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    mix-blend-mode: multiply;
+}
+
+#crtFlicker {
+    position: fixed;
+    inset: 0;
+    z-index: 9990;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.58) 100%),
+        linear-gradient(90deg, rgba(255, 0, 80, 0.018), rgba(0, 255, 160, 0.018));
+    animation: crtFlicker 7s infinite;
+}
+
+body:not(.admin-page) h1,
+body:not(.admin-page) h2,
+body:not(.admin-page) h3,
+body:not(.admin-page) .role,
+body:not(.admin-page) #activeChatTitle,
+body:not(.admin-page) #bootLog,
+body:not(.admin-page) .terminal-dialog-title {
+    font-family: "VT323", "Share Tech Mono", "Consolas", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+body:not(.admin-page) h1,
+body:not(.admin-page) h2,
+body:not(.admin-page) h3 {
+    text-shadow: 0 0 8px var(--phos-glow), 0 0 18px rgba(0, 0, 0, 0.85);
+}
+
+body:not(.admin-page) .app {
+    height: 100vh;
+    background: transparent;
+}
+
+body:not(.admin-page) header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line-strong);
+    background: linear-gradient(180deg, rgba(8, 24, 13, 0.92), rgba(3, 10, 5, 0.88));
+    box-shadow:
+        inset 0 -1px 0 rgba(138, 255, 160, 0.12),
+        0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+body:not(.admin-page) header h1 {
+    margin: 0 0 4px 0;
+    font-size: clamp(1.05rem, 2.1vw, 1.45rem);
+    line-height: 1;
+    color: var(--phos);
+}
+
+body:not(.admin-page) .header-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    border: 1px solid var(--line-strong);
+    background: var(--panel-solid);
+    filter: grayscale(1) sepia(1) hue-rotate(55deg) saturate(2.2) brightness(0.95);
+    box-shadow: 0 0 12px var(--phos-faint), inset 0 0 12px rgba(0, 0, 0, 0.8);
+}
+
+body:not(.admin-page) .status-line {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--phos-dim);
+}
+
+body:not(.admin-page) #status {
+    font-size: 12px;
+    color: var(--phos-soft);
+    text-transform: uppercase;
+}
+
+body:not(.admin-page) #status::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 7px;
+    background: var(--phos);
+    box-shadow: 0 0 8px var(--phos);
+    animation: statusBlink 1.6s steps(2, start) infinite;
+}
+
+body:not(.admin-page) #terminalClock {
+    color: var(--phos-dim);
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+}
+
+body:not(.admin-page) button {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 8px 13px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--phos);
+    background: var(--panel);
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+        inset 0 0 16px rgba(138, 255, 160, 0.05),
+        0 0 10px rgba(0, 0, 0, 0.55);
+    text-shadow: 0 0 5px var(--phos-glow);
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+body:not(.admin-page) button:hover {
+    background: var(--phos-faint);
+    color: #eaffef;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+        inset 0 0 18px rgba(138, 255, 160, 0.1),
+        0 0 16px var(--phos-glow);
+}
+
+body:not(.admin-page) button:active {
+    transform: translateY(1px);
+}
+
+body:not(.admin-page) button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+body:not(.admin-page) #newChat,
+body:not(.admin-page) #settingsToggle {
+    background: rgba(8, 28, 14, 0.92);
+}
+
+body:not(.admin-page) #send {
+    background: var(--phos);
+    color: #03130a;
+    border-color: var(--phos);
+    text-shadow: none;
+    box-shadow: 0 0 18px var(--phos-glow);
+}
+
+body:not(.admin-page) #send:hover {
+    background: #bdffcf;
+    color: #021008;
+}
+
+body:not(.admin-page) #stop,
+body:not(.admin-page) #logoutButton,
+body:not(.admin-page) #deleteChat {
+    background: rgba(55, 13, 9, 0.82);
+    color: var(--red);
+    border-color: rgba(255, 122, 110, 0.5);
+    text-shadow: 0 0 5px rgba(255, 122, 110, 0.5);
+}
+
+body:not(.admin-page) #stop:disabled {
+    background: rgba(15, 20, 16, 0.8);
+    color: var(--phos-dim);
+    border-color: var(--line);
+}
+
+body:not(.admin-page) #adminConsoleButton {
+    background: rgba(43, 27, 4, 0.86);
+    color: var(--amber);
+    border-color: rgba(255, 193, 94, 0.52);
+    text-shadow: 0 0 5px rgba(255, 193, 94, 0.5);
+}
+
+body:not(.admin-page) .thinking-toggle {
+    color: var(--phos);
+    gap: 7px;
+}
+
+body:not(.admin-page) .thinking-toggle input {
+    accent-color: var(--phos);
+}
+
+body:not(.admin-page) .settings {
+    padding: 14px 20px 16px;
+    border-bottom: 1px solid var(--line-strong);
+    background: rgba(3, 10, 5, 0.92);
+    box-shadow: inset 0 -1px 0 rgba(138, 255, 160, 0.1);
+}
+
+body:not(.admin-page) .settings label {
+    color: var(--phos-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body:not(.admin-page) .settings textarea,
+body:not(.admin-page) .settings input,
+body:not(.admin-page) .settings select,
+body:not(.admin-page) footer textarea {
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--phos);
+    border-color: var(--line);
+}
+
+body:not(.admin-page) input,
+body:not(.admin-page) textarea,
+body:not(.admin-page) select {
+    font-family: inherit;
+    color: var(--phos);
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.65);
+}
+
+body:not(.admin-page) input:focus,
+body:not(.admin-page) textarea:focus,
+body:not(.admin-page) select:focus {
+    outline: none;
+    border-color: var(--phos);
+    box-shadow:
+        inset 0 0 12px rgba(0, 0, 0, 0.55),
+        0 0 12px var(--phos-glow);
+}
+
+body:not(.admin-page) textarea::placeholder,
+body:not(.admin-page) input::placeholder {
+    color: rgba(138, 255, 160, 0.42);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+body:not(.admin-page) .active-chat-header {
+    min-height: 48px;
+    padding: 9px 20px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(4, 14, 7, 0.9);
+}
+
+body:not(.admin-page) #activeChatTitle {
+    color: var(--phos);
+    font-size: 1.1rem;
+    text-shadow: 0 0 8px var(--phos-glow);
+}
+
+body:not(.admin-page) #activeChatTitle::before {
+    content: "MEMORY FILE // ";
+    color: var(--phos-dim);
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+}
+
+body:not(.admin-page) .chat-shell {
+    position: relative;
+}
+
+body:not(.admin-page) #chatList {
+    width: 250px;
+    min-width: 250px;
+    gap: 8px;
+    padding: 18px 14px;
+    border-right: 1px solid var(--line-strong);
+    border-top: 0;
+    border-bottom: 0;
+    background: rgba(2, 7, 4, 0.66);
+}
+
+body:not(.admin-page) #chatList::before {
+    content: "MEMORY FILES";
+    display: block;
+    margin: 0 2px 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--phos-dim);
+    font-family: "VT323", "Share Tech Mono", monospace;
+    font-size: 1rem;
+    letter-spacing: 0.16em;
+    text-shadow: 0 0 6px var(--phos-faint);
+}
+
+body:not(.admin-page) #chatList button {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--phos-soft);
+    background: rgba(7, 22, 11, 0.78);
+    border-color: rgba(138, 255, 160, 0.22);
+}
+
+body:not(.admin-page) #chatList button::before {
+    content: "> ";
+    color: var(--phos-dim);
+}
+
+body:not(.admin-page) #chatList button:hover {
+    background: rgba(28, 64, 36, 0.7);
+    color: #eaffef;
+}
+
+body:not(.admin-page) #chatList button.active {
+    background: var(--phos);
+    color: #03130a;
+    border-color: var(--phos);
+    text-shadow: none;
+    box-shadow: 0 0 16px var(--phos-glow);
+}
+
+body:not(.admin-page) #chatList button.active::before {
+    color: #05250f;
+}
+
+body:not(.admin-page) #chat {
+    padding: 26px 22px;
+    background:
+        linear-gradient(180deg, rgba(5, 14, 8, 0.42), rgba(1, 3, 2, 0.28)),
+        repeating-linear-gradient(0deg, rgba(138, 255, 160, 0.025) 0px, rgba(138, 255, 160, 0.025) 1px, transparent 1px, transparent 4px);
+}
+
+body:not(.admin-page) .message {
+    max-width: 900px;
+    margin: 0 auto 18px auto;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+body:not(.admin-page) .role {
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    letter-spacing: 0.14em;
+    color: var(--phos-dim);
+}
+
+body:not(.admin-page) .message.user {
+    background: rgba(10, 26, 14, 0.64);
+    border: 1px solid rgba(138, 255, 160, 0.24);
+    border-left: 3px solid var(--amber);
+    border-radius: 3px;
+    padding: 12px 15px;
+    box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.4);
+}
+
+body:not(.admin-page) .message.user .role {
+    color: var(--amber);
+    text-shadow: 0 0 6px rgba(255, 193, 94, 0.4);
+}
+
+body:not(.admin-page) .message.assistant {
+    padding: 4px 15px;
+    border-left: 3px solid var(--phos-soft);
+    border-radius: 3px;
+    background: transparent;
+}
+
+body:not(.admin-page) .message.assistant .role {
+    color: var(--phos-soft);
+    text-shadow: 0 0 6px var(--phos-faint);
+}
+
+body:not(.admin-page) .message-reasoning {
+    border-left: 2px solid var(--phos-dim);
+    color: var(--phos-soft);
+    font-style: italic;
+}
+
+body:not(.admin-page) .completion-notice {
+    margin-top: 8px;
+    font-size: 0.85em;
+    font-style: italic;
+    color: var(--amber);
+}
+
+body:not(.admin-page) .telemetry.active {
+    display: inline-block;
+    padding: 5px 9px;
+    background: rgba(8, 28, 14, 0.86);
+    color: var(--phos-soft);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+body:not(.admin-page) .message.assistant pre {
+    overflow-x: auto;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.48);
+}
+
+body:not(.admin-page) .message.assistant code {
+    font-family: "Share Tech Mono", "Consolas", monospace;
+    color: var(--phos);
+}
+
+body:not(.admin-page) .chat-context-menu {
+    min-width: 180px;
+    padding: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: var(--panel-solid);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.7), 0 0 18px rgba(138, 255, 160, 0.12);
+}
+
+body:not(.admin-page) .chat-context-menu button {
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--phos);
+    text-align: left;
+    font-weight: 500;
+}
+
+body:not(.admin-page) .chat-context-menu button:hover {
+    background: var(--phos-faint);
+}
+
+body:not(.admin-page) footer {
+    padding: 14px 18px;
+    border-top: 1px solid var(--line-strong);
+    background: linear-gradient(180deg, rgba(3, 10, 5, 0.92), rgba(4, 16, 8, 0.96));
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+}
+
+body:not(.admin-page) .prompt-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 11px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.52);
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.6);
+}
+
+body:not(.admin-page) .prompt-wrap:focus-within {
+    border-color: var(--phos);
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.55), 0 0 14px var(--phos-glow);
+}
+
+body:not(.admin-page) .prompt-marker {
+    align-self: flex-start;
+    margin-top: 9px;
+    color: var(--phos);
+    font-weight: 700;
+    text-shadow: 0 0 8px var(--phos-glow);
+}
+
+body:not(.admin-page) #prompt {
+    flex: 1;
+    resize: none;
+    padding: 9px 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 15px;
+}
+
+body:not(.admin-page) #prompt:focus {
+    border: 0;
+    box-shadow: none;
+}
+
+body:not(.admin-page) label[for="attachment"],
+body:not(.admin-page) #attachmentName {
+    color: var(--phos-soft);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+body:not(.admin-page) #removeAttachment {
+    color: var(--red);
+}
+
+/* Login screen */
+body:not(.admin-page) #loginScreen:not([hidden]) {
+    background:
+        radial-gradient(circle at 50% 40%, rgba(85, 217, 121, 0.1), transparent 60%),
+        #020402;
+}
+
+body:not(.admin-page) #loginForm {
+    max-width: 400px;
+    padding: 26px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--panel);
+    color: var(--phos);
+    box-shadow:
+        inset 0 0 30px rgba(138, 255, 160, 0.06),
+        0 0 30px rgba(0, 0, 0, 0.75),
+        0 0 24px rgba(138, 255, 160, 0.08);
+}
+
+body:not(.admin-page) #loginForm h2 {
+    margin: 0 0 4px;
+    font-size: 1.7rem;
+    color: var(--phos);
+}
+
+body:not(.admin-page) #loginForm p {
+    margin: 0 0 18px;
+    color: var(--phos-dim);
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+}
+
+body:not(.admin-page) #loginForm input {
+    width: 100%;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--phos);
+    font-size: 16px;
+}
+
+body:not(.admin-page) #loginForm button {
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px;
+    background: var(--phos);
+    color: #03130a;
+    border-color: var(--phos);
+    text-shadow: none;
+}
+
+body:not(.admin-page) #loginForm button:hover {
+    background: #bdffcf;
+    color: #021008;
+}
+
+body:not(.admin-page) #loginError {
+    color: var(--red);
+}
+
+/* Boot screen */
+#bootScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    cursor: pointer;
+    background: var(--screen);
+    opacity: 1;
+    transition: opacity 0.45s ease;
+}
+
+#bootScreen.finished {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#bootLog {
+    width: min(100%, 760px);
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: "VT323", "Share Tech Mono", monospace;
+    font-size: clamp(1.15rem, 3.2vw, 1.65rem);
+    line-height: 1.25;
+    color: var(--phos);
+    text-shadow: 0 0 8px var(--phos-glow);
+}
+
+#bootLog span {
+    display: block;
+}
+
+#bootLog span::after {
+    content: "█";
+    animation: bootCursor 0.9s steps(1) infinite;
+}
+
+#bootScreen.finished #bootLog span::after {
+    content: "";
+    animation: none;
+}
+
+/* Terminal dialog */
+.terminal-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 21000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.74);
+}
+
+.terminal-dialog[hidden] {
+    display: none;
+}
+
+.terminal-dialog-panel {
+    width: min(100%, 520px);
+    padding: 20px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--panel-solid);
+    color: var(--phos);
+    box-shadow:
+        inset 0 0 28px rgba(138, 255, 160, 0.06),
+        0 0 34px rgba(0, 0, 0, 0.8),
+        0 0 22px rgba(138, 255, 160, 0.08);
+}
+
+.terminal-dialog-title {
+    margin: 0 0 10px;
+    font-size: 1.3rem;
+    color: var(--phos);
+    text-shadow: 0 0 8px var(--phos-glow);
+}
+
+.terminal-dialog-message {
+    color: var(--phos-soft);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.terminal-dialog-input {
+    width: 100%;
+    margin-top: 14px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--phos);
+    font-size: 15px;
+}
+
+.terminal-dialog-input:focus {
+    outline: none;
+    border-color: var(--phos);
+    box-shadow: 0 0 12px var(--phos-glow);
+}
+
+.terminal-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.terminal-dialog-btn {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 8px 14px;
+    background: var(--panel);
+    color: var(--phos);
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.terminal-dialog-btn.primary {
+    background: var(--phos);
+    color: #03130a;
+    border-color: var(--phos);
+    text-shadow: none;
+}
+
+/* Animations */
+@keyframes crtFlicker {
+    0%, 100% { opacity: 1; }
+    7% { opacity: 0.91; }
+    9% { opacity: 0.98; }
+    36% { opacity: 0.94; }
+    38% { opacity: 1; }
+    61% { opacity: 0.89; }
+    63% { opacity: 0.99; }
+    84% { opacity: 0.95; }
+}
+
+@keyframes statusBlink {
+    50% { opacity: 0.35; }
+}
+
+@keyframes bootCursor {
+    50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #crtFlicker,
+    body:not(.admin-page) #status::before,
+    #bootLog span::after {
+        animation: none;
+    }
+}
+
+/* Mobile adjustments for the terminal theme */
+@media (max-width: 600px) {
+    body:not(.admin-page) #chatList {
+        width: 100%;
+        min-width: 100%;
+        flex-direction: row;
+        border-right: 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    body:not(.admin-page) #chatList::before {
+        display: none;
+    }
+
+    body:not(.admin-page) #chatList button {
+        width: auto;
+        max-width: 190px;
+    }
+}
+
+/* ============================================================
+   Fallout-style terminal theme (Admin Console)
+   ============================================================ */
+
+body.admin-page {
+    --phos: #8affa0;
+    --phos-soft: #55d979;
+    --phos-dim: #35a35d;
+    --phos-faint: rgba(138, 255, 160, 0.12);
+    --phos-glow: rgba(85, 217, 121, 0.55);
+    --screen: #030704;
+    --panel: rgba(5, 16, 9, 0.82);
+    --panel-solid: #071309;
+    --line: rgba(138, 255, 160, 0.3);
+    --line-strong: rgba(138, 255, 160, 0.62);
+    --amber: #ffc15e;
+    --red: #ff7a6e;
+
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Share Tech Mono", "VT323", "Consolas", monospace;
+    color: var(--phos);
+    color-scheme: dark;
+    background:
+        radial-gradient(circle at 50% -10%, rgba(85, 217, 121, 0.12), transparent 55%),
+        linear-gradient(180deg, #040804 0%, #020402 100%);
+}
+
+body.admin-page[data-theme="light"] {
+    --phos: #ffc56e;
+    --phos-soft: #f2a647;
+    --phos-dim: #c98131;
+    --phos-faint: rgba(255, 197, 110, 0.13);
+    --phos-glow: rgba(242, 166, 71, 0.5);
+    --screen: #080502;
+    --panel: rgba(18, 11, 3, 0.84);
+    --panel-solid: #150d04;
+    --line: rgba(255, 197, 110, 0.3);
+    --line-strong: rgba(255, 197, 110, 0.62);
+    --amber: #ffd894;
+    --red: #ff8a72;
+
+    background:
+        radial-gradient(circle at 50% -10%, rgba(242, 166, 71, 0.13), transparent 55%),
+        linear-gradient(180deg, #0b0702 0%, #030201 100%);
+}
+
+body.admin-page::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9980;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.24) 0px,
+        rgba(0, 0, 0, 0.24) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    mix-blend-mode: multiply;
+}
+
+body.admin-page h1,
+body.admin-page h2,
+body.admin-page h3 {
+    font-family: "VT323", "Share Tech Mono", "Consolas", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 8px var(--phos-glow), 0 0 18px rgba(0, 0, 0, 0.85);
+}
+
+body.admin-page .admin-shell {
+    position: relative;
+    width: min(100%, 1440px);
+    margin: 0 auto;
+    padding: 16px 24px 24px;
+}
+
+body.admin-page .admin-header {
+    padding: 12px 0 14px;
+    border-bottom: 1px solid var(--line-strong);
+    background: transparent;
+    box-shadow: inset 0 -1px 0 rgba(138, 255, 160, 0.12);
+}
+
+body.admin-page .admin-header h1 {
+    margin: 0;
+    font-size: clamp(1.2rem, 2.4vw, 1.65rem);
+    line-height: 1.05;
+    color: var(--phos);
+}
+
+body.admin-page .admin-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+body.admin-page .admin-status-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--phos-dim);
+}
+
+body.admin-page .admin-status-line span + span {
+    padding-left: 12px;
+    border-left: 1px solid var(--line);
+}
+
+body.admin-page .header-gear {
+    color: var(--phos-soft);
+    text-shadow: 0 0 8px var(--phos-glow);
+}
+
+body.admin-page .header-side-label {
+    color: var(--phos-dim);
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+body.admin-page .admin-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    box-shadow:
+        inset 0 0 24px rgba(138, 255, 160, 0.04),
+        0 14px 34px rgba(0, 0, 0, 0.45);
+    padding: 18px 20px 14px;
+}
+
+body.admin-page .admin-panel h2 {
+    margin: 0 0 18px;
+    font-size: 1.5rem;
+    color: var(--phos);
+}
+
+body.admin-page .field-group label,
+body.admin-page .admin-panel label {
+    color: var(--phos-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body.admin-page .input-wrap,
+body.admin-page .select-wrap {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.58);
+}
+
+body.admin-page .input-wrap:focus-within,
+body.admin-page .select-wrap:focus-within {
+    border-color: var(--phos);
+    box-shadow:
+        inset 0 0 14px rgba(0, 0, 0, 0.55),
+        0 0 14px var(--phos-glow);
+}
+
+body.admin-page .field-icon,
+body.admin-page .select-caret {
+    color: var(--phos-soft);
+}
+
+body.admin-page input,
+body.admin-page select {
+    font-family: inherit;
+    color: var(--phos);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+body.admin-page .input-wrap input,
+body.admin-page .select-wrap select {
+    color: var(--phos);
+    font-size: 15px;
+}
+
+body.admin-page input::placeholder {
+    color: rgba(138, 255, 160, 0.42);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+body.admin-page button {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 8px 13px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--phos);
+    background: var(--panel);
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+        inset 0 0 16px rgba(138, 255, 160, 0.05),
+        0 0 10px rgba(0, 0, 0, 0.55);
+    text-shadow: 0 0 5px var(--phos-glow);
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+body.admin-page button:hover {
+    background: var(--phos-faint);
+    color: #eaffef;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+        inset 0 0 18px rgba(138, 255, 160, 0.1),
+        0 0 16px var(--phos-glow);
+}
+
+body.admin-page button:active {
+    transform: translateY(1px);
+}
+
+body.admin-page button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+body.admin-page .primary-btn,
+body.admin-page .create-user-btn,
+body.admin-page #saveAiConfig {
+    background: var(--phos);
+    color: #03130a;
+    border-color: var(--phos);
+    text-shadow: none;
+    box-shadow: 0 0 18px var(--phos-glow);
+}
+
+body.admin-page .primary-btn:hover,
+body.admin-page .create-user-btn:hover,
+body.admin-page #saveAiConfig:hover {
+    background: #bdffcf;
+    color: #021008;
+}
+
+body.admin-page .reset-btn {
+    background: rgba(43, 27, 4, 0.86);
+    color: var(--amber);
+    border-color: rgba(255, 193, 94, 0.52);
+    text-shadow: 0 0 5px rgba(255, 193, 94, 0.5);
+}
+
+body.admin-page .delete-btn,
+body.admin-page #restartAiServer {
+    background: rgba(55, 13, 9, 0.82);
+    color: var(--red);
+    border-color: rgba(255, 122, 110, 0.5);
+    text-shadow: 0 0 5px rgba(255, 122, 110, 0.5);
+}
+
+body.admin-page #monitorToggle {
+    background: rgba(8, 28, 14, 0.92);
+}
+
+body.admin-page #usersTable {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.26);
+    overflow: visible;
+}
+
+body.admin-page #usersTable th,
+body.admin-page #usersTable td {
+    border-bottom: 1px solid var(--line);
+    color: var(--phos);
+}
+
+body.admin-page #usersTable th {
+    background: rgba(138, 255, 160, 0.08);
+    color: var(--phos);
+    font-family: "VT323", "Share Tech Mono", monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+body.admin-page #usersTable tbody tr:nth-child(odd) {
+    background: rgba(138, 255, 160, 0.035);
+}
+
+body.admin-page #usersTable tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.16);
+}
+
+body.admin-page .users-count,
+body.admin-page .users-status,
+body.admin-page #createUserStatus,
+body.admin-page #aiModelState,
+body.admin-page #aiConfigStatus,
+body.admin-page #aiRestartStatus,
+body.admin-page #monitorStatus {
+    color: var(--phos-soft);
+}
+
+body.admin-page .ai-status-indicator {
+    border-radius: 2px;
+    background-color: #777;
+}
+
+body.admin-page .ai-status-indicator.running {
+    background-color: var(--phos);
+    box-shadow: 0 0 8px var(--phos-glow);
+}
+
+body.admin-page .ai-status-indicator.unavailable {
+    background-color: var(--red);
+}
+
+body.admin-page .ai-status-indicator.restarting {
+    background-color: var(--amber);
+}
+
+body.admin-page .monitor-card {
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.28);
+    box-shadow: inset 0 0 18px rgba(138, 255, 160, 0.04);
+}
+
+body.admin-page .monitor-card h3 {
+    color: var(--phos);
+}
+
+body.admin-page .monitor-card span,
+body.admin-page .monitor-card strong {
+    color: var(--phos-soft);
+}
+
+body.admin-page .monitor-history table,
+body.admin-page .monitor-history th,
+body.admin-page .monitor-history td {
+    border-bottom-color: var(--line);
+    color: var(--phos);
+}
+
+body.admin-page .monitor-history th {
+    color: var(--phos-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body.admin-page .back-link {
+    color: var(--phos-soft);
+    text-shadow: 0 0 6px var(--phos-faint);
+}
+
+body.admin-page .back-link:hover {
+    color: #eaffef;
+}
+
+@media (max-width: 640px) {
+    body.admin-page .admin-header {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    body.admin-page .admin-status-line {
+        flex-wrap: wrap;
+    }
+
+    body.admin-page .admin-panel {
+        padding: 16px 13px 13px;
+    }
+}
+
+/* Admin Console tabs */
+body.admin-page .admin-tabs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+body.admin-page .admin-tab {
+    border: 1px solid var(--line);
+    background: rgba(7, 22, 11, 0.72);
+    color: var(--phos-soft);
+}
+
+body.admin-page .admin-tab.active {
+    background: var(--phos);
+    border-color: var(--phos);
+    color: #03130a;
+    text-shadow: none;
+    box-shadow: 0 0 16px var(--phos-glow);
+}
+
+body.admin-page [data-admin-tabpanel][hidden] {
+    display: none;
+}
+
+/* User row actions menu */
+body.admin-page .user-actions {
+    position: relative;
+    display: inline-flex;
+}
+
+body.admin-page .user-menu-toggle {
+    min-width: 42px;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+body.admin-page .user-actions-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 1200;
+    min-width: 180px;
+    padding: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--panel-solid);
+    box-shadow:
+        inset 0 0 22px rgba(138, 255, 160, 0.04),
+        0 16px 34px rgba(0, 0, 0, 0.7),
+        0 0 18px rgba(138, 255, 160, 0.08);
+}
+
+body.admin-page .user-actions-menu[hidden] {
+    display: none;
+}
+
+body.admin-page .user-menu-item {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--phos);
+    text-align: left;
+    font-weight: 500;
+    clip-path: none;
+    box-shadow: none;
+}
+
+body.admin-page .user-menu-item:hover {
+    background: var(--phos-faint);
+    color: #eaffef;
+}
+
+body.admin-page .user-menu-item.reset-btn {
+    color: var(--amber);
+    text-shadow: 0 0 5px rgba(255, 193, 94, 0.35);
+}
+
+body.admin-page .user-menu-item.delete-btn {
+    color: var(--red);
+    text-shadow: 0 0 5px rgba(255, 122, 110, 0.35);
+}
+
+/* Custom terminal-styled select menus */
+body.admin-page .select-wrap > .terminal-select + .select-caret {
+    display: none;
+}
+
+body.admin-page .terminal-select {
+    position: relative;
+    width: 100%;
+    min-height: 46px;
+}
+
+body.admin-page .terminal-select select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.admin-page .terminal-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 46px;
+    padding: 12px 38px 12px 14px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--phos);
+    text-align: left;
+    box-shadow: none;
+    clip-path: none;
+}
+
+body.admin-page .terminal-select-trigger:hover {
+    background: rgba(138, 255, 160, 0.08);
+    color: var(--phos);
+    box-shadow: none;
+}
+
+body.admin-page .terminal-select-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.admin-page .terminal-select-caret {
+    color: var(--phos-soft);
+    font-size: 0.8rem;
+}
+
+body.admin-page .terminal-select-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 1500;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: var(--panel-solid);
+    box-shadow:
+        inset 0 0 22px rgba(138, 255, 160, 0.04),
+        0 16px 34px rgba(0, 0, 0, 0.72),
+        0 0 18px rgba(138, 255, 160, 0.08);
+}
+
+body.admin-page .terminal-select-menu[hidden] {
+    display: none;
+}
+
+body.admin-page .terminal-select-option {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--phos);
+    text-align: left;
+    font-weight: 500;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    clip-path: none;
+    box-shadow: none;
+}
+
+body.admin-page .terminal-select-option:hover {
+    background: var(--phos-faint);
+    color: #eaffef;
+}
+
+body.admin-page .terminal-select-option.selected {
+    background: var(--phos);
+    color: #03130a;
+    text-shadow: none;
+}
+
+/* Mobile composer: prompt on top, controls underneath */
+@media (max-width: 600px) {
+    body:not(.admin-page) footer {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px;
+    }
+
+    body:not(.admin-page) .prompt-wrap {
+        width: 100%;
+        flex: 1 1 auto;
+        order: -1;
+    }
+
+    body:not(.admin-page) #send,
+    body:not(.admin-page) #stop {
+        width: 100%;
+        min-height: 44px;
+    }
+
+    body:not(.admin-page) label[for="attachment"] {
+        align-self: flex-start;
+    }
+}

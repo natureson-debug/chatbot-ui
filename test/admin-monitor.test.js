@@ -1,0 +1,18 @@
+﻿'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {createAdminMonitor}=require('../public/admin-monitor');
+class Element {
+ constructor(){this.children=[];this.textContent='';this.handlers={};}
+ append(...children){this.children.push(...children);}
+ replaceChildren(){this.children=[];}
+ addEventListener(name,handler){this.handlers[name]=handler;}
+ set innerHTML(_){throw Error('HTML injection forbidden');}
+}
+function setup(fetch){const nodes=Object.fromEntries(['monitorStatus','monitorCards','monitorHistory','monitorToggle'].map(id=>[id,new Element()]));const timers=new Map();let next=0;const doc={hidden:false,handlers:{},getElementById:id=>nodes[id],createElement:()=>new Element(),addEventListener(n,h){this.handlers[n]=h;}};const monitor=createAdminMonitor({document:doc,fetch,setTimer:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimer:id=>timers.delete(id)});return {nodes,doc,monitor,timers};}
+function sample(i=0){return {sampledAt:new Date(i*5000).toISOString(),backend:{state:'ready',model:'<img src=x onerror=alert(1)>',contextPerSlot:65536,parallelSlots:1,metricsState:'unsupported',metrics:{}},gpu:{state:'available',devices:[{name:'RTX 3090',uuid:'GPU-id',driver:'610.88',utilizationPercent:0,memoryUsedMiB:12000,memoryTotalMiB:24576,temperatureC:30,powerW:15,powerLimitW:350}]}};}
+const text=node=>[node.textContent,...node.children.map(text)].join(' ');
+test('actual monitoring UI renders text safely and distinguishes unavailable from zero',async()=>{const f=setup(async()=>({ok:true,json:async()=>sample()}));await f.monitor.poll();const output=text(f.nodes.monitorCards);assert(output.includes('<img src=x onerror=alert(1)>'));assert(output.includes('0%'));assert(output.includes('Unavailable'));assert.equal(f.nodes.monitorHistory.children.length,1);f.monitor.dispose();});
+test('rolling history is capped and identical cached samples not duplicated',async()=>{let n=0;const f=setup(async()=>({ok:true,json:async()=>sample(n)}));await f.monitor.poll();await f.monitor.poll();assert.equal(f.nodes.monitorHistory.children.length,1);for(n=1;n<20;n++)await f.monitor.poll();assert.equal(f.nodes.monitorHistory.children.length,12);f.monitor.dispose();});
+test('overlapping polls suppressed and hidden page aborts stale response',async()=>{let release,calls=0;const f=setup(async()=>{calls++;await new Promise(r=>release=r);return {ok:true,json:async()=>sample()};});const p=f.monitor.poll();await f.monitor.poll();assert.equal(calls,1);f.doc.hidden=true;f.doc.handlers.visibilitychange();release();await p;assert.equal(f.nodes.monitorCards.children.length,0);assert.equal(f.timers.size,0);f.monitor.dispose();});
+test('authorization failure clears cached readings and stops polling',async()=>{let auth=true;const f=setup(async()=>auth?{ok:true,json:async()=>sample()}:{ok:false,status:401});await f.monitor.poll();auth=false;await f.monitor.poll();assert.equal(f.nodes.monitorCards.children.length,0);assert.equal(f.nodes.monitorHistory.children.length,0);assert.equal(f.timers.size,0);assert(f.nodes.monitorStatus.textContent.includes('Administrator'));});
+test('network failure labels retained values historical; pause stops polling',async()=>{let ok=true;const f=setup(async()=>{if(!ok)throw Error('secret');return {ok:true,json:async()=>sample()};});await f.monitor.poll();ok=false;await f.monitor.poll();assert(f.nodes.monitorStatus.textContent.includes('historical'));assert(!f.nodes.monitorStatus.textContent.includes('secret'));f.nodes.monitorToggle.handlers.click();assert.equal(f.timers.size,0);f.monitor.dispose();});
