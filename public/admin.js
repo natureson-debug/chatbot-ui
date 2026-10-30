@@ -440,6 +440,16 @@ function enhanceSelect(select) {
 
     select.addEventListener("change", syncTrigger);
 
+    const selectForm = select.form || select.closest("form");
+    if (selectForm) {
+        selectForm.addEventListener("reset", () => {
+            window.setTimeout(() => {
+                syncOptions();
+                syncTrigger();
+            }, 0);
+        });
+    }
+
     syncOptions();
     syncTrigger();
 
