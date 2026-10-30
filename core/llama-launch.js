@@ -10,11 +10,11 @@ function buildLlamaLaunchSpec(settings) {
 
 function buildExplicitSpec(settings) {
     const fields = new Set(["platform", "executable", "cwd", "modelPath", "apiKeyFile",
-        "host", "port", "corsOrigin", "device", "gpuLayers", "contextSize", "parallel", "verbosity"]);
+        "host", "port", "corsOrigin", "device", "gpuLayers", "contextSize", "parallel", "verbosity", "metrics"]);
     if (!settings || typeof settings !== "object" || Array.isArray(settings) ||
         Object.keys(settings).some(key => !fields.has(key))) throw new Error("Invalid launch settings");
     const { platform, executable, cwd, modelPath, apiKeyFile, host, port,
-        corsOrigin, device, gpuLayers, contextSize, parallel, verbosity } = settings;
+        corsOrigin, device, gpuLayers, contextSize, parallel, verbosity, metrics } = settings;
     if (!["win32", "linux", "darwin"].includes(platform)) throw new Error("Unsupported launch platform");
     const paths = platform === "win32" ? path.win32 : path.posix;
     const text = value => typeof value === "string" && value.trim().length > 0 && !/[\x00-\x1f\x7f]/.test(value);
@@ -35,6 +35,7 @@ function buildExplicitSpec(settings) {
     if (gpuLayers !== undefined && (!Number.isSafeInteger(gpuLayers) || gpuLayers < 0)) throw new Error("Invalid GPU layer count");
     if (device.toLowerCase() === "none" && gpuLayers > 0) throw new Error("GPU layers conflict with device none");
     if (verbosity !== undefined && (!Number.isSafeInteger(verbosity) || verbosity < 0)) throw new Error("Invalid verbosity");
+    if (metrics !== undefined && typeof metrics !== "boolean") throw new Error("Invalid metrics flag");
     if (!Number.isInteger(parallel) || parallel < 1 || parallel > 8) throw new Error("Invalid parallel slot count");
     if (!Number.isInteger(contextSize) || contextSize < 1024 || contextSize > 131072 || contextSize % 1024 !== 0) {
         throw new Error("Invalid context size");
@@ -44,10 +45,11 @@ function buildExplicitSpec(settings) {
         "--parallel", String(parallel), "--ctx-size", String(contextSize), "--device", device];
     if (gpuLayers !== undefined) args.push("--n-gpu-layers", String(gpuLayers));
     if (verbosity !== undefined) args.push("--verbosity", String(verbosity));
+    if (metrics === true) args.push("--metrics");
     return {
         executable, cwd, args, env: {},
         expected: { host, port, model: modelPath, device, gpuLayers: gpuLayers ?? null,
-            contextSize, parallel, verbosity: verbosity ?? null },
+            contextSize, parallel, verbosity: verbosity ?? null, metrics: metrics === true },
         apiKeyFile
     };
 }
@@ -71,7 +73,7 @@ function buildConfiguredSpec() {
         throw new Error("Invalid AI configuration");
     }
 
-    const { model, parallel, contextSize } = config;
+    const { model, parallel, contextSize, metrics } = config;
     const availableModels = fs.readdirSync(MODELS_DIR)
         .filter(file => file.toLowerCase().endsWith(".gguf"));
 
@@ -92,19 +94,27 @@ function buildConfiguredSpec() {
         throw new Error("Invalid context size");
     }
 
+    if (metrics !== undefined && typeof metrics !== "boolean") {
+        throw new Error("Invalid metrics flag");
+    }
+
+    const args = [
+        "--model", path.win32.join(MODELS_DIR, model),
+        "--host", LLAMA_BIND_HOST,
+        "--port", String(LLAMA_PORT),
+        "--api-key-file", API_KEY_FILE,
+        "--cors-origins", LLAMA_CORS_ORIGIN,
+        "--parallel", String(parallel),
+        "--ctx-size", String(contextSize),
+        "--device", LLAMA_DEVICE
+    ];
+
+    if (metrics === true) args.push("--metrics");
+
     return {
         executable: LLAMA_EXECUTABLE,
         cwd: LLAMA_CWD,
-        args: [
-            "--model", path.win32.join(MODELS_DIR, model),
-            "--host", LLAMA_BIND_HOST,
-            "--port", String(LLAMA_PORT),
-            "--api-key-file", API_KEY_FILE,
-            "--cors-origins", LLAMA_CORS_ORIGIN,
-            "--parallel", String(parallel),
-            "--ctx-size", String(contextSize),
-            "--device", LLAMA_DEVICE
-        ]
+        args
     };
 }
 

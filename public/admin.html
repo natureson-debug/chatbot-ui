@@ -63,7 +63,7 @@
                 aria-selected="false"
                 aria-controls="tab-ai"
                 data-tab="ai"
-            >AI Server</button>
+            >Configuration</button>
         </nav>
 
         <main class="admin-main">
@@ -155,11 +155,22 @@
     data-admin-tabpanel
     hidden
 >
-    <div class="users-header"><h2 id="monitorTitle">Server monitoring</h2><button id="monitorToggle" type="button">Pause monitoring</button></div>
+    <div class="users-header">
+        <h2 id="monitorTitle">Server monitoring</h2>
+        <div class="monitor-toolbar">
+            <label for="monitorRefreshRate">Refresh</label>
+            <select id="monitorRefreshRate">
+                <option value="1">1 second</option>
+                <option value="5" selected>5 seconds</option>
+                <option value="10">10 seconds</option>
+            </select>
+            <button id="monitorToggle" type="button">Pause monitoring</button>
+        </div>
+    </div>
     <p id="monitorStatus" role="status">Waiting for a real observation...</p>
     <div id="monitorCards" class="monitor-grid"></div>
     <h3>Recent observations</h3>
-    <p>Last 12 samples, approximately 5 seconds apart. Unavailable values are not zero. Inference metrics appear only when supported by the backend.</p>
+    <p>Last 12 samples, spaced by the selected refresh interval. Unavailable values are not zero. Inference metrics appear only when supported by the backend.</p>
     <div class="monitor-history" tabindex="0" aria-label="Recent GPU and inference observations">
         <table><thead><tr><th>Time</th><th>GPU</th><th>Utilization</th><th>VRAM used</th><th>Temperature</th><th>Generation</th></tr></thead><tbody id="monitorHistory"></tbody></table>
     </div>
@@ -238,6 +249,13 @@
         <div class="field-group">
             <label for="aiVerbosity">Verbosity (0-5)</label>
             <input id="aiVerbosity" type="number" min="0" max="5" step="1" value="4">
+        </div>
+        <div class="field-group metrics-field">
+            <label for="aiMetrics">Metrics endpoint</label>
+            <div class="toggle-control">
+                <input id="aiMetrics" type="checkbox">
+                <span>Enable llama.cpp --metrics for monitoring</span>
+            </div>
         </div>
         <button
             id="saveAiConfig"

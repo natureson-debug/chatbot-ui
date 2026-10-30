@@ -330,6 +330,56 @@ function addMessage(role, content = "", mount = true) {
     return {container, text, telemetry, thinking, reasoning, notice};
 }
 
+function addCodeCopyButtons(messageElement) {
+    messageElement.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code || pre.querySelector(".code-copy-button")) return;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "code-copy-button";
+        button.setAttribute("aria-label", "Copy code");
+        button.title = "Copy code";
+
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("aria-hidden", "true");
+        const iconPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        iconPath.setAttribute("d", "M8 8V4h12v12h-4M4 8h12v12H4z");
+        iconPath.setAttribute("fill", "none");
+        iconPath.setAttribute("stroke", "currentColor");
+        iconPath.setAttribute("stroke-width", "1.8");
+        iconPath.setAttribute("stroke-linejoin", "round");
+        icon.appendChild(iconPath);
+        button.appendChild(icon);
+
+        button.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            try {
+                await navigator.clipboard.writeText(code.textContent);
+                button.classList.add("copied");
+                button.setAttribute("aria-label", "Code copied");
+                button.title = "Copied";
+                window.setTimeout(() => {
+                    button.classList.remove("copied");
+                    button.setAttribute("aria-label", "Copy code");
+                    button.title = "Copy code";
+                }, 1500);
+            } catch (error) {
+                console.error("Failed to copy code block:", error);
+                button.setAttribute("aria-label", "Copy failed");
+                button.title = "Copy failed";
+                window.setTimeout(() => {
+                    button.setAttribute("aria-label", "Copy code");
+                    button.title = "Copy code";
+                }, 1500);
+            }
+        });
+
+        pre.appendChild(button);
+    });
+}
+
 function restoreChat() {
     chat.innerHTML = "";
 
@@ -352,6 +402,7 @@ function restoreChat() {
                 DOMPurify.sanitize(
                     marked.parse(message.content)
                 );
+            addCodeCopyButtons(restoredMessage.text);
             if (message.telemetry) {
                 const t = message.telemetry;
 
@@ -890,6 +941,7 @@ try {
                             DOMPurify.sanitize(
                                 marked.parse(assistantText)
                             );
+                        addCodeCopyButtons(assistantElement);
 
                         if (isOriginVisible()) chat.scrollTop = chat.scrollHeight;
                     }

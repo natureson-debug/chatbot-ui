@@ -15,7 +15,7 @@ function installAdminRestart({document,fetch,confirm}) {
             });
             const result=await response.json();
             if(result.code==='LIFECYCLE_ACTIVATION_DISABLED'||result.ownership==='unverified') {
-                status.textContent='Ownership unknown. Restart refused: no qualified lifecycle owner is connected. The existing backend was not stopped.';
+                status.textContent='Ownership unknown. In-app restart is unavailable because no qualified lifecycle owner is connected. Save your configuration, then run Restart-ChatbotAI from an elevated PowerShell to apply changes.';
             } else if(!response.ok) {
                 status.textContent='Failed: restart request was rejected. No successful restart has been verified.';
             } else {

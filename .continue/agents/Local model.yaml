@@ -4,11 +4,12 @@ version: 1.0.0
 schema: v1
 
 models:
-  - name: Mistral Small 3.1 - llama.cpp
-    provider: openai
+  - name: Qwen3-Coder-30B-A3B
+    provider: llama.cpp
     model: C:\AI\models\Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-    apiBase: http://127.0.0.1:8080/v1
+    apiBase: http://127.0.0.1:8080
     apiKey: Hx6xv9Mt6xIbkq0eDE/jeSn7wmEMZeAPWshddeQGFAI=
+    systemMessage: "You are a helpful coding assistant. When creating or editing files, use the tools provided to write files to the workspace."
     roles:
       - chat
       - edit
@@ -23,3 +24,10 @@ context:
   - provider: diff
   - provider: terminal
   - provider: problems
+
+experimental:
+  tools:
+    - name: write_file
+      enabled: true
+    - name: edit_file
+      enabled: true

@@ -1477,7 +1477,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
 
         const previous = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, "utf8"));
         const additions = {};
-        for (const key of ["gpuLayers", "device", "verbosity"]) {
+        for (const key of ["gpuLayers", "device", "verbosity", "metrics"]) {
             if (Object.hasOwn(payload, key)) additions[key] = payload[key];
         }
         let config;

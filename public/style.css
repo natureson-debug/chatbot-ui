@@ -1730,11 +1730,42 @@ body:not(.admin-page) .telemetry.active {
 }
 
 body:not(.admin-page) .message.assistant pre {
+    position: relative;
     overflow-x: auto;
-    padding: 12px;
+    padding: 38px 12px 12px;
     border: 1px solid var(--line);
     border-radius: 2px;
     background: rgba(0, 0, 0, 0.48);
+}
+
+body:not(.admin-page) .message.assistant .code-copy-button {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--panel-solid);
+    color: var(--phos-soft);
+    cursor: pointer;
+    clip-path: none;
+    box-shadow: none;
+}
+
+body:not(.admin-page) .message.assistant .code-copy-button:hover,
+body:not(.admin-page) .message.assistant .code-copy-button.copied {
+    color: var(--phos);
+    background: var(--phos-faint);
+}
+
+body:not(.admin-page) .message.assistant .code-copy-button svg {
+    width: 16px;
+    height: 16px;
 }
 
 body:not(.admin-page) .message.assistant code {
@@ -1901,7 +1932,7 @@ body:not(.admin-page) #loginError {
     cursor: pointer;
     background: var(--screen);
     opacity: 1;
-    transition: opacity 0.45s ease;
+    transition: opacity 0.225s ease;
 }
 
 #bootScreen.finished {
@@ -1927,7 +1958,7 @@ body:not(.admin-page) #loginError {
 
 #bootLog span::after {
     content: "█";
-    animation: bootCursor 0.9s steps(1) infinite;
+    animation: bootCursor 0.45s steps(1) infinite;
 }
 
 #bootScreen.finished #bootLog span::after {
@@ -2485,7 +2516,14 @@ body.admin-page [data-admin-tabpanel][hidden] {
 /* User row actions menu */
 body.admin-page .user-actions {
     position: relative;
-    display: inline-flex;
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+body.admin-page .actions-cell {
+    display: table-cell;
+    text-align: right;
 }
 
 body.admin-page .user-menu-toggle {
@@ -2512,6 +2550,27 @@ body.admin-page .user-actions-menu {
 
 body.admin-page .user-actions-menu[hidden] {
     display: none;
+}
+
+@media (max-width: 640px) {
+    body.admin-page #usersTable th:nth-child(1),
+    body.admin-page #usersTable td:nth-child(1) {
+        width: 55%;
+    }
+
+    body.admin-page #usersTable th:nth-child(2),
+    body.admin-page #usersTable td:nth-child(2) {
+        width: 25%;
+    }
+
+    body.admin-page #usersTable th:nth-child(3),
+    body.admin-page #usersTable td:nth-child(3) {
+        width: 20%;
+    }
+
+    body.admin-page #usersTable td:first-child {
+        overflow-wrap: anywhere;
+    }
 }
 
 body.admin-page .user-menu-item {
@@ -2645,6 +2704,56 @@ body.admin-page .terminal-select-option:hover {
 body.admin-page .terminal-select-option.selected {
     background: var(--phos);
     color: #03130a;
+    text-shadow: none;
+}
+
+body.admin-page .toggle-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.34);
+}
+
+body.admin-page .toggle-control input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--phos);
+    cursor: pointer;
+}
+
+body.admin-page .toggle-control span {
+    color: var(--phos-soft);
+    font-size: 0.82rem;
+    letter-spacing: 0.05em;
+}
+
+body.admin-page .monitor-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+body.admin-page .monitor-toolbar label {
+    color: var(--phos-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body.admin-page .monitor-toolbar .terminal-select {
+    width: 132px;
+    min-width: 132px;
+}
+
+body.admin-page .terminal-select-trigger:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+    box-shadow: none;
     text-shadow: none;
 }
 

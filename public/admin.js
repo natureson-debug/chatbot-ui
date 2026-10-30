@@ -293,6 +293,7 @@ const aiContextSize = document.getElementById("aiContextSize");
 const aiContextPerSlot = document.getElementById("aiContextPerSlot");
 const aiServerStatus = document.getElementById("aiServerStatus");
 const aiServerStatusIndicator = document.getElementById("aiServerStatusIndicator");
+const aiMetrics = document.getElementById("aiMetrics");
 
 function updateContextPerSlot() {
     const parallel = Number(aiParallel.value);
@@ -419,6 +420,8 @@ function enhanceSelect(select) {
         const option = selectedOption();
         label.textContent = option ? option.textContent : "Select";
         trigger.title = option ? option.textContent : "";
+        trigger.disabled = select.disabled;
+        trigger.setAttribute("aria-disabled", String(select.disabled));
 
         Array.from(menu.children).forEach((item) => {
             const selected = item.dataset.value === select.value;
@@ -470,7 +473,7 @@ function syncTerminalSelect(select) {
 }
 
 function enhanceAdminSelects() {
-    ["aiModel", "aiDevice", "newUserRole"].forEach((id) => {
+    ["aiModel", "aiDevice", "newUserRole", "monitorRefreshRate"].forEach((id) => {
         enhanceSelect(document.getElementById(id));
     });
 }
@@ -565,6 +568,7 @@ async function loadAiConfig() {
         aiGpuLayers.value = config.gpuLayers ?? 37;
         aiDevice.value = config.device ?? "CUDA0";
         aiVerbosity.value = config.verbosity ?? 4;
+        aiMetrics.checked = config.metrics === true;
 
         updateContextPerSlot();
 
@@ -594,7 +598,8 @@ saveAiConfig.addEventListener("click", async () => {
         contextSize: Number(aiContextSize.value),
         gpuLayers: aiGpuLayers.value === "" ? null : Number(aiGpuLayers.value),
         device: aiDevice.value,
-        verbosity: aiVerbosity.value === "" ? null : Number(aiVerbosity.value)
+        verbosity: aiVerbosity.value === "" ? null : Number(aiVerbosity.value),
+        metrics: aiMetrics.checked
     };
 
     saveAiConfig.disabled = true;
@@ -618,16 +623,17 @@ saveAiConfig.addEventListener("click", async () => {
 
         const confirmed = result.config;
         const numericSettings = ["parallel", "contextSize", "gpuLayers", "verbosity"];
+        const submittedFieldCount = Object.keys(config).length;
         const matches = confirmed && typeof confirmed === "object" && !Array.isArray(confirmed) &&
             Object.keys(config).every(key => Object.hasOwn(confirmed, key) &&
                 confirmed[key] === config[key]) &&
             numericSettings.every(key => Number.isSafeInteger(config[key]) &&
                 Number.isSafeInteger(confirmed[key]));
         if (!matches) {
-            throw new Error("Persistence mismatch: the server did not confirm all six submitted settings. Reload configuration before trying again.");
+            throw new Error(`Persistence mismatch: the server did not confirm all ${submittedFieldCount} submitted settings. Reload configuration before trying again.`);
         }
 
-        aiConfigStatus.textContent = "Configuration saved. Changes apply the next time the backend starts. Restart required; the running backend has not changed.";
+        aiConfigStatus.textContent = "Configuration saved. Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them.";
         await loadAiServerStatus();
 
     } catch (error) {

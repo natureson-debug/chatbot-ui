@@ -31,8 +31,8 @@
                 bootScreen.classList.add("finished");
                 window.setTimeout(function () {
                     bootScreen.hidden = true;
-                }, 450);
-            }, 320);
+                }, 225);
+            }, 160);
         }
 
         function advanceBoot() {
@@ -55,15 +55,15 @@
                 lineIndex += 1;
                 charIndex = 0;
                 currentLine = null;
-                window.setTimeout(advanceBoot, 110);
+                window.setTimeout(advanceBoot, 55);
             } else {
-                window.setTimeout(advanceBoot, 14 + Math.random() * 46);
+                window.setTimeout(advanceBoot, 7 + Math.random() * 23);
             }
         }
 
         bootScreen.addEventListener("click", finishBoot);
         bootScreen.addEventListener("keydown", finishBoot);
-        window.setTimeout(advanceBoot, 260);
+        window.setTimeout(advanceBoot, 130);
     }
 
     var terminalClock = byId("terminalClock");

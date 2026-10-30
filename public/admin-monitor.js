@@ -1,9 +1,17 @@
 ﻿'use strict';
 function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clearTimeout}) {
     const status=document.getElementById('monitorStatus'),cards=document.getElementById('monitorCards');
-    const rows=document.getElementById('monitorHistory'),toggle=document.getElementById('monitorToggle');
+    const rows=document.getElementById('monitorHistory'),toggle=document.getElementById('monitorToggle'),refreshRate=document.getElementById('monitorRefreshRate');
     let paused=false,stopped=false,inFlight=false,timer=null,controller=null,epoch=0,last=null,history=[];
     const format=(n,unit='')=>typeof n==='number'&&Number.isFinite(n)?`${n.toLocaleString(undefined,{maximumFractionDigits:1})}${unit}`:'Unavailable';
+    const refreshMs=()=>{
+        const seconds=Number(refreshRate?.value);
+        return [1,5,10].includes(seconds)?seconds*1000:5000;
+    };
+    if(refreshRate){
+        refreshRate.disabled=true;
+        if(typeof window!=='undefined'&&typeof window.syncTerminalSelect==='function')window.syncTerminalSelect(refreshRate);
+    }
     function element(tag,text,className){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
     function card(title,values){const node=element('article',undefined,'monitor-card');node.append(element('h3',title));for(const [label,value] of values){const line=element('p');line.append(element('span',label+': '),element('strong',value));node.append(line);}cards.append(node);}
     function render(sample){
@@ -40,11 +48,19 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             if(generation===epoch&&!paused&&!document.hidden)status.textContent='Monitoring unavailable. Displayed readings are historical, not live. Retrying in 5 seconds.';
         }finally{
             clearTimer(deadline);controller=null;inFlight=false;
-            if(!paused&&!stopped&&!document.hidden)timer=setTimer(poll,5000);
+            if(!paused&&!stopped&&!document.hidden)timer=setTimer(poll,refreshMs());
         }
     }
     function suspend(){epoch++;clearTimer(timer);controller?.abort();}
-    toggle.addEventListener('click',()=>{paused=!paused;suspend();toggle.textContent=paused?'Resume monitoring':'Pause monitoring';status.textContent=paused?'Monitoring paused; displayed readings are historical.':'Resuming monitoring...';if(!paused)poll();});
+    toggle.addEventListener('click',()=>{
+        paused=!paused;
+        suspend();
+        if(refreshRate)refreshRate.disabled=!paused;
+        if(typeof window!=='undefined'&&typeof window.syncTerminalSelect==='function'&&refreshRate)window.syncTerminalSelect(refreshRate);
+        toggle.textContent=paused?'Resume monitoring':'Pause monitoring';
+        status.textContent=paused?'Monitoring paused; displayed readings are historical.':'Resuming monitoring...';
+        if(!paused)poll();
+    });
     document.addEventListener('visibilitychange',()=>{suspend();if(!document.hidden)poll();});
     return {poll,dispose(){stopped=true;suspend();history=[];cards.replaceChildren();rows.replaceChildren();}};
 }

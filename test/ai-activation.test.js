@@ -65,7 +65,8 @@ test('frontend removes changed-PID acceptance and uses text-only model display',
     assert.ok(!ui.includes('/api/admin/ai/restart'));
     assert.ok(ui.includes('\"Unavailable\"')); 
     assert.ok(ui.includes('aiModelState").textContent'));
-    assert.ok(ui.includes('Configuration saved. Changes apply the next time the backend starts.'));
+    assert.ok(ui.includes('Configuration saved. Changes apply the next time llama.cpp starts.'));
+    assert.ok(ui.includes('Restart required; run Restart-ChatbotAI'));
 });
 test('chat completion forwards AbortSignal and preserves legacy calls', async () => {
     const calls = [];

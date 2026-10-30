@@ -8,13 +8,13 @@ const stage = 'C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama
 const qualified = () => ({ platform: 'win32', executable: stage+'\\llama-server.exe', cwd: stage,
     modelPath: 'C:\\AI\\models\\Qwen3-8B-Q5_K_M.gguf', apiKeyFile: 'C:\\AI\\config\\llama-api-key.txt',
     host: '127.0.0.1', port: 8080, corsOrigin: 'http://127.0.0.1:8080', device: 'CUDA0',
-    gpuLayers: 37, contextSize: 32768, parallel: 1, verbosity: 4 });
+    gpuLayers: 37, contextSize: 32768, parallel: 1, verbosity: 4, metrics: false });
 test('qualified profile has exact arguments, expectations and no environment overrides', () => {
     const s=qualified(), r=buildLlamaLaunchSpec(s);
     assert.deepEqual(r.args,['--model',s.modelPath,'--host','127.0.0.1','--port','8080',
         '--api-key-file',s.apiKeyFile,'--cors-origins','http://127.0.0.1:8080',
         '--parallel','1','--ctx-size','32768','--device','CUDA0','--n-gpu-layers','37','--verbosity','4']);
-    assert.deepEqual(r.expected,{host:s.host,port:8080,model:s.modelPath,device:'CUDA0',gpuLayers:37,contextSize:32768,parallel:1,verbosity:4});
+    assert.deepEqual(r.expected,{host:s.host,port:8080,model:s.modelPath,device:'CUDA0',gpuLayers:37,contextSize:32768,parallel:1,verbosity:4,metrics:false});
     assert.equal(r.executable,s.executable); assert.equal(r.cwd,s.cwd); assert.deepEqual(r.env,{});
     assert.equal(r.apiKeyFile,s.apiKeyFile); assert(!r.args.includes('--api-key'));
 });
@@ -34,6 +34,7 @@ test('missing/relative paths, invalid values, conflicts and unknown options are 
         {platform:'freebsd'},{host:'hostname'},{port:0},{port:65536},{port:'8080'},
         {parallel:0},{parallel:9},{contextSize:32767},{contextSize:Infinity},
         {gpuLayers:-1},{gpuLayers:1.5},{gpuLayers:'37'},{verbosity:-1},{verbosity:'4'},
+        {metrics:'true'},
         {device:'none',gpuLayers:37},{device:'CUDA0,CUDA1'},{device:'--device'},
         {corsOrigin:'http://user:password@localhost'},{corsOrigin:'http://localhost/path'},
         {args:['--host','0.0.0.0']},{env:{PATH:'untrusted'}},{apiKey:'secret'}];
@@ -45,6 +46,12 @@ test('optional flags are omitted, never silently replaced with qualified values'
     const s=qualified(); delete s.gpuLayers;delete s.verbosity;const r=buildLlamaLaunchSpec(s);
     assert(!r.args.includes('--n-gpu-layers'));assert(!r.args.includes('--verbosity'));
     assert.equal(r.expected.gpuLayers,null);assert.equal(r.expected.verbosity,null);
+});
+test('metrics flag is added only when enabled', () => {
+    assert(!buildLlamaLaunchSpec(qualified()).args.includes('--metrics'));
+    const enabled=buildLlamaLaunchSpec({...qualified(),metrics:true});
+    assert(enabled.args.includes('--metrics'));
+    assert.equal(enabled.expected.metrics,true);
 });
 test('generic spec supports explicit POSIX paths and non-CUDA device labels without runtime support', () => {
     for(const platform of ['linux','darwin']) {
