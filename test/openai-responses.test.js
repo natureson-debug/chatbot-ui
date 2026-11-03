@@ -123,3 +123,8 @@ test('cancellation after text preserves partial output and releases the pending 
  const a=createAdapter({secret:async()=> 'synthetic-only',fetchImpl:async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(encode([delta('partial')])));},cancel(){cancelled=true;}}),{headers:{'Content-Type':'text/event-stream'}})});
  const r=await a.chat(connection(),{messages:[]},{signal:controller.signal}),reader=r.body.getReader();const first=await reader.read();assert.equal(textOf(parse(new TextDecoder().decode(first.value))),'partial');controller.abort();let tail='';for(;;){const n=await reader.read();if(n.done)break;tail+=new TextDecoder().decode(n.value);}assert.equal(parse(tail)[0].code,'OPENAI_CANCELLED');assert(cancelled);
 });
+test('server cap overrides larger requested output and late admin disable prevents dispatch',async()=>{
+ let body,calls=0;const a=createAdapter({secret:async()=> 'synthetic-only',fetchImpl:async(_,o)=>{calls++;body=JSON.parse(o.body);return response([completed()]);}});
+ await(await a.chat(connection(),{messages:[],max_tokens:100},{maxOutputTokens:8})).text();assert.equal(body.max_output_tokens,8);
+ await(await a.chat(connection(),{messages:[]},{beforeSend:()=>{throw Error('admin disabled');}})).text();assert.equal(calls,1);
+});

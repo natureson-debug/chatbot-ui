@@ -422,6 +422,10 @@ function restoreChat() {
                 );
             addCodeCopyButtons(restoredMessage.text);
             if(message.telemetry?.model)restoredMessage.roleLabel.textContent=[message.telemetry.provider,message.telemetry.model].filter(Boolean).join(" / ");
+            if(message.responseStatus&&message.responseStatus!=='completed'){
+                restoredMessage.notice.textContent='Response status: '+message.responseStatus+'. Output may be incomplete.';
+                restoredMessage.notice.hidden=false;
+            }
             if (message.telemetry) {
                 const t = message.telemetry;
 
@@ -679,7 +683,7 @@ async function readAssistantStream(reader, onChunk) {
             return;
         }
         const chunk = JSON.parse(data);
-        if (typeof chunk?.error === 'string') throw new Error(chunk.error);
+        if (typeof chunk?.error === 'string') {const error=new Error(chunk.error);error.responseStatus=chunk.responseStatus;throw error;}
         onChunk(chunk);
     }
     function line(value) {
@@ -847,6 +851,7 @@ try {
         assistantMessage.telemetry;
     let responseTelemetry = null;
     let responseIdentity = {};
+    let serverPersistence=false,responseStatus='interrupted';
     let generationContextLimit = contextLimit;
 
     let assistantText = "";
@@ -871,6 +876,7 @@ try {
                     },
                     ...requestHistory
                 ],
+                chatId:responseChatId,expectedRevision:generation.expectedRevision,
                 enable_thinking: thinkingEnabled,
                 temperature: generationSettings.temperature,
                 max_tokens: generationSettings.maxTokens,
@@ -890,6 +896,7 @@ try {
 
         if (!generationIsValid(generation)) return;
         const requestModel = response.headers?.get?.("X-Chat-Model");
+        serverPersistence=response.headers?.get?.('X-Chat-Persistence')==='server';
         if (requestModel) { try { assistantMessage.roleLabel.textContent = decodeURIComponent(requestModel); } catch {} }
         const requestProvider = response.headers?.get?.("X-Chat-Provider");
         if(requestModel){try{responseIdentity={model:decodeURIComponent(requestModel),provider:requestProvider?decodeURIComponent(requestProvider):''};assistantMessage.roleLabel.textContent=[responseIdentity.provider,responseIdentity.model].filter(Boolean).join(' / ');}catch{}}
@@ -897,6 +904,7 @@ try {
         if (requestContext && requestContext !== "local") generationContextLimit = /^\d+$/.test(requestContext) ? Number(requestContext) : null;
         await readAssistantStream(response.body.getReader(), (chunk) => {
             if (!generationIsValid(generation)) throw new DOMException("Obsolete generation", "AbortError");
+            if(['completed','cancelled','failed','incomplete','interrupted'].includes(chunk.responseStatus))responseStatus=chunk.responseStatus;
             if (chunk.toolActivity && isOriginVisible()) statusText.textContent = 'Tool '+String(chunk.toolActivity.name).slice(0,80)+': '+String(chunk.toolActivity.state).slice(0,30);
             if (chunk.choices?.[0]?.finish_reason != null) {
                 finishReason = chunk.choices[0].finish_reason;
@@ -954,6 +962,7 @@ try {
     } catch (error) {
         if (!generationIsValid(generation)) return;
         const cancelled = error.name === "AbortError";
+        responseStatus=cancelled?'cancelled':['failed','incomplete','interrupted','cancelled'].includes(error.responseStatus)?error.responseStatus:'interrupted';
         assistantMessage.notice.textContent = cancelled
             ? "Generation stopped. The response may be incomplete."
             : "Response interrupted: " + error.message;
@@ -963,11 +972,11 @@ try {
         assistantMessage.notice.hidden = !assistantMessage.notice.textContent;
         try {
             if (assistantText.trim()) {
-                const savedMessage = { role: "assistant", content: assistantText, telemetry: {...responseIdentity,...responseTelemetry} };
+                const savedMessage = { role: "assistant", content: assistantText, telemetry: {...responseIdentity,...responseTelemetry},...(serverPersistence?{responseStatus}:{}) };
                 originMessages.push(savedMessage);
                 assistantViews.set(savedMessage, assistantMessage);
                 generation.saved = true;
-                const saved = await fetch(
+                const saved = serverPersistence?{ok:true}:await fetch(
                     "/api/chats/" + encodeURIComponent(responseChatId) + "/messages",
                     {
                         method: "POST",

@@ -22,3 +22,7 @@ test('aborted request cannot open a socket and DNS waiting is cancellable',async
 test('invalid upstream response metadata fails closed without uncaught callbacks',async()=>{
  const f=fixture(9999);await assert.rejects(f.fetch('https://fixture.invalid/v1'),/response unavailable/);
 });
+test('authorization changed during DNS prevents socket creation',async()=>{
+ let resolve,allowed=true,sockets=0;const fetch=createCloudFetch({lookup:()=>new Promise(r=>resolve=r),request:()=>sockets++});
+ const pending=fetch('https://fixture.invalid/v1',{beforeConnect:()=>{if(!allowed)throw Error('disabled');}});allowed=false;resolve([{address:'8.8.8.8',family:4}]);await assert.rejects(pending);assert.equal(sockets,0);
+});

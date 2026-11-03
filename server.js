@@ -225,7 +225,9 @@ if (req.method === "GET" && req.url === "/api/ai/models") {
  try{const config=await connections.read();const legacy=config.defaultId==='legacy-local'?buildLegacyProvider():null;
  if(!getAuthenticatedUser(req)){res.writeHead(401);res.end();return;}
  const catalog=require('./core/chat-models');
- res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify({defaultId:config.defaultId,default:catalog.defaultChoice(config,legacy),models:catalog.choices(config,legacy)}));
+ const permitted=entry=>config.connections.find(c=>c.id===entry?.providerId)?.adapter!=='openai-responses'||require('./core/openai-usage').settings(db).enabled===1;
+ const defaultModel=catalog.defaultChoice(config,legacy);
+ res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify({defaultId:config.defaultId,default:permitted(defaultModel)?defaultModel:null,models:catalog.choices(config,legacy).filter(permitted)}));
  }catch{res.writeHead(503);res.end(JSON.stringify({error:'Model list unavailable'}));}return;
 }
 
@@ -748,6 +750,11 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
             }
 
             if (!provider) provider=buildLegacyProvider();
+            if(provider.adapter==='openai-responses'){
+                const token=getSessionToken(req);
+                await require('./core/openai-http').serve({db,req,res,user,provider,input:clientRequest,providers,authorize:()=>getSessionUser(db,token)?.id===user.id});
+                return;
+            }
             if (!Array.isArray(clientRequest.messages)) {
                 res.writeHead(400, {
                     "Content-Type": "application/json"
@@ -1410,6 +1417,23 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
     return;
 }
 
+// Admin-only aggregate accounting; no ordinary-user usage-record endpoint.
+if(req.url==='/api/admin/ai/openai-usage'){
+ const admin=getAuthenticatedUser(req),token=getSessionToken(req);
+ const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
+ if(!admin||admin.is_admin!==1){reply(admin?403:401,{error:'Administrator access required'});return;}
+ const accounting=require('./core/openai-usage');
+ try{
+  if(req.method==='GET'){reply(200,accounting.summary(db));return;}
+  if(req.method==='POST'){
+   if(!require('./core/restart-request').validRestartRequest({...req,headers:{...req.headers,'x-chatbot-action':req.headers['x-chatbot-action']==='configure-openai'?'restart-ai':null}})){reply(403,{error:'Same-origin request required'});return;}
+   let body='';for await(const chunk of req){body+=chunk;if(body.length>8192)throw Error();}
+   const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:'Session no longer authorized'});return;}
+   accounting.configure(db,JSON.parse(body));reply(200,accounting.summary(db));return;
+  }
+  reply(405,{error:'Method not allowed'});
+ }catch{reply(400,{error:'OpenAI safeguards unavailable or invalid'});}return;
+}
 // Named connection administration; credentials are references, never values.
 if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/check$/.test(req.url)) {
     const token = getSessionToken(req), admin = getAuthenticatedUser(req);
@@ -1721,6 +1745,7 @@ if (req.method === "GET" && req.url === "/admin") {
 );
 
 server.listen(PORT, HOST, () => {
+    require('./core/openai-usage').reconcile(db);
     require("./core/application-lifecycle").installApplicationLifecycle({ server, requestTracker, db });
     console.log("");
     console.log("Local AI Chatbot");

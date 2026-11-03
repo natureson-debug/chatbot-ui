@@ -138,7 +138,7 @@ function getChatHistorySnapshot(chatId, userId) {
     if (typeof userId !== "string" || !userId.trim()) throw new Error("A chat owner is required");
     // One statement supplies a consistent snapshot, including empty chats.
     const rows = db.prepare(`
-        SELECT c.revision, m.id, m.role, m.content, m.display_content, m.telemetry_json
+        SELECT c.revision, m.id, m.role, m.content, m.display_content, m.telemetry_json, m.response_status
         FROM chats AS c LEFT JOIN messages AS m ON m.chat_id = c.id
         WHERE c.id = ? AND c.user_id = ? ORDER BY m.id ASC
     `).all(chatId, userId);
@@ -149,7 +149,8 @@ function getChatHistorySnapshot(chatId, userId) {
         messages: rows.filter((row) => row.id !== null).map((row) => ({
             id: row.id, role: row.role, content: row.content,
             displayContent: row.display_content,
-            telemetry: row.telemetry_json === null ? null : JSON.parse(row.telemetry_json)
+            telemetry: row.telemetry_json === null ? null : JSON.parse(row.telemetry_json),
+            ...(row.response_status?{responseStatus:row.response_status}:{})
         }))
     };
 }
@@ -213,7 +214,7 @@ function getMessages(chatId, userId) {
     }
 
     const rows = db.prepare(`
-        SELECT m.id, m.role, m.content, m.display_content, m.telemetry_json
+        SELECT m.id, m.role, m.content, m.display_content, m.telemetry_json, m.response_status
         FROM messages AS m
         JOIN chats AS c ON c.id = m.chat_id
         WHERE m.chat_id = ?
@@ -228,7 +229,8 @@ function getMessages(chatId, userId) {
         displayContent: row.display_content,
         telemetry: row.telemetry_json === null
             ? null
-            : JSON.parse(row.telemetry_json)
+            : JSON.parse(row.telemetry_json),
+        ...(row.response_status?{responseStatus:row.response_status}:{})
     }));
 }
 

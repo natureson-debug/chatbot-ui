@@ -132,6 +132,26 @@ if (!messageColumns.some((column) => column.name === "display_content")) {
         throw new Error("Invalid stored chat revision");
     }
 }
+ // Additive OpenAI reliability/accounting migration; legacy rows stay unspecified.
+ const responseColumns=db.prepare('PRAGMA table_info(messages)').all();
+ if(!responseColumns.some(c=>c.name==='response_status'))db.exec('ALTER TABLE messages ADD COLUMN response_status TEXT');
+ if(!responseColumns.some(c=>c.name==='response_request_id'))db.exec('ALTER TABLE messages ADD COLUMN response_request_id TEXT');
+ db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS message_response_request ON messages(response_request_id) WHERE response_request_id IS NOT NULL;
+ CREATE TABLE IF NOT EXISTS openai_safeguards (
+  id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL DEFAULT 0,
+  max_output_tokens INTEGER NOT NULL DEFAULT 1024, max_concurrent INTEGER NOT NULL DEFAULT 1,
+  per_hour INTEGER NOT NULL DEFAULT 20, per_day INTEGER NOT NULL DEFAULT 100,
+  estimated_daily_usd REAL
+ );
+ INSERT OR IGNORE INTO openai_safeguards(id) VALUES(1);
+ CREATE TABLE IF NOT EXISTS openai_usage (
+  request_id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, model_id TEXT NOT NULL,
+  user_id TEXT NOT NULL, conversation_id TEXT NOT NULL, revision INTEGER NOT NULL,
+  started_at INTEGER NOT NULL, finished_at INTEGER, status TEXT NOT NULL,
+  input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
+  latency_ms REAL, provider_response_id TEXT
+ );
+ CREATE INDEX IF NOT EXISTS openai_usage_user_time ON openai_usage(user_id,started_at);`);
  db.exec('COMMIT');
  } catch(error) { if(db.isTransaction)db.exec('ROLLBACK'); throw error; }
 }

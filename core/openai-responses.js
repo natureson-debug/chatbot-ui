@@ -45,8 +45,9 @@ function bounded(promise, signal) {
  });
 }
 function abortCode(signal) {return signal.reason?.name==='TimeoutError'?'timeout':'cancelled';}
-async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>{},clock=()=>performance.now()}={}) {
+async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>{},onProgress=()=>{},beforeSend=()=>{},maxOutputTokens,clock=()=>performance.now()}={}) {
  const body=buildRequest(connection,input), started=clock(),controller=new AbortController();
+ if(maxOutputTokens!==undefined)body.max_output_tokens=Math.min(body.max_output_tokens??maxOutputTokens,maxOutputTokens);
  const deadline=AbortSignal.timeout(connection.timeoutMs || 120000);
  const combined=AbortSignal.any([controller.signal,deadline,...(signal?[signal]:[])]);
  const diagnostic = response => {
@@ -55,7 +56,9 @@ async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>
    try{onDiagnostics({providerResponseId:id,latencyMs:Math.max(0,clock()-started)});}catch{}
   }
  };
- const responseError=code=>new Response(frame(failure(code)),{headers:{'Content-Type':'text/event-stream'}});
+ const statusFor=code=>code==='cancelled'?'cancelled':['network','timeout','malformed'].includes(code)?'interrupted':code==='incomplete'?'incomplete':'failed';
+ const failed=code=>{const status=statusFor(code);onProgress({status});return {...failure(code),responseStatus:status};};
+ const responseError=code=>new Response(frame(failed(code)),{headers:{'Content-Type':'text/event-stream'}});
  let upstream;
  try {
   combined.throwIfAborted();
@@ -63,9 +66,10 @@ async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>
   try{key=await bounded(secret(connection),combined);}catch{if(combined.aborted)throw combined.reason;return responseError('auth');}
   if(typeof key!=='string'||!key.trim()||/[\r\n]/.test(key.trim()))return responseError('auth');
   combined.throwIfAborted();
+  beforeSend();
   upstream=await bounded(Promise.resolve(fetchImpl(connection.endpoint.replace(/\/$/,'')+'/responses',{
    method:'POST',headers:{'Content-Type':'application/json',Accept:'text/event-stream',Authorization:'Bearer '+key.trim()},
-   body:JSON.stringify(body),signal:combined,redirect:'error'
+   body:JSON.stringify(body),signal:combined,redirect:'error',beforeConnect:beforeSend
   })).then(r=>{if(combined.aborted)void r.body?.cancel().catch(()=>{});return r;}),combined);
   if(!upstream.ok){void upstream.body?.cancel().catch(()=>{});return responseError([401,403].includes(upstream.status)?'auth':upstream.status===429?'rate':upstream.status===404?'model':'failed');}
   if(!upstream.body||!/^text\/event-stream(?:;|$)/i.test(upstream.headers.get('content-type')||'')){void upstream.body?.cancel().catch(()=>{});return responseError('malformed');}
@@ -77,7 +81,7 @@ async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>
   const raw=data.join('\n');data=[];dataSize=0;
   const event=JSON.parse(raw);if(!event||typeof event.type!=='string')throw Error();
   if(event.sequence_number!==undefined){if(!Number.isSafeInteger(event.sequence_number)||event.sequence_number<0||event.sequence_number<=lastSequence)throw Error();lastSequence=event.sequence_number;}
-  if(['response.created','response.in_progress'].includes(event.type))return '';
+  if(['response.created','response.in_progress'].includes(event.type)){onProgress({providerResponseId:event.response?.id});return '';}
   if(event.type==='response.output_text.delta'||event.type==='response.output_text.done'){
    if(!Number.isSafeInteger(event.output_index)||event.output_index<0||!Number.isSafeInteger(event.content_index)||event.content_index<0||event.content_index>9999)throw Error();
    const order=event.output_index*10000+event.content_index;if(!Number.isSafeInteger(order)||order<lastPart)throw Error();lastPart=order;
@@ -86,16 +90,18 @@ async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>
    else {if(typeof event.text!=='string'||!event.text.startsWith(part.text))throw Error();text=event.text.slice(part.text.length);part.text=event.text;part.done=true;}
    totalText+=text.length;
    if(totalText>4194304||parts.size>1024)throw Error();parts.set(order,part);
+   if(text)onProgress({text});
    return text?frame({choices:[{delta:{content:text},finish_reason:null}]}):'';
   }
   if(['response.completed','response.failed','response.incomplete'].includes(event.type)){
    const r=event.response;if(!r||r.status!==event.type.slice(9))throw Error();
-   terminal=true;diagnostic(r);
-   if(event.type==='response.failed')return frame(failure('failed'));
-   if(event.type==='response.incomplete'&&r.incomplete_details?.reason!=='max_output_tokens')return frame(failure('incomplete'));
-   return frame({choices:[{delta:{},finish_reason:event.type==='response.completed'?'stop':'length'}],telemetry:usage(r,clock()-started)})+'data: [DONE]\n\n';
+   const status=event.type.slice(9),telemetry=usage(r,clock()-started);
+   onProgress({status,usage:telemetry,providerResponseId:r.id});terminal=true;diagnostic(r);
+   if(event.type==='response.failed')return frame({...failure('failed'),responseStatus:status});
+   if(event.type==='response.incomplete'&&r.incomplete_details?.reason!=='max_output_tokens')return frame({...failure('incomplete'),responseStatus:status});
+   return frame({responseStatus:status,choices:[{delta:{},finish_reason:status==='completed'?'stop':'length'}],telemetry})+'data: [DONE]\n\n';
   }
-  if(event.type==='error'){terminal=true;return frame(failure('failed'));}
+  if(event.type==='error'){const result=failed('failed');terminal=true;return frame(result);}
   return ''; // Future provider events, tools and reasoning are never forwarded.
  }
  async function* events(){
@@ -113,7 +119,7 @@ async function chat(connection,input,{fetchImpl,secret,signal,onDiagnostics=()=>
     }
     if(done){if(!terminal&&data.length){const output=dispatch();if(output)yield encoder.encode(output);}if(!terminal)throw Error();}
    }
-  }catch{if(!terminal){terminal=true;yield encoder.encode(frame(failure(combined.aborted?abortCode(combined):streamFailure)));}}
+  }catch{if(!terminal){const result=failed(combined.aborted?abortCode(combined):streamFailure);terminal=true;yield encoder.encode(frame(result));}}
   finally{controller.abort();void reader.cancel().catch(()=>{});reader.releaseLock();}
  }
  const iterator=events();

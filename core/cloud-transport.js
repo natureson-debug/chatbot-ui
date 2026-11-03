@@ -28,7 +28,7 @@ function createCloudFetch({lookup=dns.lookup,request,allowPrivate=false,allowLoo
   });
   return new Promise((resolve,reject)=>{
    let req;
-   try{signal.throwIfAborted();req=(request||(url.protocol==='https:'?https.request:http.request))(url,{method:options.method||'GET',headers:options.headers,signal,agent:false,
+   try{signal.throwIfAborted();options.beforeConnect?.();req=(request||(url.protocol==='https:'?https.request:http.request))(url,{method:options.method||'GET',headers:options.headers,signal,agent:false,
     lookup:(_host,opts,callback)=>opts.all?callback(null,[pinned]):callback(null,pinned.address,pinned.family)},response=>{
      try {
      if(response.statusCode>=300&&response.statusCode<400){response.destroy();reject(Error('Cloud redirect rejected'));return;}

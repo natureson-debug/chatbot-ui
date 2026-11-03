@@ -37,6 +37,9 @@ https.request=(url,options,callback)=>{
   if(mode==='failed'){write({type:'response.failed',response:{status:'failed',error:{message:'sensitive fixture upstream detail'}}});finish();return;}
   write({type:'response.created',response:{id:'resp_fixture',status:'in_progress'}});
   write({type:'response.output_text.delta',output_index:0,content_index:0,delta:'First '});
+  if(mode==='incomplete'){write({type:'response.incomplete',response:{status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{input_tokens:9,output_tokens:1}}});finish();return;}
+  if(mode==='partial-failed'){write({type:'response.failed',response:{status:'failed'}});finish();return;}
+  if(mode==='interrupted'){finish();return;}
   const complete=()=>{write({type:'response.output_text.delta',output_index:0,content_index:0,delta:'second'});write({type:'response.output_text.done',output_index:0,content_index:0,text:'First second'});write({type:'response.completed',response:{id:'resp_fixture',status:'completed',usage:{input_tokens:9,output_tokens:2,input_tokens_details:{cached_tokens:1}}}});finish();};
   if(mode==='hold'){pending=complete;return;}complete();
  };return req;
@@ -47,6 +50,7 @@ http.createServer=function(...args){server=create.apply(this,args);server.once('
 const modulePath=require.resolve('./core/application-lifecycle'),original=require(modulePath);
 require.cache[modulePath].exports={...original,installApplicationLifecycle(options){lifecycle=original.installApplicationLifecycle(options);return lifecycle;}};
 process.on('message',async message=>{
+ if(message.type==='crash')process.exit(23); // Abrupt exit of this disposable fixture only.
  if(message.type==='mode'){mode=message.mode;send({type:'ack',id:message.id});}
  if(message.type==='release'){pending?.();send({type:'ack',id:message.id});}
  if(message.type==='shutdown'){const result=await lifecycle.shutdown();send({type:'shutdown',result});process.disconnect();}
