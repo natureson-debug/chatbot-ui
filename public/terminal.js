@@ -5,67 +5,6 @@
         return document.getElementById(id);
     }
 
-    var bootScreen = byId("bootScreen");
-    var bootLog = byId("bootLog");
-
-    if (bootScreen && bootLog) {
-        var bootLines = [
-            "ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL",
-            "INITIALIZING LOCAL INTELLIGENCE LINK...",
-            "MOUNTING MEMORY FILES... OK",
-            "CALIBRATING PHOSPHOR DISPLAY... OK",
-            "SYNCING NEURAL CACHE... OK",
-            "WELCOME, VAULT DWELLER"
-        ];
-
-        var lineIndex = 0;
-        var charIndex = 0;
-        var currentLine = null;
-        var finished = false;
-
-        function finishBoot() {
-            if (finished) return;
-            finished = true;
-            bootLog.textContent = bootLines.join("\n");
-            window.setTimeout(function () {
-                bootScreen.classList.add("finished");
-                window.setTimeout(function () {
-                    bootScreen.hidden = true;
-                }, 225);
-            }, 160);
-        }
-
-        function advanceBoot() {
-            if (finished) return;
-
-            if (lineIndex >= bootLines.length) {
-                finishBoot();
-                return;
-            }
-
-            if (!currentLine) {
-                currentLine = document.createElement("span");
-                bootLog.appendChild(currentLine);
-            }
-
-            charIndex += 1;
-            currentLine.textContent = bootLines[lineIndex].slice(0, charIndex);
-
-            if (charIndex >= bootLines[lineIndex].length) {
-                lineIndex += 1;
-                charIndex = 0;
-                currentLine = null;
-                window.setTimeout(advanceBoot, 55);
-            } else {
-                window.setTimeout(advanceBoot, 7 + Math.random() * 23);
-            }
-        }
-
-        bootScreen.addEventListener("click", finishBoot);
-        bootScreen.addEventListener("keydown", finishBoot);
-        window.setTimeout(advanceBoot, 130);
-    }
-
     var terminalClock = byId("terminalClock");
 
     function updateClock() {

@@ -77,6 +77,11 @@ function setup(createChatCompletion) {
         },
 
         './core/admin-telemetry': {},
+        './core/connections': {selected:async()=>null},
+        './core/provider-adapter': {
+            chat: (_provider, input, options) => createChatCompletion(input, options),
+            usable: () => ({vision:false, tools:false, thinking:true})
+        },
         './core/ai-activation': {
             blockedActivation: async () => ({
                 state: 'blocked'

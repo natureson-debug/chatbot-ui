@@ -7,9 +7,9 @@ const root=__dirname,profile=require('./profile.json'),state=path.join(root,'sta
 const shell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function fixedLog(code,service){const log=path.join(state,'events.jsonl'),old=path.join(state,'events.previous.jsonl'); if(fs.existsSync(log)&&fs.statSync(log).size>1048576){if(fs.existsSync(old))fs.unlinkSync(old);fs.renameSync(log,old);}fs.appendFileSync(path.join(state,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),code,service})+'\n');}
-function runObserver(service){
+function runObserver(service, applicationOnly=false){
  return new Promise((resolve,reject)=>{
-  const args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,service==='environment'?'verify-environment.ps1':'observe.ps1')]; if(service!=='environment')args.push('-Service',service); const p=spawn(shell,args,{windowsHide:true,shell:false,stdio:['ignore','pipe','ignore']});
+  const args=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,service==='environment'?'verify-environment.ps1':'observe.ps1')]; if(service!=='environment')args.push('-Service',service);else if(applicationOnly)args.push('-ApplicationOnly'); const p=spawn(shell,args,{windowsHide:true,shell:false,stdio:['ignore','pipe','ignore']});
   let text='',settled=false;const timer=setTimeout(()=>{settled=true;reject(Error('OBSERVATION_TIMEOUT'));},TIMEOUTS.observerMs);
   p.stdout.on('data',b=>{if(settled)return;text+=b;if(text.length>4096&&!settled){settled=true;reject(Error('OBSERVATION_OVERSIZE'));}});
   p.on('error',()=>{clearTimeout(timer);if(!settled){settled=true;reject(Error('OBSERVATION_FAILED'));}});
@@ -26,11 +26,11 @@ async function health(service,ms=3000){
   return b.status==='ok'&&(service==='backend'||b.backend==='chatbot-ui');
  }catch(e){if(e.message==='AUTHENTICATION_BLOCKED')throw e;return false;}
 }
-function checkGate(){
+function checkGate(services=['backend','application']){
  const q=JSON.parse(fs.readFileSync(path.join(root,'qualification.json'),'utf8'));
- if(q.activationApproved!==true||q.modelLoadPassed!==true||q.generationPassed!==true||
- q.databaseStartupApproved!==true||q.gracefulBackendStopPassed!==true||q.gracefulNodeStopPassed!==true||q.gpuUUID!==profile.gpuUUID)throw Error('QUALIFICATION_INCOMPLETE');
- for(const service of ['backend','application']){
+ if(q.activationApproved!==true||(services.includes('backend')&&(q.modelLoadPassed!==true||q.generationPassed!==true))||
+ q.databaseStartupApproved!==true||q.gracefulNodeStopPassed!==true||(services.includes('backend')&&(q.gracefulBackendStopPassed!==true||q.gpuUUID!==profile.gpuUUID)))throw Error('QUALIFICATION_INCOMPLETE');
+ for(const service of services){
   const dir=path.join(root,'build',service),m=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));
   const expected=service==='backend'?require('C:/AI/chatbot-ui/core/llama-launch.js').buildLlamaLaunchSpec(profile.backend):profile.application; if(m.profile.executable!==expected.executable||m.profile.cwd!==expected.cwd||JSON.stringify(m.profile.args)!==JSON.stringify(expected.args))throw Error('COMPILED_PROFILE_MISMATCH');
   if(m.profile.operatorSid!==profile.sid)throw Error('COMPILED_IDENTITY_MISMATCH');
@@ -41,7 +41,9 @@ function checkGate(){
 async function main(testProviders){
  // CLI never supplies providers. This seam executes the same coordinator with isolated effects.
  const effects=testProviders||{};
- const gate=effects.gate||checkGate,observe=effects.observe||runObserver,connect=effects.connect||open;
+ const selected=testProviders ? (effects.selectedConnection ?? null) : await require('../../../core/connections').selected();
+ const services=require('./connection-plan.cjs').connectionPlan(selected,profile.backend);
+ const gate=effects.gate||(()=>checkGate(services)),observe=effects.observe||(s=>runObserver(s,!services.includes('backend'))),connect=effects.connect||open;
  const healthy=effects.health||health,log=effects.log||fixedLog;
  const clock=effects.now||(()=>performance.now()),pause=effects.pause||sleep;
  const io=effects.fs||fs,mode=effects.mode||process.argv[2];
@@ -102,7 +104,7 @@ async function main(testProviders){
   // Existing application never enters owned. Backend must be ready before a new application starts.
   const app=await observe('application');
   if(classify(app)==='external'){if(!await healthy('application'))throw Error('EXTERNAL_UNHEALTHY');external.set('application',app);}
-  await ensure('backend');
+  if(services.includes('backend'))await ensure('backend');
   if(!external.has('application'))await ensure('application');
   while(true){
    if(stopRequested||io.existsSync(path.join(state,'stop.request'))){

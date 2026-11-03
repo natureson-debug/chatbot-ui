@@ -1,14 +1,14 @@
 const fs = require("fs");
 const { LLAMA_URL, LLAMA_HEALTH_URL, API_KEY_FILE } = require("./config");
 
-const apiKey = fs.readFileSync(API_KEY_FILE, "utf8").trim();
+const readApiKey = () => fs.readFileSync(API_KEY_FILE, "utf8").trim();
 
 async function createChatCompletion(llamaRequest, { signal } = {}) {
     return fetch(LLAMA_URL, {
         method: "POST",
         signal,
         headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            "Authorization": `Bearer ${readApiKey()}`,
             "Content-Type": "application/json"
         },
         body: JSON.stringify(llamaRequest)
@@ -19,7 +19,7 @@ async function getHealth({ signal } = {}) {
     const response = await fetch(LLAMA_HEALTH_URL, {
         signal,
         headers: {
-            "Authorization": `Bearer ${apiKey}`
+            "Authorization": `Bearer ${readApiKey()}`
         }
     });
 
@@ -33,7 +33,7 @@ async function getHealth({ signal } = {}) {
 async function getReportedModel() {
     const response = await fetch(new URL("/v1/models", LLAMA_URL), {
         signal: AbortSignal.timeout(3000),
-        headers: { "Authorization": `Bearer ${apiKey}` }
+        headers: { "Authorization": `Bearer ${readApiKey()}` }
     });
     if (!response.ok) throw new Error("Model observation unavailable");
     const result = await response.json();
@@ -45,7 +45,7 @@ async function readTelemetryResource(resource) {
     if (!['/health', '/v1/models', '/props', '/metrics'].includes(resource)) throw Error('INVALID_RESOURCE');
     const response = await fetch(new URL(resource, LLAMA_URL), {
         method: 'GET', redirect: 'error', signal: AbortSignal.timeout(2500),
-        headers: { Authorization: 'Bearer ' + apiKey }
+        headers: { Authorization: 'Bearer ' + readApiKey() }
     });
     if (!response.ok) {
         await response.body?.cancel();

@@ -1356,7 +1356,6 @@ body:not(.admin-page) h2,
 body:not(.admin-page) h3,
 body:not(.admin-page) .role,
 body:not(.admin-page) #activeChatTitle,
-body:not(.admin-page) #bootLog,
 body:not(.admin-page) .terminal-dialog-title {
     font-family: "VT323", "Share Tech Mono", "Consolas", monospace;
     text-transform: uppercase;
@@ -1837,6 +1836,7 @@ body:not(.admin-page) #prompt {
     border: 0;
     background: transparent;
     box-shadow: none;
+    font-family: inherit;
     font-size: 15px;
 }
 
@@ -1918,52 +1918,6 @@ body:not(.admin-page) #loginForm button:hover {
 
 body:not(.admin-page) #loginError {
     color: var(--red);
-}
-
-/* Boot screen */
-#bootScreen {
-    position: fixed;
-    inset: 0;
-    z-index: 20000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 22px;
-    cursor: pointer;
-    background: var(--screen);
-    opacity: 1;
-    transition: opacity 0.225s ease;
-}
-
-#bootScreen.finished {
-    opacity: 0;
-    pointer-events: none;
-}
-
-#bootLog {
-    width: min(100%, 760px);
-    margin: 0;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    font-family: "VT323", "Share Tech Mono", monospace;
-    font-size: clamp(1.15rem, 3.2vw, 1.65rem);
-    line-height: 1.25;
-    color: var(--phos);
-    text-shadow: 0 0 8px var(--phos-glow);
-}
-
-#bootLog span {
-    display: block;
-}
-
-#bootLog span::after {
-    content: "█";
-    animation: bootCursor 0.45s steps(1) infinite;
-}
-
-#bootScreen.finished #bootLog span::after {
-    content: "";
-    animation: none;
 }
 
 /* Terminal dialog */
@@ -2068,14 +2022,9 @@ body:not(.admin-page) #loginError {
     50% { opacity: 0.35; }
 }
 
-@keyframes bootCursor {
-    50% { opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
     #crtFlicker,
-    body:not(.admin-page) #status::before,
-    #bootLog span::after {
+    body:not(.admin-page) #status::before {
         animation: none;
     }
 }
@@ -2750,6 +2699,123 @@ body.admin-page .monitor-toolbar .terminal-select {
     min-width: 132px;
 }
 
+body.admin-page .code-editor {
+    width: 100%;
+    min-height: 300px;
+    padding: 12px;
+    font-family: "Share Tech Mono", "Consolas", monospace;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    white-space: pre;
+    resize: vertical;
+}
+
+body.admin-page .provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+body.admin-page .provider-card {
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.26);
+    padding: 12px;
+}
+
+body.admin-page .provider-card.default {
+    border-color: var(--phos);
+    box-shadow: 0 0 14px var(--phos-faint);
+}
+
+body.admin-page .provider-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+body.admin-page .provider-card-title h3 {
+    margin: 0 0 4px;
+    color: var(--phos);
+}
+
+body.admin-page .provider-card-title p {
+    margin: 0;
+    color: var(--phos-soft);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .provider-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+body.admin-page .provider-form {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+body.admin-page .provider-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+    gap: 12px;
+}
+
+body.admin-page .provider-form-grid .field-group {
+    margin: 0;
+}
+
+body.admin-page .provider-capabilities {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+body.admin-page .provider-capabilities > span {
+    color: var(--phos-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body.admin-page .status-line.error,
+body.admin-page #connectionStatus.error,
+body.admin-page #providerDiscoverStatus.error {
+    color: var(--red);
+}
+
+body.admin-page .toolbar-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+body.admin-page .toolbar-row label {
+    margin-left: 6px;
+    color: var(--phos-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+body.admin-page .toolbar-row input {
+    width: 180px;
+    min-height: 40px;
+    padding: 8px 10px;
+}
+
 body.admin-page .terminal-select-trigger:disabled {
     opacity: 0.42;
     cursor: not-allowed;
@@ -2782,3 +2848,768 @@ body.admin-page .terminal-select-trigger:disabled {
         align-self: flex-start;
     }
 }
+/* Main-chat model selection: shared desktop/mobile control. */
+.chat-model-picker { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .75rem; }
+.chat-model-picker select { min-width: 0; max-width: 100%; flex: 1 1 14rem; font: inherit; }
+.chat-model-picker small { flex-basis: 100%; overflow-wrap: anywhere; }
+
+/* Compact, conventional themes for the main chat UI. */
+body:not(.admin-page)[data-theme^="normal-"] {
+    --normal-bg: #f4f6f9;
+    --normal-surface: #ffffff;
+    --normal-raised: #e9edf3;
+    --normal-text: #263142;
+    --normal-muted: #687386;
+    --normal-border: #d3dae4;
+    --normal-accent: #3569b7;
+    --normal-accent-contrast: #ffffff;
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    color: var(--normal-text);
+    color-scheme: light;
+    background: var(--normal-bg);
+}
+
+body:not(.admin-page)[data-theme="normal-dark"] {
+    --normal-bg: #171a20;
+    --normal-surface: #20252d;
+    --normal-raised: #2a303a;
+    --normal-text: #e4e8ef;
+    --normal-muted: #a0a9b8;
+    --normal-border: #3a424e;
+    --normal-accent: #6ea3f2;
+    --normal-accent-contrast: #111820;
+    color-scheme: dark;
+}
+
+body:not(.admin-page)[data-theme^="normal-"]::before,
+body:not(.admin-page)[data-theme^="normal-"] #crtFlicker {
+    display: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] h1,
+body:not(.admin-page)[data-theme^="normal-"] h2,
+body:not(.admin-page)[data-theme^="normal-"] h3,
+body:not(.admin-page)[data-theme^="normal-"] .role,
+body:not(.admin-page)[data-theme^="normal-"] #activeChatTitle,
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog-title {
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] header {
+    padding: 10px 18px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] header h1 {
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .header-icon {
+    width: 38px;
+    height: 38px;
+    border-color: var(--normal-border);
+    background: var(--normal-raised);
+    filter: none;
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .status-line,
+body:not(.admin-page)[data-theme^="normal-"] #status,
+body:not(.admin-page)[data-theme^="normal-"] #terminalClock {
+    color: var(--normal-muted);
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #status::before {
+    background: var(--normal-accent);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] button {
+    padding: 7px 11px;
+    border: 1px solid var(--normal-border);
+    border-radius: 5px;
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    box-shadow: none;
+    text-shadow: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    letter-spacing: normal;
+    text-transform: none;
+    clip-path: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] button:hover {
+    background: var(--normal-raised);
+    color: var(--normal-text);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #newChat,
+body:not(.admin-page)[data-theme^="normal-"] #settingsToggle {
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #send {
+    background: var(--normal-accent);
+    color: var(--normal-accent-contrast);
+    border-color: var(--normal-accent);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #send:hover {
+    background: var(--normal-accent);
+    filter: brightness(1.08);
+    color: var(--normal-accent-contrast);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #stop,
+body:not(.admin-page)[data-theme^="normal-"] #logoutButton,
+body:not(.admin-page)[data-theme^="normal-"] #deleteChat {
+    background: var(--normal-surface);
+    color: #c44747;
+    border-color: var(--normal-border);
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #stop:disabled {
+    background: var(--normal-raised);
+    color: var(--normal-muted);
+    border-color: var(--normal-border);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton {
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    border-color: var(--normal-border);
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .thinking-toggle {
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .thinking-toggle input {
+    accent-color: var(--normal-accent);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .settings {
+    padding: 10px 18px 12px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .settings label {
+    color: var(--normal-muted);
+    font-size: 0.9rem;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] input,
+body:not(.admin-page)[data-theme^="normal-"] textarea,
+body:not(.admin-page)[data-theme^="normal-"] select {
+    border: 1px solid var(--normal-border);
+    border-radius: 5px;
+    background: var(--normal-bg);
+    color: var(--normal-text);
+    box-shadow: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .settings textarea,
+body:not(.admin-page)[data-theme^="normal-"] .settings input,
+body:not(.admin-page)[data-theme^="normal-"] .settings select,
+body:not(.admin-page)[data-theme^="normal-"] footer textarea {
+    background: var(--normal-bg);
+    color: var(--normal-text);
+    border-color: var(--normal-border);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] input:focus,
+body:not(.admin-page)[data-theme^="normal-"] textarea:focus,
+body:not(.admin-page)[data-theme^="normal-"] select:focus {
+    border-color: var(--normal-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--normal-accent) 20%, transparent);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] textarea::placeholder,
+body:not(.admin-page)[data-theme^="normal-"] input::placeholder {
+    color: var(--normal-muted);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .active-chat-header {
+    min-height: 42px;
+    padding: 7px 16px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #activeChatTitle {
+    color: var(--normal-text);
+    font-size: 1rem;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #activeChatTitle::before {
+    content: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList {
+    width: 220px;
+    min-width: 220px;
+    gap: 6px;
+    padding: 12px 10px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList::before {
+    content: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList button {
+    padding: 7px 9px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    text-align: left;
+    text-transform: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList button::before {
+    content: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList button:hover {
+    background: var(--normal-raised);
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chatList button.active {
+    background: var(--normal-accent);
+    border-color: var(--normal-accent);
+    color: var(--normal-accent-contrast);
+    font-weight: 600;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #chat {
+    padding: 18px;
+    background: var(--normal-bg);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message {
+    max-width: 900px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .role {
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+    color: var(--normal-muted);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message.user {
+    padding: 10px 13px;
+    border: 1px solid var(--normal-border);
+    border-left: 3px solid var(--normal-accent);
+    border-radius: 6px;
+    background: var(--normal-surface);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message.user .role,
+body:not(.admin-page)[data-theme^="normal-"] .message.assistant .role {
+    color: var(--normal-muted);
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message.assistant {
+    padding: 3px 13px;
+    border-left: 2px solid var(--normal-border);
+    border-radius: 0;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message-reasoning {
+    border-color: var(--normal-border);
+    color: var(--normal-muted);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .message.assistant pre {
+    border-color: var(--normal-border);
+    border-radius: 5px;
+    background: var(--normal-raised);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] footer {
+    gap: 8px;
+    padding: 12px 16px;
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] footer textarea {
+    padding: 9px 10px;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .telemetry.active,
+body:not(.admin-page)[data-theme^="normal-"] .completion-notice {
+    color: var(--normal-muted);
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .chat-context-menu {
+    border-color: var(--normal-border);
+    border-radius: 6px;
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .chat-context-menu button {
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .chat-context-menu button:hover {
+    background: var(--normal-raised);
+}
+
+@media (max-width: 600px) {
+    body:not(.admin-page)[data-theme^="normal-"] header {
+        padding: 9px 12px;
+    }
+
+    body:not(.admin-page)[data-theme^="normal-"] #chatList {
+        width: 170px;
+        min-width: 170px;
+        padding: 10px 7px;
+    }
+
+    body:not(.admin-page)[data-theme^="normal-"] #chat {
+        padding: 12px;
+    }
+
+    body:not(.admin-page)[data-theme^="normal-"] footer {
+        padding: 10px;
+    }
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .phosphor-brand {
+    display: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .normal-brand {
+    display: inline;
+}
+
+body:not(.admin-page):not([data-theme^="normal-"]) .normal-brand {
+    display: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .settings-drawer {
+    max-height: min(55vh, 560px);
+    overflow-y: auto;
+    border-bottom: 1px solid var(--normal-border);
+    background: var(--normal-surface);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .settings-drawer > .settings {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .chat-model-picker {
+    padding: 10px 18px;
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .chat-model-picker small {
+    color: var(--normal-muted);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .prompt-wrap {
+    border-color: var(--normal-border);
+    border-radius: 5px;
+    background: var(--normal-bg);
+    box-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .prompt-wrap:focus-within {
+    border-color: var(--normal-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--normal-accent) 20%, transparent);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .prompt-marker {
+    color: var(--normal-muted);
+    text-shadow: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #prompt {
+    font: inherit;
+    color: var(--normal-text);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #prompt::placeholder {
+    color: var(--normal-muted);
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] label[for="attachment"] {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 7px 11px;
+    border: 1px solid var(--normal-border);
+    border-radius: 5px;
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    font-size: 0.9rem;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #attachmentName {
+    color: var(--normal-muted);
+    font-size: 0.85rem;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #newChat,
+body:not(.admin-page)[data-theme^="normal-"] #newChat:hover,
+body:not(.admin-page)[data-theme^="normal-"] #newChat:active,
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton,
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton:hover,
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton:active,
+body:not(.admin-page)[data-theme^="normal-"] label[for="attachment"] {
+    box-shadow: none;
+    text-shadow: none;
+    filter: none;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #newChat,
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton {
+    border-color: var(--normal-border);
+    background: var(--normal-surface);
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #newChat:hover,
+body:not(.admin-page)[data-theme^="normal-"] #adminConsoleButton:hover {
+    background: var(--normal-raised);
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginScreen:not([hidden]) {
+    background: var(--normal-bg);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginForm {
+    border-color: var(--normal-border);
+    border-radius: 8px;
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    box-shadow: 0 8px 24px rgba(16, 24, 40, 0.1);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginForm h2 {
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginForm label {
+    color: var(--normal-text);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginForm button {
+    border-color: var(--normal-accent);
+    background: var(--normal-accent);
+    color: var(--normal-accent-contrast);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] #loginError {
+    color: #b42318;
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog {
+    background: rgba(0, 0, 0, 0.45);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog-panel {
+    border-color: var(--normal-border);
+    border-radius: 8px;
+    background: var(--normal-surface);
+    color: var(--normal-text);
+    box-shadow: 0 12px 32px rgba(16, 24, 40, 0.2);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog-title,
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog-message {
+    color: var(--normal-text);
+}
+
+body:not(.admin-page)[data-theme^="normal-"] .terminal-dialog-input {
+    margin-top: 14px;
+    padding: 9px 10px;
+}
+
+body.admin-page[data-theme^="normal-"] {
+    --normal-admin-bg: #f4f6f9;
+    --normal-admin-surface: #ffffff;
+    --normal-admin-raised: #e9edf3;
+    --normal-admin-text: #263142;
+    --normal-admin-muted: #687386;
+    --normal-admin-border: #d3dae4;
+    --normal-admin-accent: #3569b7;
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: var(--normal-admin-text);
+    color-scheme: light;
+    background: var(--normal-admin-bg);
+}
+
+body.admin-page[data-theme="normal-dark"] {
+    --normal-admin-bg: #171a20;
+    --normal-admin-surface: #20252d;
+    --normal-admin-raised: #2a303a;
+    --normal-admin-text: #e4e8ef;
+    --normal-admin-muted: #a0a9b8;
+    --normal-admin-border: #3a424e;
+    --normal-admin-accent: #6ea3f2;
+    color-scheme: dark;
+}
+
+body.admin-page[data-theme^="normal-"]::before {
+    display: none;
+}
+
+body.admin-page[data-theme^="normal-"] h1,
+body.admin-page[data-theme^="normal-"] h2,
+body.admin-page[data-theme^="normal-"] h3 {
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    text-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-header {
+    border-color: var(--normal-admin-border);
+    background: transparent;
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-header h1,
+body.admin-page[data-theme^="normal-"] .admin-panel h2,
+body.admin-page[data-theme^="normal-"] .admin-panel h3 {
+    color: var(--normal-admin-text);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-status-line,
+body.admin-page[data-theme^="normal-"] .header-side-label,
+body.admin-page[data-theme^="normal-"] .header-gear,
+body.admin-page[data-theme^="normal-"] .field-icon,
+body.admin-page[data-theme^="normal-"] .select-caret,
+body.admin-page[data-theme^="normal-"] .users-count,
+body.admin-page[data-theme^="normal-"] .users-status,
+body.admin-page[data-theme^="normal-"] .users-header,
+body.admin-page[data-theme^="normal-"] .back-link {
+    color: var(--normal-admin-muted);
+    text-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-panel {
+    border-color: var(--normal-admin-border);
+    border-radius: 8px;
+    background: var(--normal-admin-surface);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+}
+
+body.admin-page[data-theme^="normal-"] .field-group label,
+body.admin-page[data-theme^="normal-"] .admin-panel label {
+    color: var(--normal-admin-text);
+    font-size: 0.9rem;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+body.admin-page[data-theme^="normal-"] .input-wrap,
+body.admin-page[data-theme^="normal-"] .select-wrap {
+    border-color: var(--normal-admin-border);
+    border-radius: 5px;
+    background: var(--normal-admin-bg);
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] input,
+body.admin-page[data-theme^="normal-"] select,
+body.admin-page[data-theme^="normal-"] .input-wrap input,
+body.admin-page[data-theme^="normal-"] .select-wrap select {
+    color: var(--normal-admin-text);
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+body.admin-page[data-theme^="normal-"] input::placeholder {
+    color: var(--normal-admin-muted);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+body.admin-page[data-theme^="normal-"] button {
+    border: 1px solid var(--normal-admin-border);
+    border-radius: 5px;
+    background: var(--normal-admin-surface);
+    color: var(--normal-admin-text);
+    box-shadow: none;
+    text-shadow: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    letter-spacing: normal;
+    text-transform: none;
+    clip-path: none;
+}
+
+body.admin-page[data-theme^="normal-"] button:hover {
+    background: var(--normal-admin-raised);
+    color: var(--normal-admin-text);
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .primary-btn,
+body.admin-page[data-theme^="normal-"] .create-user-btn,
+body.admin-page[data-theme^="normal-"] #saveAiConfig,
+body.admin-page[data-theme^="normal-"] .admin-tab.active {
+    border-color: var(--normal-admin-accent);
+    background: var(--normal-admin-accent);
+    color: #ffffff;
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-tabs {
+    border-color: var(--normal-admin-border);
+    border-radius: 6px;
+    background: var(--normal-admin-surface);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-tab {
+    border-color: var(--normal-admin-border);
+    background: var(--normal-admin-surface);
+    color: var(--normal-admin-text);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-tab.active {
+    color: #ffffff;
+}
+
+body.admin-page[data-theme^="normal-"] #usersTable,
+body.admin-page[data-theme^="normal-"] .monitor-card,
+body.admin-page[data-theme^="normal-"] .user-actions-menu {
+    border-color: var(--normal-admin-border);
+    border-radius: 6px;
+    background: var(--normal-admin-surface);
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] #usersTable th,
+body.admin-page[data-theme^="normal-"] #usersTable td,
+body.admin-page[data-theme^="normal-"] .monitor-history th,
+body.admin-page[data-theme^="normal-"] .monitor-history td {
+    border-bottom-color: var(--normal-admin-border);
+    color: var(--normal-admin-text);
+}
+
+body.admin-page[data-theme^="normal-"] #usersTable th,
+body.admin-page[data-theme^="normal-"] #usersTable tbody tr:nth-child(odd),
+body.admin-page[data-theme^="normal-"] #usersTable tbody tr:nth-child(even) {
+    background: var(--normal-admin-raised);
+}
+
+body.admin-page[data-theme^="normal-"] .users-count,
+body.admin-page[data-theme^="normal-"] .users-status,
+body.admin-page[data-theme^="normal-"] #createUserStatus,
+body.admin-page[data-theme^="normal-"] #aiModelState,
+body.admin-page[data-theme^="normal-"] #aiConfigStatus,
+body.admin-page[data-theme^="normal-"] #aiRestartStatus,
+body.admin-page[data-theme^="normal-"] #monitorStatus,
+body.admin-page[data-theme^="normal-"] .monitor-card span,
+body.admin-page[data-theme^="normal-"] .monitor-card strong,
+body.admin-page[data-theme^="normal-"] .monitor-history th {
+    color: var(--normal-admin-muted);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-panel :is(input, select, textarea) {
+    border-color: var(--normal-admin-border);
+    border-radius: 5px;
+    background: var(--normal-admin-bg);
+    color: var(--normal-admin-text);
+    box-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-panel :is(input, select, textarea):focus {
+    border-color: var(--normal-admin-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--normal-admin-accent) 20%, transparent);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-shell {
+    color: var(--normal-admin-text);
+}
+
+body.admin-page[data-theme^="normal-"] .admin-panel p,
+body.admin-page[data-theme^="normal-"] .admin-panel td,
+body.admin-page[data-theme^="normal-"] .admin-panel th,
+body.admin-page[data-theme^="normal-"] .admin-panel a {
+    color: var(--normal-admin-text);
+    text-shadow: none;
+}
+
+body.admin-page[data-theme^="normal-"] .admin-panel :is(.status, [role="status"], .muted) {
+    color: var(--normal-admin-muted);
+}
+
+body.admin-page[data-theme^="normal-"] .terminal-dialog {
+    background: rgba(0, 0, 0, 0.45);
+}
+
+body.admin-page[data-theme^="normal-"] .terminal-dialog-panel {
+    border-color: var(--normal-admin-border);
+    border-radius: 8px;
+    background: var(--normal-admin-surface);
+    color: var(--normal-admin-text);
+    box-shadow: 0 12px 32px rgba(16, 24, 40, 0.2);
+}
+
+body.admin-page[data-theme^="normal-"] .terminal-dialog-title,
+body.admin-page[data-theme^="normal-"] .terminal-dialog-message {
+    color: var(--normal-admin-text);
+    text-shadow: none;
+}
+
+body.admin-page[data-theme="normal-light"] #saveAiConfig,
+body.admin-page[data-theme="normal-light"] .primary-btn,
+body.admin-page[data-theme="normal-light"] .create-user-btn {
+    color: #ffffff;
+}
+.provider-model-row { display:flex; flex-wrap:wrap; gap:.75rem; min-width:0; margin:.75rem 0; }
+.provider-model-row legend { overflow-wrap:anywhere; max-width:100%; }
+.provider-model-row label { display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+.provider-model-row input { max-width:100%; min-width:0; }

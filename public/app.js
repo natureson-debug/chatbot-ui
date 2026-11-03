@@ -10,6 +10,7 @@ const settingsPanel = document.getElementById("settingsPanel");
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
 const themeSelect = document.getElementById("theme");
+const userSettingsStatus = document.getElementById("userSettingsStatus");
 const temperatureInput = document.getElementById("temperature");
 const maxTokensInput = document.getElementById("maxTokens");
 const statusText = document.getElementById("status");
@@ -27,8 +28,8 @@ attachmentInput.addEventListener("change", () => {
     const file = attachmentInput.files[0];
 
     if (file && (
-        !file.name.toLowerCase().endsWith(".txt") ||
-        file.size > 100 * 1024
+        ! /\.(txt|pdf|docx|png|jpe?g)$/i.test(file.name) ||
+        file.size > (/\.txt$/i.test(file.name) ? 100 * 1024 : 8 * 1024 * 1024)
     )) {
         if (typeof terminalAlert === "function") {
             terminalAlert("Please select a .txt file no larger than 100 KB.", "ATTACHMENT ERROR");
@@ -58,10 +59,11 @@ async function readSelectedAttachment() {
     const file = attachmentInput.files[0];
     if (!file) return null;
 
-    return {
-        name: file.name,
-        content: await file.text()
-    };
+    if (/\.txt$/i.test(file.name)) return {name:file.name,content:await file.text()};
+    const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error('Attachment read failed'));reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(file);});
+    const response=await fetch('/api/attachments',{method:'POST',headers:{'Content-Type':'application/json','X-Chatbot-Action':'extensions'},body:JSON.stringify({name:file.name,base64})});
+    if(!response.ok)throw Error('Unsupported attachment or extraction failed');const item=await response.json();
+    return {name:item.name,content:'[Chatbot attachment: '+item.id+']'};
 }
 
 chatActionsToggle.addEventListener("click", (event) => {
@@ -104,8 +106,10 @@ async function loadAiRuntime() {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        const runtime = await response.json();
+        let runtime = await response.json();
+        runtime = globalThis.chatModelSelector?.runtime() || runtime;
         if (epoch !== sessionEpoch) return;
+        if (typeof globalThis.loadExtensionChoices === "function") await globalThis.loadExtensionChoices(runtime.capabilities);
 
         if (
             Number.isInteger(runtime.contextLimit) &&
@@ -113,6 +117,7 @@ async function loadAiRuntime() {
         ) {
             contextLimit = runtime.contextLimit;
         }
+        if (runtime.connectionId && runtime.contextLimit === null) contextLimit = null;
         if (typeof runtime.modelName === "string" && runtime.modelName.trim()) {
             activeModelName = runtime.modelName.trim();
         }
@@ -148,6 +153,7 @@ async function loadUserSettings() {
         temperatureInput.value = settings.temperature;
         maxTokensInput.value = settings.maxTokens;
         thinkingToggle.checked = settings.thinking;
+        if(globalThis.chatModelSelector) await globalThis.chatModelSelector.load(settings.modelSelection,()=>epoch===sessionEpoch);
 
     } catch (error) {
         if (epoch !== sessionEpoch) return;
@@ -163,7 +169,8 @@ async function loadUserSettings() {
 }    
 
 function applyTheme(theme) {
-    document.body.dataset.theme = theme === "light" ? "light" : "dark";
+    const supportedThemes = ["dark", "light", "normal-dark", "normal-light"];
+    document.body.dataset.theme = supportedThemes.includes(theme) ? theme : "dark";
 }
 
 let chatStore = {
@@ -259,6 +266,7 @@ function invalidateGeneration(chatId = null) {
 }
 function replaceSession() {
     sessionEpoch++;
+    globalThis.chatModelSelector?.reset();
     invalidateGeneration();
     return sessionEpoch;
 }
@@ -279,6 +287,16 @@ async function checkHealth() {
     } catch {
         statusText.textContent = "Disconnected";
     }
+}
+
+function formatPartialTelemetry(t) {
+    const number = (key, digits) => typeof t[key] === "number" && Number.isFinite(t[key]) && t[key] >= 0
+        ? (digits === undefined ? String(t[key]) : t[key].toFixed(digits)) : "N/A";
+    const used=Number.isSafeInteger(t.contextUsedTokens)&&t.contextUsedTokens>=0?t.contextUsedTokens.toLocaleString('en-US'):null;
+    const capacity=Number.isSafeInteger(t.contextCapacityTokens)&&t.contextCapacityTokens>0?t.contextCapacityTokens.toLocaleString('en-US'):null;
+    const context=used===null&&capacity===null?'N/A':(used??'N/A')+' / '+(capacity??'N/A');
+    return 'Generated: '+number('generatedTokens')+' \u2022 '+number('generationSpeed',1)+' t/s \u2022 '+
+        number('generationSeconds',2)+' s | Context: '+context+' \u2022 Cached: '+number('cachedTokens')+' \u2022 Prompt: '+number('promptTokens');
 }
 
 function addMessage(role, content = "", mount = true) {
@@ -327,7 +345,7 @@ function addMessage(role, content = "", mount = true) {
         chat.scrollTop = chat.scrollHeight;
     }
 
-    return {container, text, telemetry, thinking, reasoning, notice};
+    return {container, text, telemetry, thinking, reasoning, notice, roleLabel};
 }
 
 function addCodeCopyButtons(messageElement) {
@@ -403,16 +421,11 @@ function restoreChat() {
                     marked.parse(message.content)
                 );
             addCodeCopyButtons(restoredMessage.text);
+            if(message.telemetry?.model)restoredMessage.roleLabel.textContent=[message.telemetry.provider,message.telemetry.model].filter(Boolean).join(" / ");
             if (message.telemetry) {
                 const t = message.telemetry;
 
-                restoredMessage.telemetry.textContent =
-                    `Generated: ${t.generatedTokens} • ` +
-                    `${t.generationSpeed.toFixed(1)} t/s • ` +
-                    `${t.generationSeconds.toFixed(2)} s | ` +
-                    `Context: ${t.contextTokens}/${t.contextLimit} • ` +
-                    `Cached: ${t.cachedTokens} • ` +
-                    `Prompt: ${t.promptTokens}`;
+                restoredMessage.telemetry.textContent = formatPartialTelemetry(t);
             }
         }
     });
@@ -717,6 +730,8 @@ async function sendMessage() {
     const originMessages = originChat.messages;
     const requestHistory = originMessages.map(({ role, content }) => ({ role, content }));
     const thinkingEnabled = thinkingToggle.checked;
+    const selectedModel = globalThis.chatModelSelector?.capture();
+    const extensionSelection = typeof globalThis.readExtensionSelection === "function" ? globalThis.readExtensionSelection() : {skillIds:[],useTools:false};
     const generationSettings = {
         systemPrompt: systemPromptBox.value.trim(),
         temperature: Number(temperatureInput.value),
@@ -829,6 +844,8 @@ try {
     const telemetryElement = 
         assistantMessage.telemetry;
     let responseTelemetry = null;
+    let responseIdentity = {};
+    let generationContextLimit = contextLimit;
 
     let assistantText = "";
     let reasoningText = "";
@@ -854,7 +871,10 @@ try {
                 ],
                 enable_thinking: thinkingEnabled,
                 temperature: generationSettings.temperature,
-                max_tokens: generationSettings.maxTokens
+                max_tokens: generationSettings.maxTokens,
+                skillIds: extensionSelection.skillIds,
+                useTools: extensionSelection.useTools,
+                ...(selectedModel ? {selection:selectedModel} : {})
             }),
             signal: generation.controller.signal,
         });
@@ -867,62 +887,33 @@ try {
         }
 
         if (!generationIsValid(generation)) return;
+        const requestModel = response.headers?.get?.("X-Chat-Model");
+        if (requestModel) { try { assistantMessage.roleLabel.textContent = decodeURIComponent(requestModel); } catch {} }
+        const requestProvider = response.headers?.get?.("X-Chat-Provider");
+        if(requestModel){try{responseIdentity={model:decodeURIComponent(requestModel),provider:requestProvider?decodeURIComponent(requestProvider):''};assistantMessage.roleLabel.textContent=[responseIdentity.provider,responseIdentity.model].filter(Boolean).join(' / ');}catch{}}
+        const requestContext = response.headers?.get?.("X-Chat-Context");
+        if (requestContext && requestContext !== "local") generationContextLimit = /^\d+$/.test(requestContext) ? Number(requestContext) : null;
         await readAssistantStream(response.body.getReader(), (chunk) => {
             if (!generationIsValid(generation)) throw new DOMException("Obsolete generation", "AbortError");
+            if (chunk.toolActivity && isOriginVisible()) statusText.textContent = 'Tool '+String(chunk.toolActivity.name).slice(0,80)+': '+String(chunk.toolActivity.state).slice(0,30);
             if (chunk.choices?.[0]?.finish_reason != null) {
                 finishReason = chunk.choices[0].finish_reason;
             }
-                        if (chunk.timings && ["predicted_n", "predicted_per_second", "predicted_ms", "cache_n", "prompt_n"].every(
-                            key => Number.isFinite(chunk.timings[key]))) {
-                            const timings = chunk.timings;
-
-                            const generatedTokens =
-                                timings.predicted_n;
-
-                            const generationSpeed =
-                                timings.predicted_per_second;
-
-                            const generationSeconds =
-                                timings.predicted_ms / 1000;
-
-                            const contextTokens =
-                                timings.cache_n +
-                                timings.prompt_n +
-                                timings.predicted_n;
-
-                            const contextPercent =
-                                (contextTokens / contextLimit) * 100;
-                                
-                            const cachedTokens =
-                                timings.cache_n;
-
-                            const promptTokens =
-                                timings.prompt_n;
-
-                                responseTelemetry = {
-                                generatedTokens,
-                                generationSpeed,
-                                generationSeconds,
-                                contextTokens,
-                                contextLimit,
-                                cachedTokens,
-                                promptTokens,
-                                timestamp: new Date().toISOString()
-                                };
-
-                            telemetryElement.textContent =
-                                `Generated: ${generatedTokens} • ` +
-                                `${generationSpeed.toFixed(1)} t/s • ` +
-                                `${generationSeconds.toFixed(2)} s | ` +
-                                `Context: ${contextTokens}/${contextLimit} ` +
-                                `(${contextPercent.toFixed(1)}%) • ` +
-                                `Cached: ${cachedTokens} • ` +
-                                `Prompt: ${promptTokens}`;
-
-                            telemetryElement.classList.add("active");
-
-                        }
-
+            if (chunk.telemetry && typeof chunk.telemetry === "object") {
+                responseTelemetry = {...responseIdentity};
+                for (const key of ["generatedTokens", "generationSpeed", "generationSeconds", "promptTokens", "cachedTokens", "promptSeconds", "totalSeconds", "loadSeconds"]) {
+                    const value = chunk.telemetry[key];
+                    responseTelemetry[key] = typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+                }
+                for(const key of ['contextUsedTokens','contextCapacityTokens']){
+                    const value=chunk.telemetry[key];responseTelemetry[key]=Number.isSafeInteger(value)&&value>=(key==='contextCapacityTokens'?1:0)?value:null;
+                }
+                responseTelemetry.contextTokens = null;
+                responseTelemetry.contextLimit = null;
+                responseTelemetry.timestamp = new Date().toISOString();
+                telemetryElement.textContent = formatPartialTelemetry(responseTelemetry);
+                telemetryElement.classList.add("active");
+            }
                     const delta =
                         chunk.choices?.[0]?.delta;
 
@@ -970,7 +961,7 @@ try {
         assistantMessage.notice.hidden = !assistantMessage.notice.textContent;
         try {
             if (assistantText.trim()) {
-                const savedMessage = { role: "assistant", content: assistantText, telemetry: responseTelemetry };
+                const savedMessage = { role: "assistant", content: assistantText, telemetry: {...responseIdentity,...responseTelemetry} };
                 originMessages.push(savedMessage);
                 assistantViews.set(savedMessage, assistantMessage);
                 generation.saved = true;
@@ -1023,16 +1014,21 @@ promptBox.addEventListener(
     }
 );
 
+let userSettingsSaveQueue = Promise.resolve();
+
 async function saveUserSettings() {
     const settings = {
         systemPrompt: systemPromptBox.value,
         theme: themeSelect.value,
         temperature: Number(temperatureInput.value),
         maxTokens: Number(maxTokensInput.value),
-        thinking: thinkingToggle.checked
+        thinking: thinkingToggle.checked,
+        modelSelection: globalThis.chatModelSelector?.capture() ?? null
     };
 
-    try {
+    const save = userSettingsSaveQueue.then(async () => {
+        userSettingsStatus.hidden = false;
+        userSettingsStatus.textContent = "Saving settings...";
         const response = await fetch("/api/settings", {
             method: "POST",
             headers: {
@@ -1042,16 +1038,22 @@ async function saveUserSettings() {
             body: JSON.stringify(settings)
         });
 
+        const result = await response.json();
         if (!response.ok) {
-            const result = await response.json();
             throw new Error(
                 result.error || `HTTP ${response.status}`
             );
         }
 
-    } catch (error) {
+        userSettingsStatus.textContent = "Settings saved.";
+    }).catch(error => {
         console.error("Failed to save user settings:", error);
-    }
+        userSettingsStatus.hidden = false;
+        userSettingsStatus.textContent = `Settings could not be saved: ${error.message}`;
+    });
+
+    userSettingsSaveQueue = save;
+    return save;
 }
 
 systemPromptBox.addEventListener("change", saveUserSettings);

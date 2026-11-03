@@ -9,5 +9,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "mammoth": "1.13.0",
+    "pdfjs-dist": "6.5.438"
+  }
 }

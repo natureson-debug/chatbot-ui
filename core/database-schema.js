@@ -44,7 +44,7 @@ db.exec(`
         thinking INTEGER NOT NULL DEFAULT 0
             CHECK (thinking IN (0, 1)),
         theme TEXT NOT NULL DEFAULT 'dark'
-            CHECK (theme IN ('dark', 'light')),
+            CHECK (theme IN ('dark', 'light', 'normal-dark', 'normal-light')),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -58,7 +58,38 @@ if (!userSettingsColumns.some((column) => column.name === "theme")) {
     db.exec(`
         ALTER TABLE user_settings
         ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'
-            CHECK (theme IN ('dark', 'light'))
+            CHECK (theme IN ('dark', 'light', 'normal-dark', 'normal-light'))
+    `);
+}
+
+if (!userSettingsColumns.some(column=>column.name==='model_selection')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN model_selection TEXT');
+}
+
+const userSettingsSql = db.prepare(`
+    SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_settings'
+`).get()?.sql || "";
+
+if (!userSettingsSql.includes("'normal-dark'")) {
+    db.exec(`
+        ALTER TABLE user_settings RENAME TO user_settings_legacy;
+        CREATE TABLE user_settings (
+            user_id TEXT PRIMARY KEY,
+            system_prompt TEXT NOT NULL DEFAULT '',
+            temperature REAL NOT NULL DEFAULT 0.7,
+            max_tokens INTEGER NOT NULL DEFAULT 4096,
+            thinking INTEGER NOT NULL DEFAULT 0 CHECK (thinking IN (0, 1)),
+            theme TEXT NOT NULL DEFAULT 'dark'
+                CHECK (theme IN ('dark', 'light', 'normal-dark', 'normal-light')),
+            model_selection TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO user_settings (
+            user_id, system_prompt, temperature, max_tokens, thinking, theme, model_selection
+        )
+        SELECT user_id, system_prompt, temperature, max_tokens, thinking, theme, model_selection
+        FROM user_settings_legacy;
+        DROP TABLE user_settings_legacy;
     `);
 }
 

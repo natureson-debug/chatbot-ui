@@ -17,10 +17,6 @@
 
 <body>
 
-<div id="bootScreen" aria-hidden="true">
-    <pre id="bootLog"></pre>
-</div>
-
 <div id="crtFlicker" aria-hidden="true"></div>
 
 <section id="loginScreen">
@@ -56,7 +52,7 @@
             <img src="/favicon.png" alt="Chatbot" class="header-icon">
 
             <div class="brand-block">
-                <h1>ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL</h1>
+                <h1><span class="phosphor-brand">ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL</span><span class="normal-brand">CHATBOT</span></h1>
                 <div class="status-line">
                     <span id="status">Connecting...</span>
                     <span id="terminalClock" aria-label="Current time">--:--:--</span>
@@ -81,7 +77,14 @@
         </div>
     </header>
 
-    <section id="settingsPanel" class="settings" hidden>
+    <div id="settingsPanel" class="settings-drawer" hidden>
+    <section aria-label="Skills and tools" class="settings">
+<label for="activeSkills">Active skills (select up to 3)</label><select id="activeSkills" multiple size="3" aria-label="Active skills"></select>
+<label><input id="useTools" type="checkbox" disabled>Allow approved read-only tools for this request</label>
+<p>Skill instructions, documents and search results cannot grant tool permissions. Images require a vision-capable connection.</p>
+</section>
+<div class="chat-model-picker"><label for="chatModelSelect">AI model</label><select id="chatModelSelect" aria-describedby="chatModelStatus"><option value="">Application default</option></select><small id="chatModelStatus" role="status">Existing conversation history is retained when switching models.</small></div>
+<section class="settings">
         <label for="systemPrompt">System Prompt</label>
 
         <textarea
@@ -96,6 +99,8 @@
                 <select id="theme">
                     <option value="dark">Green Phosphor</option>
                     <option value="light">Amber Phosphor</option>
+                    <option value="normal-dark">Normal - Dark</option>
+                    <option value="normal-light">Normal - Light</option>
                 </select>
             </div>
 
@@ -123,7 +128,9 @@
                 >
             </div>
         </div>
+        <p id="userSettingsStatus" role="status" aria-live="polite" hidden></p>
     </section>
+    </div>
 
     <div id="activeChatHeader" class="active-chat-header" aria-live="polite">
     <span id="activeChatTitle"></span>
@@ -164,11 +171,11 @@
             ></textarea>
         </div>
 
-<label for="attachment" title="Attach a text file">📎 Attach</label>
+<label for="attachment" title="Attach text, PDF, DOCX, PNG or JPEG">📎 Attach</label>
 <input
     id="attachment"
     type="file"
-    accept=".txt,text/plain"
+    accept=".txt,.pdf,.docx,.png,.jpg,.jpeg"
     hidden
 >
 
@@ -202,6 +209,8 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 <script src="/terminal.js"></script>
+<script src="/extensions.js"></script>
+<script src="/model-selector.js"></script>
 <script src="/app.js"></script>
 
 </body>

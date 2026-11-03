@@ -1,7 +1,15 @@
 const { API_KEY_FILE, AI_CONFIG_FILE, MODELS_DIR } = require("./paths");
 
 const HOST = "127.0.0.1";
-const PORT = 3000;
+const PORT = (() => {
+    const raw = process.env.CHATBOT_PORT;
+    if (raw === undefined || raw === "") return 3000;
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error("CHATBOT_PORT must be an integer from 1 to 65535");
+    }
+    return port;
+})();
 
 const LLAMA_BIND_HOST = "127.0.0.1";
 const LLAMA_PORT = 8080;

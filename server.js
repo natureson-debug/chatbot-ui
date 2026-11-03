@@ -10,6 +10,8 @@ const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSes
 const {
     HOST, PORT, LLAMA_URL, LLAMA_BIND_HOST, LLAMA_PORT, AI_CONFIG_FILE, MODELS_DIR
 } = require("./core/config");
+const connections = require("./core/connections");
+const providers = require("./core/provider-adapter");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const { createChatCompletion, getHealth, getReportedModel } = require("./core/llama-client");
@@ -28,6 +30,41 @@ const contentTypes = {
     ".js": "application/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8"
 };
+
+function buildLegacyProvider() {
+    const aiConfig = JSON.parse(
+        fs.readFileSync(AI_CONFIG_FILE, "utf8")
+    );
+    const availableModels = fs.readdirSync(MODELS_DIR)
+        .filter(file => file.toLowerCase().endsWith(".gguf"));
+
+    if (
+        !aiConfig ||
+        typeof aiConfig.model !== "string" ||
+        !availableModels.includes(aiConfig.model)
+    ) {
+        throw new Error("Invalid AI model");
+    }
+
+    return {
+        id: "legacy-local",
+        name: "Local llama.cpp",
+        adapter: "llama.cpp",
+        endpoint: LLAMA_URL.replace(/\/chat\/completions$/i, ""),
+        model: path.join(MODELS_DIR, aiConfig.model),
+        credentialRef: "local-api-key",
+        parameters: ["temperature", "max_tokens"],
+        capabilities: {
+            streaming: true,
+            thinking: true,
+            vision: false,
+            tools: false,
+            models: false
+        },
+        contextLimit: Math.floor(aiConfig.contextSize / aiConfig.parallel),
+        legacy: true
+    };
+}
 
 function serveFile(res, filePath) {
     return new Promise((resolve, reject) => {
@@ -119,6 +156,11 @@ if (req.method === "GET" && req.url === "/api/chats") {
     return;
 }
 
+if (req.url.startsWith('/api/attachments') || req.url.startsWith('/api/admin/extensions') || req.url === '/api/extensions') {
+    const originalToken=getSessionToken(req), user=getAuthenticatedUser(req);
+    if(await require('./core/extension-routes').handle(req,res,{user,revalidate:()=>{const current=getSessionUser(db,originalToken);return !!current&&current.id===user?.id&&current.is_admin===user?.is_admin;}}))return;
+}
+
 // Authenticated AI runtime information
 if (req.method === "GET" && req.url === "/api/ai/runtime") {
     const user = getAuthenticatedUser(req);
@@ -134,6 +176,12 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
     }
 
     try {
+        const selected = await connections.selected();
+        if (selected) {
+            res.writeHead(200, {"Content-Type":"application/json", "Cache-Control":"no-store"});
+            res.end(JSON.stringify({connectionId:selected.id,modelName:selected.model,contextLimit:selected.contextLimit,capabilities:providers.usable(selected),source:"provider-declared"}));
+            return;
+        }
         const config = JSON.parse(
             fs.readFileSync(AI_CONFIG_FILE, "utf8")
         );
@@ -169,6 +217,16 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
     }
 
     return;
+}
+
+// Authenticated catalog: only administrator-configured chat models, no secrets.
+if (req.method === "GET" && req.url === "/api/ai/models") {
+ const user=getAuthenticatedUser(req);if(!user){res.writeHead(401);res.end();return;}
+ try{const config=await connections.read();const legacy=config.defaultId==='legacy-local'?buildLegacyProvider():null;
+ if(!getAuthenticatedUser(req)){res.writeHead(401);res.end();return;}
+ const catalog=require('./core/chat-models');
+ res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify({defaultId:config.defaultId,default:catalog.defaultChoice(config,legacy),models:catalog.choices(config,legacy)}));
+ }catch{res.writeHead(503);res.end(JSON.stringify({error:'Model list unavailable'}));}return;
 }
 
 // Authenticated user settings
@@ -671,14 +729,25 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
         }
 
         try {
+            let selectedConnection = await connections.selected();
+            let provider = selectedConnection;
             let body = "";
 
             for await (const chunk of req) {
                 body += chunk;
+                if (body.length > 2 * 1024 * 1024) throw Error("Request too large");
             }
 
             const clientRequest = JSON.parse(body);
+            if (clientRequest.selection !== undefined) {
+                try {
+                    const registry=await connections.read();
+                    provider=require('./core/chat-models').resolve(registry,clientRequest.selection,clientRequest.selection?.providerId==='legacy-local'&&registry.defaultId==='legacy-local'?buildLegacyProvider():null);
+                    selectedConnection=provider.legacy?null:provider;
+                } catch {res.writeHead(400,{"Content-Type":"application/json"});res.end(JSON.stringify({error:"Selected model is unavailable; reload the model list",code:"MODEL_SELECTION_UNAVAILABLE"}));return;}
+            }
 
+            if (!provider) provider=buildLegacyProvider();
             if (!Array.isArray(clientRequest.messages)) {
                 res.writeHead(400, {
                     "Content-Type": "application/json"
@@ -691,33 +760,13 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 return;
             }
 
-            const aiConfig = JSON.parse(
-                fs.readFileSync(AI_CONFIG_FILE, "utf8")
-            );
-            const availableModels = fs.readdirSync(MODELS_DIR)
-                .filter(file => file.toLowerCase().endsWith(".gguf"));
-
-            if (
-                !aiConfig ||
-                typeof aiConfig.model !== "string" ||
-                !availableModels.includes(aiConfig.model)
-            ) {
-                throw new Error("Invalid AI model");
+            if (clientRequest.messages.some(m=>typeof m?.content==='string'&&m.content.includes('[Chatbot attachment:'))) clientRequest.messages=await require('./core/attachments').expand(user.id,clientRequest.messages,selectedConnection?providers.usable(selectedConnection).vision:false);
+            let extensionConfig;
+            if(clientRequest.skillIds?.length || clientRequest.useTools){
+                const extensions=require('./core/extensions');extensionConfig=await extensions.read();
+                if(clientRequest.skillIds?.length)clientRequest.messages=[...extensions.activateSkills(extensionConfig.skills,clientRequest.skillIds,user.id),...clientRequest.messages];
+                if(clientRequest.useTools&&(!selectedConnection||!providers.usable(selectedConnection).tools))throw Error('Selected connection does not support tool calling');
             }
-
-            const llamaRequest = {
-                model: path.join(MODELS_DIR, aiConfig.model),
-                messages: clientRequest.messages,
-                temperature: clientRequest.temperature ?? 0.7,
-                max_tokens: clientRequest.max_tokens ?? 512,
-                stream: true,
-
-                chat_template_kwargs: {
-                    enable_thinking:
-                        clientRequest.enable_thinking ?? false
-                }
-            };
-
             const controller = new AbortController();
 
             const onDisconnect = () => {
@@ -729,9 +778,15 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
             res.on("close", onDisconnect);
 
             try {
-                const upstream = await createChatCompletion(llamaRequest, {
-                    signal: controller.signal
-                });
+                if(clientRequest.useTools){
+                    const extensions=require('./core/extensions');
+                    res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-cache","X-Chat-Connection":selectedConnection.id,"X-Chat-Model":encodeURIComponent(selectedConnection.model),"X-Chat-Provider":encodeURIComponent(selectedConnection.name),"X-Chat-Context":String(selectedConnection.contextLimit??"unknown")});
+                    const emit=data=>{if(!res.destroyed)res.write('data: '+JSON.stringify(data)+'\n\n');};
+                    const final=await extensions.runToolLoop({complete:input=>providers.complete(selectedConnection,input,{signal:controller.signal}),messages:clientRequest.messages,policy:extensions.policy(extensionConfig),user:user.id,operationId:require('node:crypto').randomUUID(),signal:controller.signal,onActivity:toolActivity=>emit({toolActivity})});
+                    if(typeof final.content!=='string'||!final.content.trim())throw Error('No final tool answer');
+                    emit({choices:[{delta:{content:final.content},finish_reason:'stop'}],telemetry:final.telemetry});if(!res.destroyed)res.end('data: [DONE]\n\n');return;
+                }
+                const upstream = await providers.chat(provider, clientRequest, {signal:controller.signal});
 
                 if (!upstream.ok) {
                     await upstream.body?.cancel();
@@ -748,6 +803,10 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
 
                 res.writeHead(200, {
                     "Content-Type": "text/event-stream",
+                    "X-Chat-Connection": selectedConnection?.id || provider.id,
+                    "X-Chat-Model": encodeURIComponent(selectedConnection?.model || provider.model),
+                    "X-Chat-Provider": encodeURIComponent(provider.name),
+                    "X-Chat-Context": selectedConnection ? String(selectedConnection.contextLimit ?? "unknown") : "local",
                     "Cache-Control": "no-cache",
                     "Connection": "keep-alive"
                 });
@@ -1348,6 +1407,34 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
     });
     res.end(JSON.stringify(blockedActivation()));
 
+    return;
+}
+
+// Named connection administration; credentials are references, never values.
+if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/check$/.test(req.url)) {
+    const token = getSessionToken(req), admin = getAuthenticatedUser(req);
+    const reply = (status, data) => {res.writeHead(status,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify(data));};
+    if (!admin || admin.is_admin !== 1) {reply(admin?403:401,{error:"Administrator access required"});return;}
+    try {
+        if(req.method==="GET"&&req.url==="/api/admin/ai/connections/presets"){reply(200,require("./core/provider-presets.json"));return;}
+        if (req.method === "GET" && req.url === "/api/admin/ai/connections") {
+            const config=await connections.read();const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}reply(200,config);return;
+        }
+        if (req.method === "POST") {
+            if (!require("./core/restart-request").validRestartRequest({...req,headers:{...req.headers,"x-chatbot-action":req.headers["x-chatbot-action"]==="configure-connections"?"restart-ai":null}})) {reply(403,{error:"Same-origin request required"});return;}
+            let text="";for await(const chunk of req){text+=chunk;if(text.length>32768)throw Error("Invalid request");}
+            const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}
+            if(req.url === "/api/admin/ai/connections"){reply(200,await connections.save(JSON.parse(text)));return;}
+            const id=req.url.split('/')[5],config=await connections.read(),c=config.connections.find(c=>c.id===id);
+            if(!c){reply(404,{error:"Connection not found"});return;}
+            const result=await providers.testConnection(c,{signal:AbortSignal.timeout(8000)});
+            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}reply(200,{models:result.models,usable:result.capabilities});return;
+        }
+        reply(405,{error:"Method not allowed"});
+    } catch(error) {
+        if(error?.message==='CONNECTION_CONFLICT'){reply(409,{error:'Configuration changed; reload.'});}
+        else {reply(400,{error:error instanceof SyntaxError?'Invalid connection configuration JSON.':error?.message||'Connection operation unavailable or invalid.'});}
+    }
     return;
 }
 

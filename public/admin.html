@@ -11,11 +11,7 @@
 
     <link rel="stylesheet" href="/style.css">
 </head>
-<body class="admin-page">
-
-    <div id="bootScreen" aria-hidden="true">
-        <pre id="bootLog"></pre>
-    </div>
+<body class="admin-page" data-theme="dark">
 
     <div id="crtFlicker" aria-hidden="true"></div>
 
@@ -28,6 +24,7 @@
                     <div class="admin-status-line">
                         <span>RESTRICTED ACCESS</span>
                         <span id="terminalClock" aria-label="Current time">--:--:--</span>
+                        <span id="themeLoadStatus" role="status" aria-live="polite" hidden></span>
                     </div>
                 </div>
             </div>
@@ -64,6 +61,26 @@
                 aria-controls="tab-ai"
                 data-tab="ai"
             >Configuration</button>
+
+            <button
+                id="tab-connections-tab"
+                class="admin-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-connections"
+                data-tab="connections"
+            >Connections</button>
+
+            <button
+                id="tab-extensions-tab"
+                class="admin-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-extensions"
+                data-tab="extensions"
+            >Extensions</button>
         </nav>
 
         <main class="admin-main">
@@ -273,6 +290,149 @@
     <p id="aiRestartStatus" role="status"></p>
 </section>
 
+<section
+    id="tab-connections"
+    class="admin-panel connections-panel"
+    role="tabpanel"
+    aria-labelledby="tab-connections-tab"
+    data-admin-tabpanel
+    hidden
+>
+    <div class="users-header">
+        <h2>AI Providers</h2>
+        <button id="newProvider" type="button">New Provider</button>
+    </div>
+
+    <p id="connectionStatus" role="status"></p>
+
+    <div id="providerList" class="provider-list"></div>
+
+    <form id="providerForm" class="provider-form" hidden>
+        <p id="providerProtocolStatus" role="status"></p>
+        <div class="provider-form-grid">
+            <div class="field-group">
+                <label for="providerId">Provider ID</label>
+                <input id="providerId" type="text" placeholder="e.g. mac-mini-ollama" autocomplete="off" required>
+            </div>
+            <div class="field-group">
+                <label for="providerName">Display name</label>
+                <input id="providerName" type="text" placeholder="Mac mini Ollama" required>
+            </div>
+            <div class="field-group">
+                <label for="providerType">Provider type</label>
+                <select id="providerType">
+                    <option value="llama.cpp-openai">llama.cpp / OpenAI-compatible</option>
+                    <option value="ollama">Ollama</option>
+                    <option value="generic-openai">Generic OpenAI-compatible</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="providerEndpoint">Base URL</label>
+                <input id="providerEndpoint" type="url" placeholder="https://api.example.com/v1" required>
+            </div>
+            <div class="field-group">
+                <label for="providerAuthMode">Authentication</label>
+                <select id="providerAuthMode">
+                    <option value="none">None</option>
+                    <option value="env">Environment reference</option>
+                    <option value="local-key">Local llama.cpp key file</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="providerCredentialRef">Credential reference</label>
+                <input id="providerCredentialRef" type="text" placeholder="env:CHATBOT_PROVIDER_KEY">
+                <small>Use a server-provisioned environment reference, never paste an API key. Replace the reference to switch credentials; select None to remove this connection's reference. This does not erase the server environment variable.</small>
+            </div>
+            <div class="field-group">
+                <label for="providerModel">Default model</label>
+                <input id="providerModel" type="text" list="providerModelChoices" placeholder="mistral:latest" required>
+                <datalist id="providerModelChoices"></datalist>
+                <label for="providerBackendIdentity">Backend model identity (llama.cpp, optional)</label>
+                <input id="providerBackendIdentity" type="text" maxlength="4096" autocomplete="off" aria-describedby="backendIdentityHelp">
+                <small id="backendIdentityHelp">Exact model ID or path reported by this backend. Used only to verify telemetry; the default model above remains the inference request identifier. Blank uses that identifier. No backend settings are changed.</small>
+            </div>
+            <div class="field-group">
+                <label for="providerTimeoutMs">Chat timeout (ms)</label>
+                <input id="providerTimeoutMs" type="number" min="1000" max="600000" step="1000" placeholder="120000">
+            </div>
+            <div class="field-group toggle-field">
+                <label class="toggle-control"><input id="providerEnabled" type="checkbox" checked><span>Enabled</span></label>
+            </div>
+            <div class="field-group toggle-field">
+                <label class="toggle-control"><input id="providerPrivateNetwork" type="checkbox"><span>Private-network endpoint</span></label>
+            </div>
+            <div class="field-group toggle-field">
+                <label class="toggle-control"><input id="providerAllowInsecureHttp" type="checkbox"><span>Allow plain HTTP</span></label>
+            </div>
+        </div>
+
+        <section aria-label="Configured models">
+            <h3>Configured models</h3>
+            <p>Discovery provides suggestions only. Approve chat capability and supported parameters for each model. New models are not chat-approved automatically.</p>
+            <label for="providerNewModel">Model ID (manual or discovered)</label>
+            <input id="providerNewModel" type="text" list="providerModelChoices" maxlength="512">
+            <button id="addProviderModel" type="button">Add model</button>
+            <div id="providerConfiguredModels"></div>
+        </section>
+        <div class="provider-capabilities">
+            <span>Capabilities</span>
+            <label class="toggle-control"><input id="providerCapModels" type="checkbox" checked><span>Model discovery</span></label>
+            <label class="toggle-control"><input id="providerCapThinking" type="checkbox"><span>Thinking</span></label>
+            <label class="toggle-control"><input id="providerCapVision" type="checkbox"><span>Vision</span></label>
+            <label class="toggle-control"><input id="providerCapTools" type="checkbox"><span>Tools</span></label>
+        </div>
+
+        <div class="toolbar-row">
+            <button id="saveProvider" type="submit">Save Provider</button>
+            <button id="discoverProvider" type="button">Discover Models</button>
+            <button id="cancelProvider" type="button">Cancel</button>
+        </div>
+        <p id="providerDiscoverStatus" role="status"></p>
+    </form>
+
+</section>
+
+<section
+    id="tab-extensions"
+    class="admin-panel extensions-panel"
+    role="tabpanel"
+    aria-labelledby="tab-extensions-tab"
+    data-admin-tabpanel
+    hidden
+>
+    <div class="users-header">
+        <h2>Skills, search and MCP tools</h2>
+    </div>
+
+    <p>Only administrator-approved, read-only MCP tools can be enabled. Skill instructions and attached documents cannot grant tool permissions.</p>
+
+    <div class="field-group">
+        <label for="extensionConfig">Extension configuration</label>
+        <textarea
+            id="extensionConfig"
+            class="code-editor"
+            rows="18"
+            spellcheck="false"
+        ></textarea>
+    </div>
+
+    <div class="toolbar-row">
+        <button id="reloadExtensions" type="button">Reload</button>
+        <button id="saveExtensions" type="button">Save</button>
+
+        <label for="mcpCheckId">MCP ID</label>
+        <input
+            id="mcpCheckId"
+            type="text"
+            placeholder="mcp-server-id"
+            autocomplete="off"
+        >
+        <button id="checkMcp" type="button">Check MCP</button>
+    </div>
+
+    <p id="extensionStatus" role="status"></p>
+</section>
+
             <a href="/" class="back-link">← Back to Chatbot</a>
         </main>
     </div>
@@ -290,5 +450,7 @@
     <script src="/admin.js" defer></script>
     <script src="/admin-monitor.js" defer></script>
     <script src="/admin-restart.js" defer></script>
+<script src="/admin-connections.js" defer></script>
+<script src="/admin-extensions.js" defer></script>
 </body>
 </html>

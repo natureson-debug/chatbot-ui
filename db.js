@@ -1,6 +1,12 @@
 const { openExistingDatabase, databasePath } = require("./core/database-startup");
 
-const dbPath = databasePath(__dirname);
+const path = require("node:path");
+const configuredDbPath = typeof process !== "undefined" && process.env
+    ? process.env.CHATBOT_DB_PATH
+    : undefined;
+const dbPath = configuredDbPath
+    ? path.resolve(configuredDbPath)
+    : databasePath(__dirname);
 const db = openExistingDatabase(dbPath);
 
 const { randomUUID } = require("node:crypto");
@@ -260,7 +266,7 @@ function getUserSettings(userId) {
     }
 
     let settings = db.prepare(`
-        SELECT system_prompt, temperature, max_tokens, thinking, theme
+        SELECT system_prompt, temperature, max_tokens, thinking, theme, model_selection
         FROM user_settings
         WHERE user_id = ?
     `).get(userId);
@@ -272,7 +278,7 @@ function getUserSettings(userId) {
         `).run(userId);
 
         settings = db.prepare(`
-            SELECT system_prompt, temperature, max_tokens, thinking, theme
+            SELECT system_prompt, temperature, max_tokens, thinking, theme, model_selection
             FROM user_settings
             WHERE user_id = ?
         `).get(userId);
@@ -283,7 +289,8 @@ function getUserSettings(userId) {
         temperature: settings.temperature,
         maxTokens: settings.max_tokens,
         thinking: settings.thinking === 1,
-        theme: settings.theme
+        theme: settings.theme,
+        modelSelection: settings.model_selection ? JSON.parse(settings.model_selection) : null
     };
 }
 
@@ -295,7 +302,8 @@ function saveUserSettings(
         temperature,
         maxTokens,
         thinking,
-        theme
+        theme,
+        modelSelection = null
     }
 ) {
     if (typeof userId !== "string" || !userId.trim()) {
@@ -327,10 +335,11 @@ function saveUserSettings(
         throw new Error("Invalid thinking setting");
     }
 
-    if (theme !== "dark" && theme !== "light") {
-        throw new Error("Theme must be dark or light");
+    if (!["dark", "light", "normal-dark", "normal-light"].includes(theme)) {
+        throw new Error("Invalid theme");
     }
 
+    if(modelSelection!==null && (!modelSelection || typeof modelSelection.providerId!=='string'||modelSelection.providerId.length>48||typeof modelSelection.model!=='string'||modelSelection.model.length>512))throw Error('Invalid model selection');
     db.prepare(`
         INSERT INTO user_settings (
             user_id,
@@ -338,23 +347,25 @@ function saveUserSettings(
             temperature,
             max_tokens,
             thinking,
-            theme
+            theme, model_selection
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
 
         ON CONFLICT(user_id) DO UPDATE SET
             system_prompt = excluded.system_prompt,
             temperature = excluded.temperature,
             max_tokens = excluded.max_tokens,
             thinking = excluded.thinking,
-            theme = excluded.theme
+            theme = excluded.theme,
+            model_selection = excluded.model_selection
     `).run(
         userId,
         systemPrompt,
         temperature,
         maxTokens,
         thinking ? 1 : 0,
-        theme
+        theme,
+        modelSelection===null?null:JSON.stringify({providerId:modelSelection.providerId,model:modelSelection.model})
     );
 }
 

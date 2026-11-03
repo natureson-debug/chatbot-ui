@@ -111,3 +111,28 @@ test('two connections serialize writers and preserve snapshot consistency', () =
         assert.equal(after.revision,2); assert.equal(after.messages.length,0);
     } finally { d2.close(); d1.close(); fs.rmSync(dir,{recursive:true}); }
 });
+
+test('model selection persists per user across repeated schema initialization',t=>{const api=setup(t);const selection={providerId:'configured',model:'model:alias'};api.saveUserSettings('u',{systemPrompt:'unchanged',temperature:.7,maxTokens:32,thinking:false,theme:'dark',modelSelection:selection});assert.equal(api.getUserSettings('u').modelSelection.model,selection.model);load(api.db);assert.equal(api.getUserSettings('u').modelSelection.providerId,'configured');assert.equal(api.getChatHistorySnapshot('a','u').messages.length,0);});
+test('normal themes persist and migrate existing user settings',t=>{
+    const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+    db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,is_admin INTEGER NOT NULL DEFAULT 0);
+        INSERT INTO users VALUES('u','user','unused',0);
+        CREATE TABLE user_settings(
+            user_id TEXT PRIMARY KEY,
+            system_prompt TEXT NOT NULL DEFAULT '',
+            temperature REAL NOT NULL DEFAULT 0.7,
+            max_tokens INTEGER NOT NULL DEFAULT 4096,
+            thinking INTEGER NOT NULL DEFAULT 0 CHECK(thinking IN (0,1)),
+            theme TEXT NOT NULL DEFAULT 'dark' CHECK(theme IN ('dark','light')),
+            model_selection TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO user_settings(user_id,system_prompt,theme) VALUES('u','saved prompt','light');`);
+    const api=load(db);
+    assert.equal(api.getUserSettings('u').systemPrompt,'saved prompt');
+    assert.equal(api.getUserSettings('u').theme,'light');
+    api.saveUserSettings('u',{systemPrompt:'saved prompt',temperature:.7,maxTokens:32,thinking:false,theme:'normal-light'});
+    assert.equal(api.getUserSettings('u').theme,'normal-light');
+    load(db);
+    assert.equal(api.getUserSettings('u').theme,'normal-light');
+});

@@ -1,4 +1,7 @@
+let themeSettingsRequest = 0;
+
 async function loadThemeSettings() {
+    const request = ++themeSettingsRequest;
     try {
         const response = await fetch("/api/settings", {
             credentials: "same-origin",
@@ -10,14 +13,30 @@ async function loadThemeSettings() {
         }
 
         const settings = await response.json();
-        document.body.dataset.theme = settings.theme === "light" ? "light" : "dark";
+        if (request !== themeSettingsRequest) return;
+        const supportedThemes = ["dark", "light", "normal-dark", "normal-light"];
+        document.body.dataset.theme = supportedThemes.includes(settings.theme) ? settings.theme : "dark";
+        const status = document.getElementById("themeLoadStatus");
+        if (status) {
+            status.hidden = true;
+            status.textContent = "";
+        }
     } catch (error) {
+        if (request !== themeSettingsRequest) return;
         console.error("Failed to load user theme:", error);
-        document.body.dataset.theme = "dark";
+        const status = document.getElementById("themeLoadStatus");
+        if (status) {
+            status.hidden = false;
+            status.textContent = "Could not load saved theme.";
+        }
     }
 }
 
 loadThemeSettings();
+window.addEventListener("focus", loadThemeSettings);
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") return loadThemeSettings();
+});
 
 function closeAllUserMenus() {
     document.querySelectorAll(".user-actions-menu").forEach((menu) => {

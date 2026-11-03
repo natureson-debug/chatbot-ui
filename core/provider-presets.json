@@ -1,0 +1,13 @@
+[
+ {"id":"llama.cpp","name":"llama.cpp","adapter":"llama.cpp","endpoint":"","cloud":false},
+ {"id":"ollama","name":"Ollama","adapter":"ollama","endpoint":"","cloud":false},
+ {"id":"openai","name":"OpenAI","adapter":"openai-responses","endpoint":"https://api.openai.com/v1","cloud":true},
+ {"id":"anthropic","name":"Anthropic Claude","adapter":"anthropic-messages","endpoint":"https://api.anthropic.com/v1","cloud":true},
+ {"id":"gemini","name":"Google Gemini","adapter":"gemini-native","endpoint":"https://generativelanguage.googleapis.com/v1beta","cloud":true},
+ {"id":"deepseek","name":"DeepSeek","adapter":"openai-compatible","endpoint":"https://api.deepseek.com","cloud":true},
+ {"id":"groq","name":"Groq","adapter":"openai-compatible","endpoint":"https://api.groq.com/openai/v1","cloud":true},
+ {"id":"mistral","name":"Mistral AI","adapter":"openai-compatible","endpoint":"https://api.mistral.ai/v1","cloud":true},
+ {"id":"openrouter","name":"OpenRouter","adapter":"openai-compatible","endpoint":"https://openrouter.ai/api/v1","cloud":true},
+ {"id":"xai","name":"xAI","adapter":"openai-compatible","endpoint":"https://api.x.ai/v1","cloud":true},
+ {"id":"custom","name":"Custom OpenAI-compatible API","adapter":"openai-compatible","endpoint":"","cloud":false}
+]
