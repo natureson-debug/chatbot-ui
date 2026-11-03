@@ -24,7 +24,7 @@ function usable(c){
  };
 }
 
-function createAdapter({fetchImpl,secret=credential}={}){
+function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
  const transport=c=>fetchImpl||createCloudFetch({allowPrivate:c.privateNetwork===true,allowLoopback:require('./connections').isLoopback(new URL(c.endpoint).hostname),allowHttp:new URL(c.endpoint).protocol==='http:'&&(c.allowInsecureHttp===true||require('./connections').isLoopback(new URL(c.endpoint).hostname))});
  function validateMessages(c,input){
   if(!Array.isArray(input.messages))throw Error('Unsupported message content');
@@ -63,6 +63,12 @@ function createAdapter({fetchImpl,secret=credential}={}){
 
  async function chat(c,input,{signal}={}){
   if(!modelConfig.ready(c))throw Error('Native inference adapter is not implemented yet');
+  if(c.adapter==='openai-responses'){
+   // Revalidate even direct adapter callers; never trust client-supplied approval.
+   const validated=require('./connections').validate({version:1,revision:0,defaultId:c.id,connections:[c]}).connections[0];
+   const selected=modelConfig.select(validated,c.model);
+   return require('./openai-responses').chat(selected,input,{fetchImpl:transport(selected),secret,signal,onDiagnostics});
+  }
   validateMessages(c,input);
   const body=buildChatBody(c,input);
   const timeout=c.legacy===true?null:(c.timeoutMs||120000);

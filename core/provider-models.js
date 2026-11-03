@@ -1,6 +1,11 @@
 'use strict';
 const nativePending=new Set(['openai-responses','anthropic-messages','gemini-native']);
-const ready=c=>!nativePending.has(c.adapter);
+function ready(c) {
+ if(c.adapter!=='openai-responses')return !nativePending.has(c.adapter);
+ return process.env.CHATBOT_OPENAI_RESPONSES_ENABLED==='1' &&
+  typeof c.credentialRef==='string' && /^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef) &&
+  c.enabled!==false && Array.isArray(c.models) && c.models.some(m=>m.id===c.model&&m.enabled===true&&m.chat===true);
+}
 function list(c){return c.models??[{id:c.model,name:c.model.split(/[\\/]/).pop().replace(/\.gguf$/i,''),enabled:true,chat:true,parameters:c.parameters??[],defaults:{}}];}
 function select(c,id){
  const model=list(c).find(m=>m.id===id&&m.enabled&&m.chat);
@@ -16,7 +21,7 @@ function validateModels(models,connection){
  const result=models.map(m=>{
   if(!m||typeof m.id!=='string'||!m.id.trim()||m.id.length>512||/[\x00-\x1f\x7f]/.test(m.id)||ids.has(m.id))throw Error('Invalid or duplicate model ID');ids.add(m.id);
   if(typeof m.name!=='string'||!m.name.trim()||m.name.length>120||typeof m.enabled!=='boolean'||typeof m.chat!=='boolean')throw Error('Invalid model display name or approval');
-  const parameters=m.parameters??connection.parameters;
+  const parameters=m.parameters??(connection.adapter==='openai-responses'?[]:connection.parameters);
   if(!Array.isArray(parameters)||parameters.some(p=>!['temperature','max_tokens'].includes(p)))throw Error('Unsupported model parameter');
   const defaults=m.defaults??{};
   if(!defaults||typeof defaults!=='object'||Array.isArray(defaults)||Object.keys(defaults).some(k=>!parameters.includes(k)))throw Error('Invalid model defaults');

@@ -4,7 +4,8 @@ function choices(config, legacy) {
  const list=config.connections.filter(c=>c.enabled!==false&&c.capabilities.streaming===true&&models.ready(c));
  if(config.defaultId==='legacy-local'&&legacy)list.unshift(legacy);
  return list.flatMap(c=>models.list(c).filter(m=>m.enabled&&m.chat).map(m=>({providerId:c.id,providerName:c.name,model:m.id,
-  name:m.name,contextLimit:m.id===c.model?c.contextLimit:null,capabilities:{...c.capabilities,...(m.capabilities||{})}})));
+  name:m.name,contextLimit:m.id===c.model?c.contextLimit:null,capabilities:{...c.capabilities,...(m.capabilities||{}),
+   ...(c.adapter==='openai-responses'?{thinking:false,vision:false,tools:false}:{})}})));
 }
 function defaultChoice(config, legacy) {
  if(config.defaultId==='legacy-local'){

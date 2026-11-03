@@ -678,7 +678,9 @@ async function readAssistantStream(reader, onChunk) {
             completed = true;
             return;
         }
-        onChunk(JSON.parse(data));
+        const chunk = JSON.parse(data);
+        if (typeof chunk?.error === 'string') throw new Error(chunk.error);
+        onChunk(chunk);
     }
     function line(value) {
         if (value.endsWith("\r")) value = value.slice(0, -1);
