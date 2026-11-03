@@ -1,8 +1,8 @@
 'use strict';
 const nativePending=new Set(['openai-responses','anthropic-messages','gemini-native']);
 function ready(c) {
- if(c.adapter!=='openai-responses')return !nativePending.has(c.adapter);
- return process.env.CHATBOT_OPENAI_RESPONSES_ENABLED==='1' &&
+ if(!['openai-responses','deepseek-chat'].includes(c.adapter))return !nativePending.has(c.adapter);
+ return process.env[c.adapter==='deepseek-chat'?'CHATBOT_DEEPSEEK_ENABLED':'CHATBOT_OPENAI_RESPONSES_ENABLED']==='1' &&
   typeof c.credentialRef==='string' && /^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef) &&
   c.enabled!==false && Array.isArray(c.models) && c.models.some(m=>m.id===c.model&&m.enabled===true&&m.chat===true);
 }

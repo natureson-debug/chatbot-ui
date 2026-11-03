@@ -448,6 +448,20 @@
 <button type="submit">Save safeguards</button><button id="refreshOpenaiUsage" type="button">Refresh usage</button>
 </form><p id="openaiUsageStatus" role="status"></p>
 </section>
+<section class="admin-section">
+<h2>DeepSeek usage and safeguards</h2>
+<pre id="deepseekUsageSummary" style="white-space:pre-wrap">Loading...</pre>
+<form id="deepseekSafeguards">
+<label><input type="checkbox" name="enabled"> Allow DeepSeek inference (environment gate also required)</label>
+<label>Maximum output tokens <input name="max_output_tokens" type="number" min="1" max="32768" required></label>
+<label>Maximum concurrent requests <input name="max_concurrent" type="number" min="1" max="32" required></label>
+<label>Requests per user per rolling hour <input name="per_hour" type="number" min="1" max="10000" required></label>
+<label>Requests per user per rolling 24 hours <input name="per_day" type="number" min="1" max="100000" required></label>
+<label>Optional estimated daily USD threshold <input name="estimated_daily_usd" type="number" min="0.01" step="0.01"></label>
+<p>Pricing is not configured. Setting a monetary threshold blocks inference because cost cannot be verified. Estimates are not billing ceilings.</p>
+<button type="submit">Save safeguards</button><button id="refreshDeepseekUsage" type="button">Refresh usage</button>
+</form><p id="deepseekUsageStatus" role="status"></p>
+</section>
         </main>
     </div>
 

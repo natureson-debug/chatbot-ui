@@ -10,7 +10,7 @@ function canonicalAdapter(adapter){
  if(adapter==='llama.cpp'||adapter==='llama.cpp-openai')return 'llama.cpp';
  if(adapter==='openai-compatible'||adapter==='generic-openai')return 'openai-compatible';
  if(adapter==='ollama')return 'ollama';
- if(['openai-responses','anthropic-messages','gemini-native'].includes(adapter))return adapter;
+ if(['openai-responses','deepseek-chat','anthropic-messages','gemini-native'].includes(adapter))return adapter;
  return null;
 }
 function isLoopback(host){
@@ -37,7 +37,7 @@ function validate(value){
  const connections=value.connections.map((c,index)=>{
   const record=`connection ${index}`;
   if(!c||!/^[a-z][a-z0-9-]{0,47}$/.test(c.id)||ids.has(c.id)||typeof c.name!=='string'||!c.name.trim()||c.name.length>80)throw Error(`Invalid connection configuration: ${record} has invalid id, name, or adapter`);ids.add(c.id);
-  const adapter=canonicalAdapter(c.adapter);if(!adapter)fail(`${record} has an unsupported adapter`);
+  const adapter=canonicalAdapter(c.providerType==='deepseek'&&c.adapter==='openai-compatible'?'deepseek-chat':c.adapter);if(!adapter)fail(`${record} has an unsupported adapter`);
   const preset=c.providerType===undefined?null:presets.find(p=>p.id===c.providerType);
   if(c.providerType!==undefined&&(!preset||preset.adapter!==adapter))fail('Provider type and adapter do not match');
   if(['apiKey','api_key','password','secret','headers'].some(k=>Object.hasOwn(c,k)))fail('Use a server credential reference, not inline credentials');
@@ -45,7 +45,7 @@ function validate(value){
   if(url.username||url.password||url.search||url.hash||!['https:','http:'].includes(url.protocol))fail('endpoint must be HTTPS or HTTP without credentials, query, or fragment');
   const loopback=isLoopback(url.hostname),priv=isPrivateAddress(url.hostname);
   if(preset?.id==='custom'&&url.protocol!=='https:'&&!loopback&&!(priv&&c.privateNetwork===true&&c.allowInsecureHttp===true))fail('Public custom endpoints require HTTPS');
-  if((preset?.cloud||['openai-responses','anthropic-messages','gemini-native'].includes(adapter))&&(url.protocol!=='https:'||loopback||priv||c.privateNetwork===true||c.allowInsecureHttp===true))fail('Cloud providers require public HTTPS endpoints');
+  if((preset?.cloud||['openai-responses','deepseek-chat','anthropic-messages','gemini-native'].includes(adapter))&&(url.protocol!=='https:'||loopback||priv||c.privateNetwork===true||c.allowInsecureHttp===true))fail('Cloud providers require public HTTPS endpoints');
   if(url.protocol==='http:'&&!loopback&&c.allowInsecureHttp!==true)fail('plain HTTP requires loopback or allowInsecureHttp');
   if(priv&&c.privateNetwork!==true)fail('private network endpoint requires privateNetwork');
   if(typeof c.model!=='string'||!c.model.trim()||c.model.length>512||/[\x00-\x1f]/.test(c.model))fail('model is required');
@@ -54,7 +54,7 @@ function validate(value){
       c.backendModelIdentity.length>4096||/[\x00-\x1f\x7f]/.test(c.backendModelIdentity)))fail('backendModelIdentity must be an exact nonempty llama.cpp model ID or path');
   if(c.credentialRef!==null&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef))&&c.credentialRef!=='local-api-key')fail('credentialRef must be env:CHATBOT_* or local-api-key');
   if(c.credentialRef==='local-api-key'&&!(adapter==='llama.cpp'&&url.origin==='http://127.0.0.1:8080'))fail('local-api-key requires llama.cpp on http://127.0.0.1:8080');
-  if(adapter==='openai-responses'&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef)))fail('OpenAI provider requires an env:CHATBOT_* credential reference');
+  if(['openai-responses','deepseek-chat'].includes(adapter)&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef)))fail('OpenAI provider requires an env:CHATBOT_* credential reference');
   if(adapter==='ollama'&&c.credentialRef===null&&!loopback&&!(priv&&c.privateNetwork===true))fail('no-auth Ollama requires loopback or approved private network');
   if(!Array.isArray(c.parameters)||c.parameters.some(p=>!['temperature','max_tokens'].includes(p)))fail('parameters may only contain temperature and max_tokens');
   if(!c.capabilities||Object.values(c.capabilities).some(v=>typeof v!=='boolean')||Object.keys(c.capabilities).some(k=>!['streaming','thinking','vision','tools','models'].includes(k))||c.capabilities.streaming!==true)fail('capabilities must include streaming=true and only supported booleans');

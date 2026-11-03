@@ -63,11 +63,11 @@ function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
 
  async function chat(c,input,{signal,onProgress,beforeSend,maxOutputTokens}={}){
   if(!modelConfig.ready(c))throw Error('Native inference adapter is not implemented yet');
-  if(c.adapter==='openai-responses'){
+  if(['openai-responses','deepseek-chat'].includes(c.adapter)){
    // Revalidate even direct adapter callers; never trust client-supplied approval.
    const validated=require('./connections').validate({version:1,revision:0,defaultId:c.id,connections:[c]}).connections[0];
    const selected=modelConfig.select(validated,c.model);
-   return require('./openai-responses').chat(selected,input,{fetchImpl:transport(selected),secret,signal,onDiagnostics,onProgress,beforeSend,maxOutputTokens});
+   return require(c.adapter==='deepseek-chat'?'./deepseek-chat':'./openai-responses').chat(selected,input,{fetchImpl:transport(selected),secret,signal,onDiagnostics,onProgress,beforeSend,maxOutputTokens});
   }
   validateMessages(c,input);
   const body=buildChatBody(c,input);

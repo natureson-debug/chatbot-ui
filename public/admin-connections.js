@@ -214,8 +214,9 @@
 
  function updateType(prefill){
   const p=presets.find(p=>p.id===document.getElementById('providerType').value);if(!p)return;
+  if(prefill&&p.id==='deepseek'){document.getElementById('providerCredentialRef').value=p.credentialRef;document.getElementById('providerModel').value=p.models[0];modelDraft=p.models.map(id=>({id,name:id,enabled:true,chat:true,parameters:['max_tokens','temperature'],defaults:{max_tokens:128}}));renderModels();}
   if(prefill){document.getElementById('providerEndpoint').value=p.endpoint;document.getElementById('providerAuthMode').value=p.cloud?'env':'none';}
-  document.getElementById('providerProtocolStatus').textContent=p.adapter==='openai-responses'?'Native text inference requires the server feature gate (disabled by default), a credential reference and an approved model. Enable only model parameters verified as supported.':['anthropic-messages','gemini-native'].includes(p.adapter)?'Configuration and discovery only. Native inference is not implemented.':'Uses the existing adapter; individual model compatibility requires qualification.';
+  document.getElementById('providerProtocolStatus').textContent=['openai-responses','deepseek-chat'].includes(p.adapter)?'Native text inference requires the server feature gate (disabled by default), a credential reference and an approved model. Enable only model parameters verified as supported.':['anthropic-messages','gemini-native'].includes(p.adapter)?'Configuration and discovery only. Native inference is not implemented.':'Uses the existing adapter; individual model compatibility requires qualification.';
   document.getElementById('providerBackendIdentity').closest('.field-group').querySelector('small').hidden=p.adapter!=='llama.cpp';
   document.getElementById('providerBackendIdentity').disabled=p.adapter!=='llama.cpp';
   if(prefill&&p.adapter!=='llama.cpp')document.getElementById('providerBackendIdentity').value='';

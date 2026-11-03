@@ -2,7 +2,7 @@
 // Test-only bootstrap, copied alongside a disposable application. Never import from production.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),https=require('node:https');
 const {EventEmitter}=require('node:events'),{PassThrough}=require('node:stream');
-if(!process.send||process.env.CHATBOT_PORT!=='4173'||!fs.existsSync(path.join(__dirname,'.mp05b3-fixture'))||path.resolve(process.env.CHATBOT_HOME)!==path.resolve(__dirname,'home'))throw Error('Isolated fixture required');
+if(!process.send||!['4173','4183'].includes(process.env.CHATBOT_PORT)||!fs.existsSync(path.join(__dirname,'.mp05b3-fixture'))||path.resolve(process.env.CHATBOT_HOME)!==path.resolve(__dirname,'home'))throw Error('Isolated fixture required');
 const send=message=>{if(process.connected)process.send(message);};
 let mode='complete',pending=null,server,lifecycle;
 const nativeEnv=process.env;
@@ -10,11 +10,11 @@ process.env=new Proxy(nativeEnv,{get(target,key){if(key==='CHATBOT_SYNTHETIC_OPE
 global.fetch=()=>{throw Error('Unintercepted network forbidden');};
 http.request=()=>{throw Error('Unintercepted HTTP forbidden');};
 require('node:dns/promises').lookup=async(host,options)=>{
- if(!['openai.fixture.invalid','llama.fixture.invalid','ollama.fixture.invalid'].includes(host)||!options.all)throw Error('DNS outside fixture forbidden');
+ if(!['openai.fixture.invalid','deepseek.fixture.invalid','llama.fixture.invalid','ollama.fixture.invalid'].includes(host)||!options.all)throw Error('DNS outside fixture forbidden');
  send({type:'dns',host});return [{address:'8.8.8.8',family:4}];
 };
 https.request=(url,options,callback)=>{
- if(!['openai.fixture.invalid','llama.fixture.invalid','ollama.fixture.invalid'].includes(url.hostname)||options.agent!==false||typeof options.lookup!=='function')throw Error('Unsafe fixture request');
+ if(!['openai.fixture.invalid','deepseek.fixture.invalid','llama.fixture.invalid','ollama.fixture.invalid'].includes(url.hostname)||options.agent!==false||typeof options.lookup!=='function')throw Error('Unsafe fixture request');
  options.lookup(url.hostname,{all:true},(error,addresses)=>{if(error||addresses[0].address!=='8.8.8.8')throw Error('Missing DNS pin');});
  const req=new EventEmitter();let output,ended=false;
  const abort=()=>{if(!ended){ended=true;output?.destroy();send({type:'aborted'});req.emit('error',Error('Fixture cancellation'));}};
@@ -34,7 +34,19 @@ https.request=(url,options,callback)=>{
   if(url.hostname==='ollama.fixture.invalid'){output.write(JSON.stringify({message:{content:'Ollama fixture'},done:false})+'\n');output.write(JSON.stringify({done:true,eval_count:2,eval_duration:1000000000,prompt_eval_count:3})+'\n');finish();return;}
   if(url.hostname==='llama.fixture.invalid'){write({choices:[{delta:{content:'Local fixture'},finish_reason:null}]});write({choices:[{delta:{},finish_reason:'stop'}],usage:{prompt_tokens:3,completion_tokens:2}});output.write('data: [DONE]\n\n');finish();return;}
   if(mode==='timeout')return;
-  if(mode==='failed'){write({type:'response.failed',response:{status:'failed',error:{message:'sensitive fixture upstream detail'}}});finish();return;}
+  if(url.hostname==='deepseek.fixture.invalid'){
+   const chunk=(content,finish=null,extra={})=>write({choices:[{index:0,delta:{content,reasoning_content:'private reasoning'},finish_reason:finish}],...extra});
+   const end=(reason='stop')=>{chunk(null,reason,{usage:{prompt_tokens:9,completion_tokens:2,prompt_cache_hit_tokens:1}});output.write('data: [DONE]\n\n');finish();};
+   if(mode==='failed'){end('content_filter');return;}
+   chunk('First ');
+   if(mode==='interrupted'){finish();return;}
+   if(mode==='incomplete'){end('length');return;}
+   if(mode==='partial-failed'){end('content_filter');return;}
+   const complete=()=>{chunk('second');end();};
+   if(mode==='hold'){pending=complete;return;}complete();return;
+  }
+  if(mode==='failed'){
+write({type:'response.failed',response:{status:'failed',error:{message:'sensitive fixture upstream detail'}}});finish();return;}
   write({type:'response.created',response:{id:'resp_fixture',status:'in_progress'}});
   write({type:'response.output_text.delta',output_index:0,content_index:0,delta:'First '});
   if(mode==='incomplete'){write({type:'response.incomplete',response:{status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{input_tokens:9,output_tokens:1}}});finish();return;}
@@ -45,7 +57,7 @@ https.request=(url,options,callback)=>{
  };return req;
 };
 const create=http.createServer;
-http.createServer=function(...args){server=create.apply(this,args);server.once('listening',()=>{const address=server.address();if(address.address!=='127.0.0.1'||address.port!==4173)throw Error('Invalid binding');send({type:'ready',address});});server.once('error',()=>{send({type:'startup-failed'});process.disconnect();});return server;};
+http.createServer=function(...args){server=create.apply(this,args);server.once('listening',()=>{const address=server.address();if(address.address!=='127.0.0.1'||address.port!==Number(process.env.CHATBOT_PORT))throw Error('Invalid binding');send({type:'ready',address});});server.once('error',()=>{send({type:'startup-failed'});process.disconnect();});return server;};
 // Reuse the actual graceful shutdown implementation; no PID-based production controls.
 const modulePath=require.resolve('./core/application-lifecycle'),original=require(modulePath);
 require.cache[modulePath].exports={...original,installApplicationLifecycle(options){lifecycle=original.installApplicationLifecycle(options);return lifecycle;}};
