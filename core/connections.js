@@ -54,6 +54,7 @@ function validate(value){
       c.backendModelIdentity.length>4096||/[\x00-\x1f\x7f]/.test(c.backendModelIdentity)))fail('backendModelIdentity must be an exact nonempty llama.cpp model ID or path');
   if(c.credentialRef!==null&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef))&&c.credentialRef!=='local-api-key')fail('credentialRef must be env:CHATBOT_* or local-api-key');
   if(c.credentialRef==='local-api-key'&&!(adapter==='llama.cpp'&&url.origin==='http://127.0.0.1:8080'))fail('local-api-key requires llama.cpp on http://127.0.0.1:8080');
+  if(adapter==='openai-responses'&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef)))fail('OpenAI provider requires an env:CHATBOT_* credential reference');
   if(adapter==='ollama'&&c.credentialRef===null&&!loopback&&!(priv&&c.privateNetwork===true))fail('no-auth Ollama requires loopback or approved private network');
   if(!Array.isArray(c.parameters)||c.parameters.some(p=>!['temperature','max_tokens'].includes(p)))fail('parameters may only contain temperature and max_tokens');
   if(!c.capabilities||Object.values(c.capabilities).some(v=>typeof v!=='boolean')||Object.keys(c.capabilities).some(k=>!['streaming','thinking','vision','tools','models'].includes(k))||c.capabilities.streaming!==true)fail('capabilities must include streaming=true and only supported booleans');

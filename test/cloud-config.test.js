@@ -15,6 +15,11 @@ test('native pending adapters reject generation before credentials/network and a
   const a=createAdapter({secret:async()=>{throw Error('must not read');},fetchImpl:async()=>{throw Error('must not call');}});await assert.rejects(a.chat(c,{messages:[]}),/not implemented/);
  }
 });
+test('openai provider requires a server credential reference and never stores the value',()=>{
+ const c=connection();c.providerType='openai';c.adapter='openai-responses';c.credentialRef='env:CHATBOT_OPENAI_KEY';assert.equal(validate(config(c)).connections[0].credentialRef,'env:CHATBOT_OPENAI_KEY');
+ assert.throws(()=>validate(config({...c,credentialRef:null})));
+ assert.throws(()=>validate(config({...c,credentialRef:'raw-key'})));
+});
 test('multi-model choices use friendly labels, enabled chat approvals and immutable per-model parameters',()=>{
  const c=connection();c.models.push({id:'embedding',name:'Embedding',enabled:true,chat:false},{id:'disabled',name:'Disabled',enabled:false,chat:true});const valid=validate(config(c));
  assert.deepEqual(catalog.choices(valid).map(m=>m.name),['Alpha friendly','Beta friendly']);
