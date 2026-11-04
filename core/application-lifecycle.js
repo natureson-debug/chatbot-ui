@@ -4,12 +4,19 @@ const {createShutdownCoordinator}=require('./shutdown-coordinator');
 const {createDatabaseCleanup}=require('./database-cleanup');
 const {createLifecycleOrchestrator}=require('./lifecycle-orchestrator');
 const installed=new WeakMap();
-function installApplicationLifecycle({server,requestTracker,db,signals=process,report=console.log,timeoutMs=20000,gracePeriodMs=15000,cleanupTimeoutMs=2000}) {
+function installApplicationLifecycle({server,requestTracker,db,signals=process,report=console.log,timeoutMs=20000,gracePeriodMs=15000,cleanupTimeoutMs=2000,beforeDatabaseClose=async()=>{}}) {
     if(installed.has(server))return installed.get(server);
+    if(typeof beforeDatabaseClose!=='function')throw new TypeError('beforeDatabaseClose must be a function');
+    const databaseCleanup=createDatabaseCleanup({db});
     const lifecycle=createLifecycleOrchestrator({
         shutdownCoordinator:createShutdownCoordinator({requestTracker,timeoutMs,
             gracefulShutdown:createGracefulShutdown({server,gracePeriodMs,cleanupTimeoutMs})}),
-        databaseCleanup:createDatabaseCleanup({db})
+        databaseCleanup:{
+            async cleanup(shutdownResult) {
+                await beforeDatabaseClose();
+                return databaseCleanup.cleanup(shutdownResult);
+            }
+        }
     });
     let notification=null;
     function shutdown(){

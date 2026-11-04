@@ -51,6 +51,8 @@ function setup({ readFileError = null } = {}) {
         './core/llama-client': {},
         './core/llama-runtime': {},
         './core/admin-telemetry': {},
+        './core/system-logs': { createSystemLogService: () => ({ log() {}, startRetention() {}, flush: async () => {}, stop() {} }), validateFilters() {} },
+        './core/system-log-routes': { createSystemLogRoute: () => () => false },
         './core/connections': {selected:async()=>null},
         './core/provider-adapter': {},
         './core/ai-activation': {},

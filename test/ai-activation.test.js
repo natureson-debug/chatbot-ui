@@ -11,7 +11,7 @@ async function route(user) {
     const run = vm.runInNewContext('(async () => {' + source.slice(start, end) + '})', {
         req: { method: 'POST', url: '/api/admin/ai/restart', headers: {host:'localhost:3000',origin:'http://localhost:3000','x-chatbot-action':'restart-ai'} },
         res: { writeHead(s) { status = s; }, end(s) { body = JSON.parse(s); } },
-        getAuthenticatedUser: () => user, blockedActivation, console: {info(){}}, require: n => { if(n === "./core/restart-request") return require("../core/restart-request"); throw Error("Unexpected dependency"); }
+        getAuthenticatedUser: () => user, logAdminAccessDenied(){}, blockedActivation, console: {info(){}}, require: n => { if(n === "./core/restart-request") return require("../core/restart-request"); throw Error("Unexpected dependency"); }
     });
     await run(); return { status, body };
 }

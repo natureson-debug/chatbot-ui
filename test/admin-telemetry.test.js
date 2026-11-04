@@ -18,7 +18,7 @@ const source=fs.readFileSync(require.resolve('../server'),'utf8');const begin=so
 async function route(user,current=user,url='/api/admin/ai/telemetry'){
  let code,body,calls=0,headers;
  const run=vm.runInNewContext('(async()=>{'+source.slice(begin,end)+'})',{
- req:{method:'GET',url},res:{writeHead(c,h){code=c;headers=h;},end(b){body=JSON.parse(b);}},getSessionToken:()=> 'synthetic',getAuthenticatedUser:()=>user,getSessionUser:()=>current,db:{},getAdminTelemetry:async()=>{calls++;return {sampledAt:'now',backend:{state:'ready'},gpu:{state:'available',devices:[]}};}
+ req:{method:'GET',url,headers:{}},res:{writeHead(c,h){code=c;headers=h;},end(b){body=JSON.parse(b);}},getSessionToken:()=> 'synthetic',getAuthenticatedUser:()=>user,getSessionUser:()=>current,db:{},logAdminAccessDenied(){},logSystemEvent(){},systemLogs:{log(){}},lastBackendHealthState:null,getAdminTelemetry:async()=>{calls++;return {sampledAt:'now',backend:{state:'ready'},gpu:{state:'available',devices:[]}};}
  });await run();return {code,body,calls,headers};
 }
 test('actual telemetry route rejects anonymous and ordinary users before collection',async()=>{assert.equal((await route(null)).code,401);const r=await route({id:'u',is_admin:0});assert.equal(r.code,403);assert.equal(r.calls,0);});

@@ -19,11 +19,35 @@ const { createChatCompletion, getHealth, getReportedModel } = require("./core/ll
 const { getLlamaServerPid } = require("./core/llama-runtime");
 
 const { getAdminTelemetry } = require("./core/admin-telemetry");
+const { createSystemLogService, validateFilters } = require("./core/system-logs");
+const { createSystemLogRoute } = require("./core/system-log-routes");
 const { blockedActivation } = require("./core/ai-activation");
 const { createRequestTracker } = require("./core/request-tracker");
 const { withHttpErrorBoundary } = require("./core/http-error-boundary");
 
 const requestTracker = createRequestTracker();
+const systemLogs = createSystemLogService({ db });
+let lastBackendHealthState = null;
+const systemLogRoute = createSystemLogRoute({
+    logs: systemLogs,
+    validate: validateFilters,
+    authenticate: req => getAuthenticatedUser(req),
+    revalidate: req => getAuthenticatedUser(req)
+});
+
+function logSystemEvent(req, eventCode, fields = {}) {
+    systemLogs.log(eventCode, fields);
+}
+
+function logAdminAccessDenied(req, admin) {
+    logSystemEvent(req, "AUTH_ADMIN_ACCESS_DENIED", {
+        actorId: admin?.id,
+        metadata: {
+            resource: "admin_api",
+            reason: admin ? "not_administrator" : "unauthenticated"
+        }
+    });
+}
 
 const contentTypes = {
     ".html": "text/html; charset=utf-8",
@@ -117,6 +141,8 @@ function getAuthenticatedUser(req) {
 const server = http.createServer(
     withHttpErrorBoundary(
         requestTracker.track(async (req, res) => {
+
+    if (systemLogRoute(req, res)) return;
 
     // Health check
     if (req.method === "GET" && req.url === "/health") {
@@ -943,6 +969,9 @@ if (req.method === "POST" && req.url === "/api/login") {
             : false;
 
         if (!validPassword) {
+            logSystemEvent(req, "AUTH_LOGIN_FAILED", {
+                metadata: { reason: "invalid_credentials" }
+            });
             res.writeHead(401, {
                 "Content-Type": "application/json; charset=utf-8"
             });
@@ -951,6 +980,7 @@ if (req.method === "POST" && req.url === "/api/login") {
         }
 
         const token = createSession(db, user.id);
+        logSystemEvent(req, "AUTH_LOGIN_SUCCEEDED", { actorId: user.id });
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
@@ -978,8 +1008,9 @@ if (req.method === "POST" && req.url === "/api/login") {
 // Log out and revoke the current session
 if (req.method === "POST" && req.url === "/api/logout") {
     const token = getSessionToken(req);
+    const user = token ? getSessionUser(db, token) : null;
 
-    if (!token || !getSessionUser(db, token)) {
+    if (!user) {
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -988,6 +1019,7 @@ if (req.method === "POST" && req.url === "/api/logout") {
     }
 
     deleteSession(db, token);
+    logSystemEvent(req, "AUTH_LOGOUT", { actorId: user.id });
 
     res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
@@ -1004,12 +1036,14 @@ if (req.method === "POST" && req.url === "/api/admin/reset-password") {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Authentication required" }));
         return;
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Administrator access required" }));
         return;
@@ -1086,12 +1120,14 @@ if (req.method === "DELETE" && req.url.startsWith("/api/admin/users/")) {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Authentication required" }));
         return;
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Administrator access required" }));
         return;
@@ -1192,12 +1228,14 @@ if (req.method === "POST" && req.url === "/api/admin/users") {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Authentication required" }));
         return;
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Administrator access required" }));
         return;
@@ -1266,6 +1304,7 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
     const user = getAuthenticatedUser(req);
 
     if (!user) {
+        logAdminAccessDenied(req, user);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1274,6 +1313,7 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
     }
 
     if (user.is_admin !== 1) {
+        logAdminAccessDenied(req, user);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1301,13 +1341,27 @@ if (req.method === "GET" && ["/api/admin/ai/telemetry", "/api/admin/ai/telemetry
     const admin = getAuthenticatedUser(req);
     const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
     if (!admin || admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(admin ? 403 : 401, headers);
         res.end(JSON.stringify({ error: "Administrator access required" })); return;
     }
     const sample = await getAdminTelemetry();
     const current = getSessionUser(db, token);
     if (!current || current.id !== admin.id || current.is_admin !== 1) {
+        logSystemEvent(req, "AUTH_ADMIN_ACCESS_DENIED", {
+            actorId: admin.id,
+            metadata: { resource: "admin_api", reason: "session_revoked" }
+        });
         res.writeHead(401, headers); res.end(JSON.stringify({ error: "Session no longer authorized" })); return;
+    }
+    if (sample.backend.state !== lastBackendHealthState) {
+        systemLogs.log("RUNTIME_BACKEND_HEALTH_CHANGED", {
+            metadata: {
+                previousState: lastBackendHealthState,
+                currentState: sample.backend.state
+            }
+        });
+        lastBackendHealthState = sample.backend.state;
     }
     if (res.destroyed || res.writableEnded) return;
     res.writeHead(200, headers);
@@ -1320,6 +1374,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1328,6 +1383,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1386,6 +1442,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1394,6 +1451,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/restart") {
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1422,45 +1480,86 @@ if(['/api/admin/ai/openai-usage','/api/admin/ai/deepseek-usage'].includes(req.ur
  const family=req.url.includes('deepseek')?'deepseek':'openai';
  const admin=getAuthenticatedUser(req),token=getSessionToken(req);
  const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
- if(!admin||admin.is_admin!==1){reply(admin?403:401,{error:'Administrator access required'});return;}
+ if(!admin||admin.is_admin!==1){logAdminAccessDenied(req,admin);reply(admin?403:401,{error:'Administrator access required'});return;}
  const accounting=require('./core/openai-usage').forProvider(family);
  try{
   if(req.method==='GET'){reply(200,accounting.summary(db));return;}
   if(req.method==='POST'){
    if(!require('./core/restart-request').validRestartRequest({...req,headers:{...req.headers,'x-chatbot-action':req.headers['x-chatbot-action']==='configure-'+family?'restart-ai':null}})){reply(403,{error:'Same-origin request required'});return;}
    let body='';for await(const chunk of req){body+=chunk;if(body.length>8192)throw Error();}
-   const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:'Session no longer authorized'});return;}
-   accounting.configure(db,JSON.parse(body));reply(200,accounting.summary(db));return;
+   const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){
+    logSystemEvent(req,'AUTH_ADMIN_ACCESS_DENIED',{actorId:admin.id,metadata:{resource:'admin_api',reason:'session_revoked'}});
+    reply(401,{error:'Session no longer authorized'});return;
+   }
+   const before=accounting.settings(db);
+   const updated=accounting.configure(db,JSON.parse(body));
+   const changed=before.enabled!==updated.enabled||before.max_output_tokens!==updated.max_output_tokens||
+    before.max_concurrent!==updated.max_concurrent||before.per_hour!==updated.per_hour||before.per_day!==updated.per_day;
+   if(changed)logSystemEvent(req,family==='deepseek'?'CONFIG_DEEPSEEK_SAFEGUARDS_CHANGED':'CONFIG_OPENAI_SAFEGUARDS_CHANGED',{
+    actorId:admin.id,metadata:{enabled:updated.enabled===1,maxOutputTokens:updated.max_output_tokens,
+     maxConcurrent:updated.max_concurrent,perHour:updated.per_hour,perDay:updated.per_day}
+   });
+   reply(200,accounting.summary(db));return;
   }
   reply(405,{error:'Method not allowed'});
  }catch{reply(400,{error:'Provider safeguards unavailable or invalid'});}return;
 }
 if(/^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/(credential|test)$/.test(req.url)){
  const token=getSessionToken(req);
- await require('./core/deepseek-admin').handle({req,res,db,connections,authenticate:()=>getSessionUser(db,token)});return;
+ await require('./core/deepseek-admin').handle({req,res,db,connections,authenticate:()=>getSessionUser(db,token),
+  log:(code,fields)=>logSystemEvent(req,code,fields)});return;
 }
 // Named connection administration; credentials are references, never values.
 if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/check$/.test(req.url)) {
     const token = getSessionToken(req), admin = getAuthenticatedUser(req);
     const reply = (status, data) => {res.writeHead(status,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify(data));};
-    if (!admin || admin.is_admin !== 1) {reply(admin?403:401,{error:"Administrator access required"});return;}
+    if (!admin || admin.is_admin !== 1) {logAdminAccessDenied(req,admin);reply(admin?403:401,{error:"Administrator access required"});return;}
     try {
         if(req.method==="GET"&&req.url==="/api/admin/ai/connections/presets"){reply(200,require("./core/provider-presets.json"));return;}
         if (req.method === "GET" && req.url === "/api/admin/ai/connections") {
-            const config=await connections.read();const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}reply(200,config);return;
+            const config=await connections.read();const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){
+             logSystemEvent(req,'AUTH_ADMIN_ACCESS_DENIED',{actorId:admin.id,metadata:{resource:'admin_api',reason:'session_revoked'}});
+             reply(401,{error:"Session no longer authorized"});return;
+            }reply(200,config);return;
         }
         if (req.method === "POST") {
             if (!require("./core/restart-request").validRestartRequest({...req,headers:{...req.headers,"x-chatbot-action":req.headers["x-chatbot-action"]==="configure-connections"?"restart-ai":null}})) {reply(403,{error:"Same-origin request required"});return;}
             let text="";for await(const chunk of req){text+=chunk;if(text.length>32768)throw Error("Invalid request");}
-            const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}
+            const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){
+             logSystemEvent(req,'AUTH_ADMIN_ACCESS_DENIED',{actorId:admin.id,metadata:{resource:'admin_api',reason:'session_revoked'}});
+             reply(401,{error:"Session no longer authorized"});return;
+            }
             if(req.url === "/api/admin/ai/connections"){const input=JSON.parse(text),checked=require('./core/connections').validate(input);
             for(const c of checked.connections){if(c.adapter==='deepseek-chat'&&c.credentialRef==='protected:'+c.id&&c.enabled!==false&&!await require('./core/protected-credentials').configured(c)){reply(400,{error:'Save this provider disabled, then save its API key before enabling.'});return;}}
-            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){reply(401,{error:'Session no longer authorized'});return;}
-            reply(200,await connections.save(input));return;}
+            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){
+             logSystemEvent(req,'AUTH_ADMIN_ACCESS_DENIED',{actorId:admin.id,metadata:{resource:'admin_api',reason:'session_revoked'}});
+             reply(401,{error:'Session no longer authorized'});return;
+            }
+            const saved=await connections.save(input);
+            logSystemEvent(req,'PROVIDER_CONFIGURATION_CHANGED',{actorId:admin.id,metadata:{
+             providerCount:saved.connections.length,enabledCount:saved.connections.filter(connection=>connection.enabled!==false).length,change:'saved'
+            }});
+            reply(200,saved);return;}
             const id=req.url.split('/')[5],config=await connections.read(),c=config.connections.find(c=>c.id===id);
             if(!c){reply(404,{error:"Connection not found"});return;}
-            const result=await providers.testConnection(c,{signal:AbortSignal.timeout(8000)});
-            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}reply(200,{models:result.models,usable:result.capabilities});return;
+            const startedAt=Date.now();
+            logSystemEvent(req,'PROVIDER_CONNECTION_TEST_STARTED',{actorId:admin.id,providerId:c.id,metadata:{diagnostic:false}});
+            let result;
+            try {
+                result=await providers.testConnection(c,{signal:AbortSignal.timeout(8000)});
+            } catch(error) {
+                logSystemEvent(req,'PROVIDER_CONNECTION_TEST_FAILED',{actorId:admin.id,providerId:c.id,metadata:{
+                 reason:'operation_failed',durationMs:Math.min(10000000,Math.max(0,Date.now()-startedAt))
+                }});
+                throw error;
+            }
+            logSystemEvent(req,'PROVIDER_CONNECTION_TEST_COMPLETED',{actorId:admin.id,providerId:c.id,metadata:{
+             durationMs:Math.min(10000000,Math.max(0,Date.now()-startedAt)),modelCount:Array.isArray(result.models)?result.models.length:0
+            }});
+            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){
+             logSystemEvent(req,'AUTH_ADMIN_ACCESS_DENIED',{actorId:admin.id,metadata:{resource:'admin_api',reason:'session_revoked'}});
+             reply(401,{error:"Session no longer authorized"});return;
+            }reply(200,{models:result.models,usable:result.capabilities});return;
         }
         reply(405,{error:"Method not allowed"});
     } catch(error) {
@@ -1475,6 +1574,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/config") {
     const user = getAuthenticatedUser(req);
 
     if (!user) {
+        logAdminAccessDenied(req, user);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1483,6 +1583,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/config") {
     }
 
     if (user.is_admin !== 1) {
+        logAdminAccessDenied(req, user);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1521,6 +1622,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
     const admin = getAuthenticatedUser(req);
 
     if (!admin) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1529,6 +1631,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
     }
 
     if (admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1618,6 +1721,14 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
         } finally {
             if (fs.existsSync(temporaryConfig)) fs.unlinkSync(temporaryConfig);
         }
+        const changedFields = ["model", "parallel", "contextSize", "gpuLayers", "device", "verbosity", "metrics"]
+            .filter(key => Object.hasOwn(config, key) && config[key] !== previous[key]);
+        if (changedFields.length) {
+            logSystemEvent(req, "CONFIG_ADMIN_SETTINGS_UPDATED", {
+                actorId: admin.id,
+                metadata: { changedFields }
+            });
+        }
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
@@ -1649,6 +1760,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/models") {
     const user = getAuthenticatedUser(req);
 
     if (!user) {
+        logAdminAccessDenied(req, user);
         res.writeHead(401, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1657,6 +1769,7 @@ if (req.method === "GET" && req.url === "/api/admin/ai/models") {
     }
 
     if (user.is_admin !== 1) {
+        logAdminAccessDenied(req, user);
         res.writeHead(403, {
             "Content-Type": "application/json; charset=utf-8"
         });
@@ -1695,12 +1808,14 @@ if (req.method === "GET" && req.url === "/admin") {
     const user = getAuthenticatedUser(req);
 
     if (!user) {
+        logAdminAccessDenied(req, user);
         res.writeHead(401);
         res.end("Authentication required");
         return;
     }
 
     if (user.is_admin !== 1) {
+        logAdminAccessDenied(req, user);
         res.writeHead(403);
         res.end("Administrator access required");
         return;
@@ -1753,9 +1868,16 @@ if (req.method === "GET" && req.url === "/admin") {
 );
 
 server.listen(PORT, HOST, () => {
+    systemLogs.startRetention();
     require('./core/openai-usage').reconcile(db);
     require('./core/openai-usage').forProvider('deepseek').reconcile(db);
-    require("./core/application-lifecycle").installApplicationLifecycle({ server, requestTracker, db });
+    require("./core/application-lifecycle").installApplicationLifecycle({
+        server, requestTracker, db,
+        beforeDatabaseClose: async () => {
+            await systemLogs.flush();
+            systemLogs.stop();
+        }
+    });
     console.log("");
     console.log("Local AI Chatbot");
     console.log("----------------");

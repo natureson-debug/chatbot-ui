@@ -28,6 +28,8 @@ function setup(t, fault) {
             if (name === 'http') return { createServer(fn) { handler = fn; return { listen() {} }; } };
             if (name === './db') return api;
             if (name === './auth') return { ...auth, getSessionUser(...args) { if (fault) fault(db); return auth.getSessionUser(...args); } };
+            if (name === './core/system-logs') return require('../core/system-logs');
+            if (name === './core/system-log-routes') return require('../core/system-log-routes');
             if (name === './core/request-tracker') return { createRequestTracker: () => ({ track: handler => handler }) };
             if (name === './core/http-error-boundary') return { withHttpErrorBoundary: handler => handler };
             if (name.startsWith('./core/')) return {};
@@ -35,8 +37,8 @@ function setup(t, fault) {
             return require(name);
         }
     });
-    function request(method, url, payload, duringBody) {
-        const req = { method, url, headers: { cookie: 'chatbot_session='+token }, async *[Symbol.asyncIterator]() {
+    function request(method, url, payload, duringBody, sessionToken = token) {
+        const req = { method, url, headers: { cookie: 'chatbot_session='+sessionToken }, async *[Symbol.asyncIterator]() {
             if (duringBody) await duringBody(req);
             yield typeof payload === 'string' ? payload : JSON.stringify(payload);
         } };
@@ -46,7 +48,7 @@ function setup(t, fault) {
         return handler(req,res).then(() => res);
     }
     const post = (revision=0, duringBody, chat='a', role='user') => request('POST','/api/chats/'+chat+'/messages',{ role, content:'text', expectedRevision:revision },duringBody);
-    return { db, api, token, request, post };
+    return { db, api, token, request, post, handler };
 }
 test('creation and ownership-filtered listing include revisions and preserve ordering', async t => {
     const s=setup(t); const r=await s.request('POST','/api/chats');
@@ -111,4 +113,95 @@ test('insertion failure rolls back and is not a conflict',async t=>{
 test('concurrent valid requests both succeed; committed message survives later logout',async t=>{
     const s=setup(t); const responses=await Promise.all([s.post(),s.post()]); assert.deepEqual(responses.map(r=>r.status),[201,201]);
     auth.deleteSession(s.db,s.token); assert.equal(s.api.getMessages('a','u').length,2);
+});
+test('real server route returns logs only to an authenticated administrator',async t=>{
+    const s=setup(t);
+    s.db.prepare('INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, 1)')
+        .run('admin-id','admin','unused');
+    const adminToken=auth.createSession(s.db,'admin-id');
+    const insert=s.db.prepare(`INSERT INTO system_events (
+        event_id, occurred_at, severity, category, event_code, message, metadata_json,
+        correlation_id, actor_id, provider_id, outcome
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const now=Date.now();
+    insert.run('event-1',new Date(now-2000).toISOString(),'INFO','PROVIDER','PROVIDER_CONNECTION_TEST_STARTED',
+        'Provider connection test started','{"diagnostic":true,"apiKey":"secret-value"}','trace-1','admin-id','provider-a','UNKNOWN');
+    insert.run('event-2',new Date(now-1000).toISOString(),'WARN','PROVIDER','PROVIDER_CONNECTION_TEST_FAILED',
+        'Provider connection test failed','{"reason":"operation_failed","password":"secret-value"}','trace-2','admin-id','provider-a','FAILURE');
+    insert.run('event-3',new Date(now).toISOString(),'INFO','AUTH','AUTH_LOGIN_SUCCEEDED',
+        'User signed in','{"password":"secret-value"}',null,'admin-id',null,'SUCCESS');
+
+    const server=require('node:http').createServer(s.handler);
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+    t.after(()=>new Promise(resolve=>server.close(resolve)));
+    const port=server.address().port;
+    async function send(method,url,token,payload,extraHeaders={}) {
+        return new Promise((resolve,reject)=>{
+            const request=require('node:http').request({
+                host:'127.0.0.1',port,path:url,method,
+                headers:{...(token?{cookie:`chatbot_session=${token}`}:{ }),...extraHeaders,
+                    ...(payload===undefined?{}:{'content-type':'application/json'})}
+            },response=>{
+                let body='';response.setEncoding('utf8');
+                response.on('data',chunk=>body+=chunk);
+                response.on('end',()=>resolve({status:response.statusCode,headers:response.headers,
+                    body:body?JSON.parse(body):null}));
+            });
+            request.on('error',reject);
+            request.end(payload===undefined?undefined:JSON.stringify(payload));
+        });
+    }
+    const get=(url,token,extraHeaders)=>send('GET',url,token,undefined,extraHeaders);
+
+    assert.equal((await get('/api/admin/system-logs')).status,401);
+    assert.equal((await get('/api/admin/system-logs',s.token)).status,403);
+    const page=await get('/api/admin/system-logs?category=PROVIDER&page=1&pageSize=1',adminToken);
+    assert.equal(page.status,200);
+    assert.equal(page.headers['cache-control'],'no-store');
+    assert.equal(page.body.total,2);
+    assert.equal(page.body.events.length,1);
+    assert.equal(page.body.events[0].eventId,'event-2');
+    assert.equal(page.body.events[0].metadata.reason,'operation_failed');
+    assert.equal(JSON.stringify(page.body).includes('secret-value'),false);
+    const secondPage=await get('/api/admin/system-logs?providerId=provider-a&page=2&pageSize=1',adminToken);
+    assert.equal(secondPage.status,200);
+    assert.equal(secondPage.body.events[0].eventId,'event-1');
+    assert.deepEqual(secondPage.body.events[0].metadata,{diagnostic:true});
+    const redacted=await get('/api/admin/system-logs?eventCode=AUTH_LOGIN_SUCCEEDED',adminToken);
+    assert.equal(redacted.body.events[0].metadata,null);
+
+    const password='not-for-system-logs';
+    s.db.prepare('INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, 0)')
+        .run('login-user', 'login-user', auth.hashPassword(password));
+    s.api.createChat('chat-logging-failure','Logging failure fixture','login-user');
+    const loggedLogin=await send('POST','/api/login',undefined,{username:'login-user',password},
+        {'x-correlation-id':password});
+    assert.equal(loggedLogin.status,200);
+    await new Promise(resolve=>setImmediate(resolve));
+    const loginEvent=s.db.prepare("SELECT correlation_id, metadata_json FROM system_events WHERE event_code='AUTH_LOGIN_SUCCEEDED' AND actor_id='login-user'").get();
+    assert.equal(loginEvent.correlation_id,null);
+    assert.equal(loginEvent.metadata_json,null);
+    assert.equal(JSON.stringify(loginEvent).includes(password),false);
+
+    s.db.exec("CREATE TRIGGER reject_system_log BEFORE INSERT ON system_events BEGIN SELECT RAISE(ABORT, 'fixture logging failure'); END");
+    const login=await send('POST','/api/login',undefined,{username:'login-user',password},
+        {'x-correlation-id':password});
+    assert.equal(login.status,200);
+    assert.equal(JSON.stringify(login.body).includes(password),false);
+    const loginCookie=login.headers['set-cookie'][0].match(/chatbot_session=([0-9a-f]{64})/)[1];
+    const chat=await send('POST','/api/chats/chat-logging-failure/messages',loginCookie,
+        {role:'user',content:'normal chatbot operation',expectedRevision:0},
+        {'x-correlation-id':loginCookie});
+    assert.equal(chat.status,201);
+    assert.equal(s.api.getMessages('chat-logging-failure','login-user').length,1);
+    await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(s.db.prepare("SELECT COUNT(*) AS count FROM system_events WHERE event_code='AUTH_LOGIN_SUCCEEDED' AND actor_id='login-user'").get().count,1);
+    s.db.exec('DROP TRIGGER reject_system_log');
+
+    const revoked=auth.createSession(s.db,'admin-id');
+    auth.deleteSession(s.db,revoked);
+    assert.equal((await get('/api/admin/system-logs',revoked)).status,401);
+    const expired=auth.createSession(s.db,'admin-id');
+    s.db.prepare('UPDATE sessions SET expires_at=0 WHERE user_id=?').run('admin-id');
+    assert.equal((await get('/api/admin/system-logs',expired)).status,401);
 });

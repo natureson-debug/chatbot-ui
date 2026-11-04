@@ -164,6 +164,24 @@ if (!messageColumns.some((column) => column.name === "display_content")) {
  input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
  latency_ms REAL, provider_response_id TEXT);
  CREATE INDEX IF NOT EXISTS deepseek_usage_user_time ON deepseek_usage(user_id,started_at);`);
+ db.exec(`CREATE TABLE IF NOT EXISTS system_events (
+  event_id TEXT PRIMARY KEY CHECK(length(event_id) BETWEEN 1 AND 128),
+  occurred_at TEXT NOT NULL CHECK(length(occurred_at) <= 32),
+  severity TEXT NOT NULL CHECK(severity IN ('DEBUG','INFO','WARN','ERROR')),
+  category TEXT NOT NULL CHECK(category IN ('AUTH','PROVIDER','CONFIG','RUNTIME','SYSTEM')),
+  event_code TEXT NOT NULL CHECK(length(event_code) BETWEEN 1 AND 64),
+  message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 160),
+  metadata_json TEXT CHECK(metadata_json IS NULL OR length(metadata_json) <= 2048),
+  correlation_id TEXT CHECK(correlation_id IS NULL OR length(correlation_id) <= 128),
+  actor_id TEXT CHECK(actor_id IS NULL OR length(actor_id) <= 128),
+  provider_id TEXT CHECK(provider_id IS NULL OR length(provider_id) <= 128),
+  outcome TEXT NOT NULL CHECK(outcome IN ('SUCCESS','FAILURE','DENIED','UNKNOWN'))
+ );
+ CREATE INDEX IF NOT EXISTS system_events_time ON system_events(occurred_at DESC, event_id);
+ CREATE INDEX IF NOT EXISTS system_events_severity_time ON system_events(severity, occurred_at DESC);
+ CREATE INDEX IF NOT EXISTS system_events_category_time ON system_events(category, occurred_at DESC);
+ CREATE INDEX IF NOT EXISTS system_events_provider_time ON system_events(provider_id, occurred_at DESC);
+ CREATE INDEX IF NOT EXISTS system_events_correlation ON system_events(correlation_id) WHERE correlation_id IS NOT NULL;`);
  db.exec('COMMIT');
  } catch(error) { if(db.isTransaction)db.exec('ROLLBACK'); throw error; }
 }
