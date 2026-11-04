@@ -36,7 +36,7 @@ test('admin form collects explicit identity without altering friendly model',asy
 });
 test('switching away from llama.cpp clears incompatible backend identity instead of trapping save',async()=>{
  const vm=require('node:vm'),source=await fs.readFile('public/admin-connections.js','utf8'),presets=require('../core/provider-presets.json');
- const fields={providerProtectedKey:{},providerStreamingLabel:{},providerType:{value:'openai'},providerEndpoint:{value:''},providerAuthMode:{value:'none'},providerProtocolStatus:{textContent:''},providerBackendIdentity:{value:identity,disabled:false,closest(){return {querySelector(){return {hidden:false}}};}},providerPrivateNetwork:{disabled:false,checked:false},providerAllowInsecureHttp:{disabled:false,checked:false},providerCredentialRef:{disabled:false}};
+ const fields={providerApiKey:{},providerTestStatus:{},providerProtectedKey:{},providerStreamingLabel:{},providerType:{value:'openai'},providerEndpoint:{value:''},providerAuthMode:{value:'none'},providerProtocolStatus:{textContent:''},providerBackendIdentity:{value:identity,disabled:false,closest(){return {querySelector(){return {hidden:false}}};}},providerPrivateNetwork:{disabled:false,checked:false},providerAllowInsecureHttp:{disabled:false,checked:false},providerCredentialRef:{disabled:false}};
  const context={presets,document:{getElementById:id=>fields[id]}};vm.createContext(context);vm.runInContext(source.slice(source.indexOf(' function updateType('),source.indexOf(' function renderModels(')),context);
  context.updateType(true);
  assert.equal(fields.providerBackendIdentity.value,'');

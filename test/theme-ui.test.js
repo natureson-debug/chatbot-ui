@@ -10,21 +10,26 @@ const html = fs.readFileSync('public/index.html', 'utf8');
 const admin = fs.readFileSync('public/admin.js', 'utf8');
 const css = fs.readFileSync('public/style.css', 'utf8');
 
-test('all chat themes are applied and normal themes use the chatbot brand', () => {
+test('all supported chat themes are applied and the standard brand is consistent', () => {
     const start = app.indexOf('function applyTheme(theme) {');
     const end = app.indexOf('\n}', start) + 2;
     const context = { document: { body: { dataset: {} } } };
     vm.createContext(context);
     vm.runInContext(app.slice(start, end), context);
 
-    for (const theme of ['dark', 'light', 'normal-dark', 'normal-light']) {
+    for (const theme of ['dark', 'normal-dark', 'normal-light']) {
         context.applyTheme(theme);
         assert.equal(context.document.body.dataset.theme, theme);
     }
+    context.applyTheme('light');
+    assert.equal(context.document.body.dataset.theme, 'normal-light');
 
-    assert.match(html, /class="phosphor-brand">ROBCO INDUSTRIES/);
-    assert.match(html, /class="normal-brand">CHATBOT/);
-    assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] \.phosphor-brand/);
+    assert.match(html, /<h1>CHATBOT<\/h1>/);
+    assert.doesNotMatch(html, /ROBCO|TERMLINK|SECURE ACCESS TERMINAL|Initialize Access/);
+    assert.match(html, /<option value="normal-light">Light<\/option>/);
+    assert.match(html, /<option value="normal-dark">Dark<\/option>/);
+    assert.match(html, /<option value="dark">Phosphor<\/option>/);
+    assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] #loginForm/);
 });
 
 test('skills, model selection, and preferences are hidden in the Settings drawer', () => {
@@ -74,14 +79,14 @@ test('Admin Console applies each theme returned by user settings', async () => {
         };
         vm.createContext(context);
         await vm.runInContext(source, context);
-        assert.equal(context.document.body.dataset.theme, theme);
+        assert.equal(context.document.body.dataset.theme, theme === 'light' ? 'normal-light' : theme);
 
         currentTheme = theme === 'normal-light' ? 'normal-dark' : 'normal-light';
         await windowListeners.focus();
         assert.equal(context.document.body.dataset.theme, currentTheme);
         currentTheme = theme;
         await documentListeners.visibilitychange();
-        assert.equal(context.document.body.dataset.theme, theme);
+        assert.equal(context.document.body.dataset.theme, theme === 'light' ? 'normal-light' : theme);
     }
 });
 
@@ -114,10 +119,29 @@ test('theme save posts the selected value and reports server failures visibly', 
 });
 
 test('normal themes style the composer and keep button shadows consistent', () => {
-    assert.match(css, /body:not\(\.admin-page\) #prompt[\s\S]*?font-family: inherit/);
+    assert.match(css, /body:not\(\.admin-page\)\[data-theme="dark"\] #prompt[\s\S]*?font-family: inherit/);
     assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] #prompt \{\s*font: inherit/);
     assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] \.prompt-wrap/);
     assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] label\[for="attachment"\]/);
     assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] #newChat,[\s\S]*?#adminConsoleButton,[\s\S]*?box-shadow: none/);
     assert.match(css, /body:not\(\.admin-page\)\[data-theme\^="normal-"\] #newChat,[\s\S]*?#adminConsoleButton \{[\s\S]*?background: var\(--normal-surface\)/);
+});
+
+test('semantic theme tokens isolate terminal styling and standardize admin controls', () => {
+    assert.match(css, /:root\s*\{[\s\S]*?--theme-page:[\s\S]*?--theme-input:[\s\S]*?--theme-accent:[\s\S]*?--theme-error:[\s\S]*?--theme-code-bg:/);
+    assert.match(css, /body\[data-theme="normal-light"\][\s\S]*?--theme-page: #f4f6f9/);
+    assert.match(css, /body\[data-theme="dark"\][\s\S]*?--theme-page: #030704[\s\S]*?--theme-glow: rgba/);
+    assert.match(css, /\.message\.assistant pre \.code-copy-button\s*\{[\s\S]*?background: var\(--theme-panel\)/);
+
+    const sharedAdminStyles = css.slice(css.indexOf('/* Admin Console tabs */'));
+    assert.doesNotMatch(sharedAdminStyles, /var\(--(?:phos|phos-soft|phos-dim|phos-faint|phos-glow|line|line-strong|panel-solid|amber|red)\)/);
+    assert.match(sharedAdminStyles, /body\.admin-page \.terminal-select-trigger[\s\S]*?background: var\(--theme-input\)/);
+    assert.match(sharedAdminStyles, /body\.admin-page \.toggle-control[\s\S]*?background: var\(--theme-panel\)/);
+    assert.match(sharedAdminStyles, /body\.admin-page :is\(\.provider-form, \.provider-safeguards\)[\s\S]*?color: var\(--theme-text\)/);
+    assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.provider-connections-layout\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
+    assert.match(css, /@media \(max-width: 600px\)[\s\S]*?\.provider-editor\s*\{\s*padding: 8px/);
+
+    const normalChatStyles = css.slice(css.indexOf('/* Compact, conventional themes for the main chat UI. */'));
+    assert.doesNotMatch(normalChatStyles, /Share Tech Mono|VT323|rgba\(138, 255, 160/);
+    assert.doesNotMatch(css, /body\[data-theme="normal-light"\],\s*body\.admin-page\[data-theme\^="normal-"\]\s*\{\s*--theme-page/);
 });

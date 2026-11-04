@@ -148,8 +148,11 @@ async function loadUserSettings() {
         if (epoch !== sessionEpoch) return;
 
         systemPromptBox.value = settings.systemPrompt;
-        themeSelect.value = settings.theme;
-        applyTheme(settings.theme);
+        const theme = globalThis.ChatbotTheme
+            ? globalThis.ChatbotTheme.normalize(settings.theme)
+            : settings.theme === "light" ? "normal-light" : settings.theme;
+        themeSelect.value = theme;
+        applyTheme(theme);
         temperatureInput.value = settings.temperature;
         maxTokensInput.value = settings.maxTokens;
         thinkingToggle.checked = settings.thinking;
@@ -170,7 +173,11 @@ async function loadUserSettings() {
 
 function applyTheme(theme) {
     const supportedThemes = ["dark", "light", "normal-dark", "normal-light"];
-    document.body.dataset.theme = supportedThemes.includes(theme) ? theme : "dark";
+    const normalized = globalThis.ChatbotTheme
+        ? globalThis.ChatbotTheme.normalize(theme)
+        : theme === "light" ? "normal-light" : theme;
+    document.body.dataset.theme = supportedThemes.includes(normalized) ? normalized : "dark";
+    globalThis.ChatbotTheme?.remember(document.body.dataset.theme);
 }
 
 let chatStore = {
@@ -371,23 +378,31 @@ function addCodeCopyButtons(messageElement) {
         icon.appendChild(iconPath);
         button.appendChild(icon);
 
+        const label = document.createElement("span");
+        label.textContent = "Copy";
+        button.appendChild(label);
+
         button.addEventListener("click", async (event) => {
             event.stopPropagation();
             try {
                 await navigator.clipboard.writeText(code.textContent);
                 button.classList.add("copied");
+                label.textContent = "Copied";
                 button.setAttribute("aria-label", "Code copied");
                 button.title = "Copied";
                 window.setTimeout(() => {
                     button.classList.remove("copied");
+                    label.textContent = "Copy";
                     button.setAttribute("aria-label", "Copy code");
                     button.title = "Copy code";
                 }, 1500);
             } catch (error) {
                 console.error("Failed to copy code block:", error);
+                label.textContent = "Failed";
                 button.setAttribute("aria-label", "Copy failed");
                 button.title = "Copy failed";
                 window.setTimeout(() => {
+                    label.textContent = "Copy";
                     button.setAttribute("aria-label", "Copy code");
                     button.title = "Copy code";
                 }, 1500);

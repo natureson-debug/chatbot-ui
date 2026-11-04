@@ -1,6 +1,7 @@
 'use strict';
 (() => {
  const list=document.getElementById('providerList');
+ const editor=document.getElementById('providerEditor');
  const form=document.getElementById('providerForm');
  const status=document.getElementById('connectionStatus');
  const discoverStatus=document.getElementById('providerDiscoverStatus');
@@ -76,7 +77,7 @@
 
  function openForm(provider=null){
   editingId=provider?provider.id:null;
-  form.hidden=false;
+  editor.hidden=false;
   document.getElementById('providerId').value=provider?provider.id:'';
   document.getElementById('providerId').disabled=!!provider;
   document.getElementById('providerName').value=provider?provider.name:'';
@@ -103,8 +104,8 @@
  }
 
  function closeForm(){
-  form.hidden=true;
-  editingId=null;document.getElementById('providerApiKey').value='';
+  editor.hidden=true;
+  editingId=null;document.getElementById('providerApiKey').value='';globalThis.AdminProviderUI?.select(null);
  }
 
  function collect(){
@@ -215,6 +216,8 @@
 
  function updateType(prefill){
   const p=presets.find(p=>p.id===document.getElementById('providerType').value);if(!p)return;
+  if(prefill){document.getElementById('providerApiKey').value='';document.getElementById('providerTestStatus').textContent='';}
+  globalThis.AdminProviderUI?.select(p.id,document.getElementById('providerAuthMode').value);
   if(prefill&&p.id==='deepseek'){document.getElementById('providerCredentialRef').value='';document.getElementById('providerName').value='DeepSeek';document.getElementById('providerEnabled').checked=false;document.getElementById('providerModel').value=p.models[0];modelDraft=p.models.map(id=>({id,name:id,enabled:true,chat:true,parameters:['max_tokens','temperature'],defaults:{max_tokens:128}}));renderModels();}
   if(prefill){document.getElementById('providerEndpoint').value=p.endpoint;document.getElementById('providerAuthMode').value=p.id==='deepseek'?'protected':p.cloud?'env':'none';}
   document.getElementById('providerProtocolStatus').textContent=p.id==='deepseek'?'Save a protected key and enable DeepSeek safeguards below. Environment references still require the deployment environment gate.':['openai-responses','deepseek-chat'].includes(p.adapter)?'Native text inference requires the server feature gate (disabled by default), a credential reference and an approved model. Enable only model parameters verified as supported.':['anthropic-messages','gemini-native'].includes(p.adapter)?'Configuration and discovery only. Native inference is not implemented.':'Uses the existing adapter; individual model compatibility requires qualification.';
@@ -226,7 +229,7 @@
   if(p.id==='deepseek')void keyOperation('status');
   updateAuth();
  }
- function updateAuth(){document.getElementById('providerCredentialRef').disabled=document.getElementById('providerAuthMode').value!=='env';}
+ function updateAuth(){document.getElementById('providerCredentialRef').disabled=document.getElementById('providerAuthMode').value!=='env';globalThis.AdminProviderUI?.select(document.getElementById('providerType').value,document.getElementById('providerAuthMode').value);}
  function renderModels(){
   const root=document.getElementById('providerConfiguredModels');root.replaceChildren();
   for(const m of modelDraft){
@@ -272,7 +275,7 @@
    if(action==='save')field.value='';
    const data=await api('/api/admin/ai/connections/'+encodeURIComponent(id)+'/'+(action==='test'?'test':'credential'),options);
    if(editingId!==id)return;
-   if(action==='test')result.textContent=JSON.stringify(data,null,2);else{indicator.textContent=data.configured?'Configured':'Not configured';if(action!=='status')result.textContent='Credential change saved.';if(action==='delete'){document.getElementById('providerEnabled').checked=false;void load();}}
+   if(action==='test')result.textContent=globalThis.AdminProviderUI?AdminProviderUI.testResult(data):JSON.stringify(data,null,2);else{indicator.textContent=data.configured?'Configured':'Not configured';if(action!=='status')result.textContent='Credential change saved.';if(action==='delete'){document.getElementById('providerEnabled').checked=false;void load();}}
   }catch{if(editingId===id)result.textContent='Operation failed. Check the saved provider, credential and DeepSeek safeguards.';}
  }
  document.getElementById('saveProviderKey').addEventListener('click',()=>keyOperation('save'));

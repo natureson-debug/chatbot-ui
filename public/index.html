@@ -6,7 +6,7 @@
 
 <link rel="icon" type="image/png" href="/favicon.png">
 
-<title>ROBCO TERMLINK // Local AI</title>
+<title>Chatbot</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,13 +16,13 @@
 </head>
 
 <body>
+<script src="/theme-preference.js"></script>
 
 <div id="crtFlicker" aria-hidden="true"></div>
 
 <section id="loginScreen">
     <form id="loginForm">
-        <h2>ROBCO TERMLINK</h2>
-        <p>SECURE ACCESS TERMINAL</p>
+        <h2>Sign in to Chatbot</h2>
 
         <label for="loginUsername">Username</label>
         <input
@@ -40,7 +40,7 @@
             required
         >
 
-        <button type="submit">Initialize Access</button>
+        <button type="submit">Sign In</button>
         <p id="loginError" role="alert" hidden></p>
     </form>
 </section>
@@ -52,7 +52,7 @@
             <img src="/favicon.png" alt="Chatbot" class="header-icon">
 
             <div class="brand-block">
-                <h1><span class="phosphor-brand">ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL</span><span class="normal-brand">CHATBOT</span></h1>
+                <h1>CHATBOT</h1>
                 <div class="status-line">
                     <span id="status">Connecting...</span>
                     <span id="terminalClock" aria-label="Current time">--:--:--</span>
@@ -97,10 +97,9 @@
             <div class="setting-field">
                 <label for="theme">Theme</label>
                 <select id="theme">
-                    <option value="dark">Green Phosphor</option>
-                    <option value="light">Amber Phosphor</option>
-                    <option value="normal-dark">Normal - Dark</option>
-                    <option value="normal-light">Normal - Light</option>
+                    <option value="normal-light">Light</option>
+                    <option value="normal-dark">Dark</option>
+                    <option value="dark">Phosphor</option>
                 </select>
             </div>
 

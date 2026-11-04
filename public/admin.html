@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ROBCO TERMLINK // System Admin</title>
+    <title>Chatbot // Admin</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body class="admin-page" data-theme="dark">
+<script src="/theme-preference.js"></script>
 
     <div id="crtFlicker" aria-hidden="true"></div>
 
@@ -20,15 +21,13 @@
             <div class="header-title-wrap">
                 <span class="header-gear" aria-hidden="true">⚙</span>
                 <div class="admin-title-block">
-                    <h1>ROBCO TERMLINK // SYSTEM ADMIN</h1>
+                    <h1>CHATBOT // ADMIN</h1>
                     <div class="admin-status-line">
-                        <span>RESTRICTED ACCESS</span>
                         <span id="terminalClock" aria-label="Current time">--:--:--</span>
                         <span id="themeLoadStatus" role="status" aria-live="polite" hidden></span>
                     </div>
                 </div>
             </div>
-            <span class="header-side-label">SECURE TERMINAL</span>
         </header>
 
         <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
@@ -305,19 +304,13 @@
 
     <p id="connectionStatus" role="status"></p>
 
-    <div id="providerList" class="provider-list"></div>
+    <div class="provider-connections-layout">
+        <div id="providerList" class="provider-list"></div>
 
-    <form id="providerForm" class="provider-form" hidden>
-        <div id="providerProtectedKey" class="field-group" hidden>
-            <label for="providerApiKey">DeepSeek API key</label>
-            <input id="providerApiKey" type="password" autocomplete="new-password" maxlength="4096">
-            <p id="providerKeyStatus" role="status">Not configured</p>
-            <button type="button" id="saveProviderKey" class="action-btn">Save API key</button>
-            <button type="button" id="deleteProviderKey" class="action-btn">Delete API key</button>
-            <button type="button" id="testProviderKey" class="action-btn">Test Connection (paid)</button>
-            <p id="providerTestStatus" role="status"></p>
-            <small>Save the provider disabled first. Save its key, enable DeepSeek safeguards below, then test or enable the provider. Keys are protected for the Windows account running Node.</small>
-        </div>
+    <div id="providerEditor" class="provider-editor" hidden>
+    <form id="providerForm" class="provider-form">
+        <section class="provider-form-section" aria-labelledby="providerGeneralTitle">
+        <h3 id="providerGeneralTitle">General configuration</h3>
         <p id="providerProtocolStatus" role="status"></p>
         <div class="provider-form-grid">
             <div class="field-group">
@@ -339,20 +332,6 @@
             <div class="field-group">
                 <label for="providerEndpoint">Base URL</label>
                 <input id="providerEndpoint" type="url" placeholder="https://api.example.com/v1" required>
-            </div>
-            <div class="field-group">
-                <label for="providerAuthMode">Authentication</label>
-                <select id="providerAuthMode">
-                    <option value="none">None</option>
-                    <option value="protected">Protected Windows credential</option>
-                <option value="env">Environment reference</option>
-                    <option value="local-key">Local llama.cpp key file</option>
-                </select>
-            </div>
-            <div class="field-group">
-                <label for="providerCredentialRef">Credential reference</label>
-                <input id="providerCredentialRef" type="text" placeholder="env:CHATBOT_PROVIDER_KEY">
-                <small>Use a server-provisioned environment reference, never paste an API key. Replace the reference to switch credentials; select None to remove this connection's reference. This does not erase the server environment variable.</small>
             </div>
             <div class="field-group">
                 <label for="providerModel">Default model</label>
@@ -393,7 +372,39 @@
             <label class="toggle-control"><input id="providerCapVision" type="checkbox"><span>Vision</span></label>
             <label class="toggle-control"><input id="providerCapTools" type="checkbox"><span>Tools</span></label>
         </div>
+        </section>
 
+        <section class="provider-form-section" aria-labelledby="providerCredentialsTitle">
+            <h3 id="providerCredentialsTitle">Credentials and connection testing</h3>
+            <div class="provider-form-grid">
+                <div class="field-group">
+                    <label for="providerAuthMode">Authentication</label>
+                    <select id="providerAuthMode">
+                        <option value="none">None</option>
+                        <option value="protected">Protected Windows credential</option>
+                        <option value="env">Environment reference</option>
+                        <option value="local-key">Local llama.cpp key file</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="providerCredentialRef">Credential reference</label>
+                    <input id="providerCredentialRef" type="text" placeholder="env:CHATBOT_PROVIDER_KEY">
+                    <small>Use a server-provisioned environment reference, never paste an API key. Replacing the reference switches credentials; selecting None removes this connection's reference, not the server environment variable.</small>
+                </div>
+            </div>
+            <div id="providerProtectedKey" class="field-group provider-credential-test" hidden>
+                <label for="providerApiKey">DeepSeek API key</label>
+                <input id="providerApiKey" type="password" autocomplete="new-password" maxlength="4096">
+                <p id="providerKeyStatus" role="status">Not configured</p>
+                <div class="toolbar-row">
+                    <button type="button" id="saveProviderKey" class="action-btn">Save API key</button>
+                    <button type="button" id="deleteProviderKey" class="action-btn">Delete API key</button>
+                    <button type="button" id="testProviderKey" class="action-btn">Test Connection (paid)</button>
+                </div>
+                <p id="providerTestStatus" role="status"></p>
+                <small>Save the provider disabled first. Configure DeepSeek safeguards below before testing or enabling it. Keys are protected for the Windows account running Node.</small>
+            </div>
+        </section>
         <div class="toolbar-row">
             <button id="saveProvider" type="submit">Save Provider</button>
             <button id="discoverProvider" type="button">Discover Models</button>
@@ -401,6 +412,41 @@
         </div>
         <p id="providerDiscoverStatus" role="status"></p>
     </form>
+
+    <section class="admin-section provider-safeguards" data-provider-safeguards="openai" hidden>
+        <h3>OpenAI usage and safeguards</h3>
+        <pre id="openaiUsageSummary">Loading...</pre>
+        <form id="openaiSafeguards">
+            <label><input type="checkbox" name="enabled"> Allow OpenAI inference (environment gate also required)</label>
+            <label>Maximum output tokens <input name="max_output_tokens" type="number" min="1" max="32768" required></label>
+            <label>Maximum concurrent requests <input name="max_concurrent" type="number" min="1" max="32" required></label>
+            <label>Requests per user per rolling hour <input name="per_hour" type="number" min="1" max="10000" required></label>
+            <label>Requests per user per rolling 24 hours <input name="per_day" type="number" min="1" max="100000" required></label>
+            <label>Optional estimated daily USD threshold <input name="estimated_daily_usd" type="number" min="0.01" step="0.01"></label>
+            <p>Pricing is not configured. Setting a monetary threshold blocks inference because cost cannot be verified. Estimates are not billing ceilings.</p>
+            <button type="submit">Save safeguards</button>
+            <button id="refreshOpenaiUsage" type="button">Refresh usage</button>
+        </form>
+        <p id="openaiUsageStatus" role="status"></p>
+    </section>
+    <section class="admin-section provider-safeguards" data-provider-safeguards="deepseek" hidden>
+        <h3>DeepSeek usage and safeguards</h3>
+        <pre id="deepseekUsageSummary">Loading...</pre>
+        <form id="deepseekSafeguards">
+            <label><input type="checkbox" name="enabled"> Allow DeepSeek inference (environment gate also required)</label>
+            <label>Maximum output tokens <input name="max_output_tokens" type="number" min="1" max="32768" required></label>
+            <label>Maximum concurrent requests <input name="max_concurrent" type="number" min="1" max="32" required></label>
+            <label>Requests per user per rolling hour <input name="per_hour" type="number" min="1" max="10000" required></label>
+            <label>Requests per user per rolling 24 hours <input name="per_day" type="number" min="1" max="100000" required></label>
+            <label>Optional estimated daily USD threshold <input name="estimated_daily_usd" type="number" min="0.01" step="0.01"></label>
+            <p>Pricing is not configured. Setting a monetary threshold blocks inference because cost cannot be verified. Estimates are not billing ceilings.</p>
+            <button type="submit">Save safeguards</button>
+            <button id="refreshDeepseekUsage" type="button">Refresh usage</button>
+        </form>
+        <p id="deepseekUsageStatus" role="status"></p>
+    </section>
+    </div>
+    </div>
 
 </section>
 
@@ -446,34 +492,6 @@
 </section>
 
             <a href="/" class="back-link">← Back to Chatbot</a>
-<section class="admin-section">
-<h2>OpenAI usage and safeguards</h2>
-<pre id="openaiUsageSummary" style="white-space:pre-wrap">Loading...</pre>
-<form id="openaiSafeguards">
-<label><input type="checkbox" name="enabled"> Allow OpenAI inference (environment gate also required)</label>
-<label>Maximum output tokens <input name="max_output_tokens" type="number" min="1" max="32768" required></label>
-<label>Maximum concurrent requests <input name="max_concurrent" type="number" min="1" max="32" required></label>
-<label>Requests per user per rolling hour <input name="per_hour" type="number" min="1" max="10000" required></label>
-<label>Requests per user per rolling 24 hours <input name="per_day" type="number" min="1" max="100000" required></label>
-<label>Optional estimated daily USD threshold <input name="estimated_daily_usd" type="number" min="0.01" step="0.01"></label>
-<p>Pricing is not configured. Setting a monetary threshold blocks inference because cost cannot be verified. Estimates are not billing ceilings.</p>
-<button type="submit">Save safeguards</button><button id="refreshOpenaiUsage" type="button">Refresh usage</button>
-</form><p id="openaiUsageStatus" role="status"></p>
-</section>
-<section class="admin-section">
-<h2>DeepSeek usage and safeguards</h2>
-<pre id="deepseekUsageSummary" style="white-space:pre-wrap">Loading...</pre>
-<form id="deepseekSafeguards">
-<label><input type="checkbox" name="enabled"> Allow DeepSeek inference (environment gate also required)</label>
-<label>Maximum output tokens <input name="max_output_tokens" type="number" min="1" max="32768" required></label>
-<label>Maximum concurrent requests <input name="max_concurrent" type="number" min="1" max="32" required></label>
-<label>Requests per user per rolling hour <input name="per_hour" type="number" min="1" max="10000" required></label>
-<label>Requests per user per rolling 24 hours <input name="per_day" type="number" min="1" max="100000" required></label>
-<label>Optional estimated daily USD threshold <input name="estimated_daily_usd" type="number" min="0.01" step="0.01"></label>
-<p>Pricing is not configured. Setting a monetary threshold blocks inference because cost cannot be verified. Estimates are not billing ceilings.</p>
-<button type="submit">Save safeguards</button><button id="refreshDeepseekUsage" type="button">Refresh usage</button>
-</form><p id="deepseekUsageStatus" role="status"></p>
-</section>
         </main>
     </div>
 
@@ -490,6 +508,7 @@
     <script src="/admin.js" defer></script>
     <script src="/admin-monitor.js" defer></script>
     <script src="/admin-restart.js" defer></script>
+<script src="/admin-provider-ui.js" defer></script>
 <script src="/admin-connections.js" defer></script>
 <script src="/admin-extensions.js" defer></script>
 <script src="/admin-openai.js" defer></script>

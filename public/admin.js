@@ -15,7 +15,11 @@ async function loadThemeSettings() {
         const settings = await response.json();
         if (request !== themeSettingsRequest) return;
         const supportedThemes = ["dark", "light", "normal-dark", "normal-light"];
-        document.body.dataset.theme = supportedThemes.includes(settings.theme) ? settings.theme : "dark";
+        const theme = globalThis.ChatbotTheme
+            ? globalThis.ChatbotTheme.normalize(settings.theme)
+            : settings.theme === "light" ? "normal-light" : settings.theme;
+        document.body.dataset.theme = supportedThemes.includes(theme) ? theme : "dark";
+        globalThis.ChatbotTheme?.remember(document.body.dataset.theme);
         const status = document.getElementById("themeLoadStatus");
         if (status) {
             status.hidden = true;
