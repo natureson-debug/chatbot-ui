@@ -308,6 +308,16 @@
     <div id="providerList" class="provider-list"></div>
 
     <form id="providerForm" class="provider-form" hidden>
+        <div id="providerProtectedKey" class="field-group" hidden>
+            <label for="providerApiKey">DeepSeek API key</label>
+            <input id="providerApiKey" type="password" autocomplete="new-password" maxlength="4096">
+            <p id="providerKeyStatus" role="status">Not configured</p>
+            <button type="button" id="saveProviderKey" class="action-btn">Save API key</button>
+            <button type="button" id="deleteProviderKey" class="action-btn">Delete API key</button>
+            <button type="button" id="testProviderKey" class="action-btn">Test Connection (paid)</button>
+            <p id="providerTestStatus" role="status"></p>
+            <small>Save the provider disabled first. Save its key, enable DeepSeek safeguards below, then test or enable the provider. Keys are protected for the Windows account running Node.</small>
+        </div>
         <p id="providerProtocolStatus" role="status"></p>
         <div class="provider-form-grid">
             <div class="field-group">
@@ -334,7 +344,8 @@
                 <label for="providerAuthMode">Authentication</label>
                 <select id="providerAuthMode">
                     <option value="none">None</option>
-                    <option value="env">Environment reference</option>
+                    <option value="protected">Protected Windows credential</option>
+                <option value="env">Environment reference</option>
                     <option value="local-key">Local llama.cpp key file</option>
                 </select>
             </div>
@@ -356,6 +367,7 @@
                 <input id="providerTimeoutMs" type="number" min="1000" max="600000" step="1000" placeholder="120000">
             </div>
             <div class="field-group toggle-field">
+                <label class="toggle-control" id="providerStreamingLabel" hidden><input id="providerStreaming" type="checkbox" checked><span>Stream DeepSeek output</span></label>
                 <label class="toggle-control"><input id="providerEnabled" type="checkbox" checked><span>Enabled</span></label>
             </div>
             <div class="field-group toggle-field">

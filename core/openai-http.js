@@ -9,7 +9,7 @@ async function serve({db,req,res,user,provider,input,providers,authorize}){
  try{
   admission=usage.admit(db,{provider,userId:user.id,chatId:input.chatId,revision:input.expectedRevision,authorize});
   const response=await providers.chat(provider,input,{signal:controller.signal,maxOutputTokens:admission.maxOutput,
-   beforeSend:()=>{if(process.env[usage.gate]!=='1'||!usage.settings(db).enabled||!authorize())throw Error('Provider authorization changed');},
+   beforeSend:()=>{if((process.env[usage.gate]!=='1'&&!(family==='deepseek'&&provider.credentialRef==='protected:'+provider.id))||!usage.settings(db).enabled||!authorize())throw Error('Provider authorization changed');},
    onProgress:event=>usage.observe(db,admission.id,{...event,providerName:provider.name})});
   if(res.destroyed)return;
   res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store','X-Chat-Persistence':'server','X-Chat-Model':encodeURIComponent(provider.model),'X-Chat-Provider':encodeURIComponent(provider.name),'X-Chat-Context':'unknown'});

@@ -52,17 +52,18 @@ function validate(value){
   if(c.backendModelIdentity!==undefined&&c.backendModelIdentity!==null&&
      (adapter!=='llama.cpp'||typeof c.backendModelIdentity!=='string'||!c.backendModelIdentity.trim()||
       c.backendModelIdentity.length>4096||/[\x00-\x1f\x7f]/.test(c.backendModelIdentity)))fail('backendModelIdentity must be an exact nonempty llama.cpp model ID or path');
-  if(c.credentialRef!==null&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef))&&c.credentialRef!=='local-api-key')fail('credentialRef must be env:CHATBOT_* or local-api-key');
+  if(c.credentialRef!==null&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef))&&c.credentialRef!=='local-api-key'&&!(adapter==='deepseek-chat'&&c.credentialRef==='protected:'+c.id))fail('credentialRef must be env:CHATBOT_* or local-api-key');
   if(c.credentialRef==='local-api-key'&&!(adapter==='llama.cpp'&&url.origin==='http://127.0.0.1:8080'))fail('local-api-key requires llama.cpp on http://127.0.0.1:8080');
-  if(['openai-responses','deepseek-chat'].includes(adapter)&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef)))fail('OpenAI provider requires an env:CHATBOT_* credential reference');
+  if(['openai-responses','deepseek-chat'].includes(adapter)&&c.credentialRef!=='protected:'+c.id&&!(typeof c.credentialRef==='string'&&/^env:CHATBOT_[A-Z0-9_]{1,80}$/.test(c.credentialRef)))fail('OpenAI provider requires an env:CHATBOT_* credential reference');
   if(adapter==='ollama'&&c.credentialRef===null&&!loopback&&!(priv&&c.privateNetwork===true))fail('no-auth Ollama requires loopback or approved private network');
   if(!Array.isArray(c.parameters)||c.parameters.some(p=>!['temperature','max_tokens'].includes(p)))fail('parameters may only contain temperature and max_tokens');
   if(!c.capabilities||Object.values(c.capabilities).some(v=>typeof v!=='boolean')||Object.keys(c.capabilities).some(k=>!['streaming','thinking','vision','tools','models'].includes(k))||c.capabilities.streaming!==true)fail('capabilities must include streaming=true and only supported booleans');
   if(c.contextLimit!==null&&(!Number.isSafeInteger(c.contextLimit)||c.contextLimit<1))fail('contextLimit must be null or a positive integer');
   if(c.timeoutMs!==undefined&&c.timeoutMs!==null&&(!Number.isSafeInteger(c.timeoutMs)||c.timeoutMs<1000||c.timeoutMs>600000))fail('timeoutMs must be between 1000 and 600000');
   if(c.enabled!==undefined&&typeof c.enabled!=='boolean')fail('enabled must be a boolean');
+  if(c.streaming!==undefined&&(adapter!=='deepseek-chat'||typeof c.streaming!=='boolean'))fail('Invalid streaming setting');
   const models=modelConfig.validateModels(c.models,c);
-  return {...(preset?{providerType:preset.id}:{}),...(models?{models}:{}),id:c.id,name:c.name,adapter,endpoint:url.href.replace(/\/$/,''),model:c.model,...(c.backendModelIdentity==null?{}:{backendModelIdentity:c.backendModelIdentity}),credentialRef:c.credentialRef,parameters:[...new Set(c.parameters)],capabilities:{...c.capabilities},contextLimit:c.contextLimit,privateNetwork:c.privateNetwork===true,allowInsecureHttp:c.allowInsecureHttp===true,timeoutMs:c.timeoutMs??null,enabled:c.enabled!==false};
+  return {...(adapter==='deepseek-chat'?{streaming:c.streaming!==false}:{}),...(preset?{providerType:preset.id}:{}),...(models?{models}:{}),id:c.id,name:c.name,adapter,endpoint:url.href.replace(/\/$/,''),model:c.model,...(c.backendModelIdentity==null?{}:{backendModelIdentity:c.backendModelIdentity}),credentialRef:c.credentialRef,parameters:[...new Set(c.parameters)],capabilities:{...c.capabilities},contextLimit:c.contextLimit,privateNetwork:c.privateNetwork===true,allowInsecureHttp:c.allowInsecureHttp===true,timeoutMs:c.timeoutMs??null,enabled:c.enabled!==false};
  });
  if(value.defaultId!=='legacy-local'&&!ids.has(value.defaultId)||ids.has('legacy-local'))fail('defaultId must reference an existing connection or legacy-local');
  return {version:1,revision:value.revision,defaultId:value.defaultId,connections};

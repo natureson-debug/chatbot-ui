@@ -15,16 +15,17 @@ function configure(db,value){
  if(value.estimated_daily_usd!==null&&(typeof value.estimated_daily_usd!=='number'||!Number.isFinite(value.estimated_daily_usd)||value.estimated_daily_usd<=0))throw denied('INVALID_OPENAI_LIMITS',400);
  return transaction(db,()=>{prepare(db,'UPDATE openai_safeguards SET enabled=?,max_output_tokens=?,max_concurrent=?,per_hour=?,per_day=?,estimated_daily_usd=? WHERE id=1').run(+value.enabled,value.max_output_tokens,value.max_concurrent,value.per_hour,value.per_day,value.estimated_daily_usd);return settings(db);});
 }
-function admit(db,{provider,userId,chatId,revision,authorize,now=Date.now()}){
- if(typeof chatId!=='string'||!Number.isSafeInteger(revision)||revision<0)throw denied('CHAT_CONTEXT_REQUIRED',400);
+function admit(db,{provider,userId,chatId,revision,authorize,diagnostic=false,now=Date.now()}){
+ if(!diagnostic&&(typeof chatId!=='string'||!Number.isSafeInteger(revision)||revision<0))throw denied('CHAT_CONTEXT_REQUIRED',400);
+ if(diagnostic){chatId='';revision=0;}
  if(!provider.parameters?.includes('max_tokens'))throw denied('OPENAI_OUTPUT_LIMIT_UNSUPPORTED',400);
  return transaction(db,()=>{
   if(!authorize())throw denied('SESSION_REVOKED',401);
-  if(process.env[gate]!=='1')throw denied('OPENAI_DISABLED',403);
+  if(process.env[gate]!=='1'&&!(family==='deepseek'&&provider.credentialRef==='protected:'+provider.id))throw denied('OPENAI_DISABLED',403);
   const s=settings(db);if(!s.enabled)throw denied('OPENAI_DISABLED',403);
   const chat=prepare(db,'SELECT revision FROM chats WHERE id=? AND user_id=?').get(chatId,userId);
-  if(!chat)throw denied('CHAT_NOT_FOUND',404);
-  if(!Number.isSafeInteger(revision)||revision!==chat.revision)throw denied('CHAT_REVISION_CONFLICT',409);
+  if(!chat&&!diagnostic)throw denied('CHAT_NOT_FOUND',404);
+  if(!diagnostic&&(!Number.isSafeInteger(revision)||revision!==chat.revision))throw denied('CHAT_REVISION_CONFLICT',409);
   // No reliable price/input-cost model is installed. Unknown cost is never zero.
   if(s.estimated_daily_usd!==null)throw denied('OPENAI_COST_UNVERIFIABLE',403);
   if(prepare(db,"SELECT count(*) AS n FROM openai_usage WHERE status='in_progress'").get().n>=s.max_concurrent)throw denied('OPENAI_CONCURRENCY_LIMIT');
@@ -42,6 +43,7 @@ function observe(db,id,event,now=Date.now()){
   const count=n=>Number.isSafeInteger(n)&&n>=0?n:null;
   const responseId=typeof event.providerResponseId==='string'&&/^resp_[A-Za-z0-9_-]{1,160}$/.test(event.providerResponseId)?event.providerResponseId:null;
   prepare(db,'UPDATE openai_usage SET status=?,finished_at=?,latency_ms=?,input_tokens=COALESCE(?,input_tokens),output_tokens=COALESCE(?,output_tokens),cached_input_tokens=COALESCE(?,cached_input_tokens),provider_response_id=COALESCE(?,provider_response_id) WHERE request_id=?').run(status,status==='in_progress'?null:now,status==='in_progress'?null:Math.max(0,now-row.started_at),count(event.usage?.promptTokens),count(event.usage?.generatedTokens),count(event.usage?.cachedTokens),responseId,id);
+  if(row.conversation_id==='')return; // Administrator diagnostic: never a chat message.
   const chat=prepare(db,'SELECT revision FROM chats WHERE id=? AND user_id=?').get(row.conversation_id,row.user_id);
   if(!chat||chat.revision!==row.revision)return; // Never resurrect cleared/deleted output.
   if(typeof event.text==='string'&&event.text){
@@ -57,7 +59,7 @@ function reconcile(db,now=Date.now()){
 }
 function summary(db,now=Date.now()){
  const today=new Date(now);today.setUTCHours(0,0,0,0);
- return {settings:settings(db),environmentEnabled:process.env[gate]==='1',currentConcurrency:prepare(db,"SELECT count(*) AS n FROM openai_usage WHERE status='in_progress'").get().n,
+ return {guiCredentialsAvailable:family==='deepseek',settings:settings(db),environmentEnabled:process.env[gate]==='1',currentConcurrency:prepare(db,"SELECT count(*) AS n FROM openai_usage WHERE status='in_progress'").get().n,
   today:prepare(db,`SELECT count(*) AS requests,COALESCE(SUM(status='completed'),0) AS completed,COALESCE(SUM(status='failed'),0) AS failed,COALESCE(SUM(status='cancelled'),0) AS cancelled,COALESCE(SUM(status='incomplete'),0) AS incomplete,COALESCE(SUM(status='interrupted'),0) AS interrupted,SUM(input_tokens) AS inputTokens,SUM(output_tokens) AS outputTokens,COALESCE(SUM(input_tokens IS NULL),0) AS unknownUsage FROM openai_usage WHERE started_at>=?`).get(today.getTime()),estimatedCost:null,costStatus:'unavailable',dayBoundary:'UTC'};
 }
 return {settings,configure,admit,observe,reconcile,summary,gate};

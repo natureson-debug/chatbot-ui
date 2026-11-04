@@ -3,6 +3,11 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {chat,buildRequest,usage}=require('../core/deepseek-chat');
 const config={id:'ds',name:'DeepSeek',adapter:'deepseek-chat',endpoint:'https://api.deepseek.com',credentialRef:'env:CHATBOT_DEEPSEEK_API_KEY',model:'deepseek-flash',parameters:['max_tokens','temperature'],capabilities:{streaming:true},contextLimit:null,models:[{id:'deepseek-flash',name:'Flash',enabled:true,chat:true,parameters:['max_tokens'],defaults:{max_tokens:64}}]};
 const input={messages:[{role:'user',content:'Synthetic'}]};
+test('DeepSeek non-streaming setting preserves normalized text, status and usage without reasoning',async()=>{
+ let body,status;const events=[];
+ const response=await chat({...config,streaming:false},input,{secret:async()=> 'synthetic',onDiagnostics:e=>status=e.httpStatus,onProgress:e=>events.push(e),fetchImpl:async(url,options)=>{body=JSON.parse(options.body);return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'OK',reasoning_content:'private'},finish_reason:'stop'}],usage:{prompt_tokens:2,completion_tokens:1}}),{headers:{'content-type':'application/json'}});}});
+ const text=await response.text();assert.equal(body.stream,false);assert.equal(body.stream_options,undefined);assert.equal(status,200);assert(text.includes('OK'));assert(!text.includes('private'));assert.equal(events.at(-1).status,'completed');assert.equal(events.at(-1).usage.generatedTokens,1);
+});
 const chunk=(content,finish=null,extra={})=>'data: '+JSON.stringify({choices:[{index:0,delta:{content,reasoning_content:'not public'},finish_reason:finish}],...extra})+'\r\n\r\n';
 const wire=': keep-alive\r\n\r\n'+chunk('Hello 🌍')+chunk(null,'stop',{usage:{prompt_tokens:9,completion_tokens:3,prompt_cache_hit_tokens:2}})+'data: [DONE]\r\n\r\n';
 function transport(text=wire,fragment=1){return async()=>{const bytes=new TextEncoder().encode(text);let offset=0;return new Response(new ReadableStream({pull(c){if(offset===bytes.length)c.close();else{c.enqueue(bytes.slice(offset,offset+fragment));offset=Math.min(bytes.length,offset+fragment);}}}),{headers:{'content-type':'text/event-stream'}});};}

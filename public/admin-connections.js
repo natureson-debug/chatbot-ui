@@ -82,7 +82,7 @@
   document.getElementById('providerName').value=provider?provider.name:'';
   document.getElementById('providerType').value=provider?(provider.providerType|| (provider.adapter==='llama.cpp'?'llama.cpp':provider.adapter==='ollama'?'ollama':'custom')):'custom';
   document.getElementById('providerEndpoint').value=provider?provider.endpoint:'';
-  const auth=provider?.credentialRef==='local-api-key'?'local-key':provider?.credentialRef?'env':'none';
+  const auth=provider?.credentialRef?.startsWith('protected:')?'protected':provider?.credentialRef==='local-api-key'?'local-key':provider?.credentialRef?'env':'none';
   document.getElementById('providerAuthMode').value=auth;
   document.getElementById('providerCredentialRef').value=provider?.credentialRef&&provider.credentialRef!=='local-api-key'?provider.credentialRef:'';
   document.getElementById('providerModel').value=provider?provider.model:'';
@@ -95,6 +95,7 @@
   document.getElementById('providerCapThinking').checked=provider?provider.capabilities.thinking===true:false;
   document.getElementById('providerCapVision').checked=provider?provider.capabilities.vision===true:false;
   document.getElementById('providerCapTools').checked=provider?provider.capabilities.tools===true:false;
+  document.getElementById('providerApiKey').value='';document.getElementById('providerStreaming').checked=provider?.streaming!==false;
   modelChoices.replaceChildren();
   discoverStatus.textContent='';
   modelDraft=provider?.models?structuredClone(provider.models):provider?[{id:provider.model,name:provider.model,enabled:true,chat:true,parameters:[...provider.parameters],defaults:{}}]:[];
@@ -103,7 +104,7 @@
 
  function closeForm(){
   form.hidden=true;
-  editingId=null;
+  editingId=null;document.getElementById('providerApiKey').value='';
  }
 
  function collect(){
@@ -115,7 +116,7 @@
   const endpoint=document.getElementById('providerEndpoint').value.trim();
   if(!endpoint)throw Error('Base URL is required.');
   const auth=document.getElementById('providerAuthMode').value;
-  const credentialRef=auth==='local-key'?'local-api-key':auth==='env'?document.getElementById('providerCredentialRef').value.trim():null;
+  const credentialRef=auth==='protected'?'protected:'+id:auth==='local-key'?'local-api-key':auth==='env'?document.getElementById('providerCredentialRef').value.trim():null;
   const model=document.getElementById('providerModel').value.trim();
   const backendModelIdentity=document.getElementById('providerBackendIdentity').value;
   if(backendModelIdentity&&!['llama.cpp-openai','llama.cpp'].includes(type))throw Error('Backend identity is only supported for llama.cpp. Clear it before changing provider type.');
@@ -124,7 +125,7 @@
   const timeoutRaw=document.getElementById('providerTimeoutMs').value;
   const timeoutMs=timeoutRaw?Number(timeoutRaw):null;
   return {
-   id,name,adapter:(typeof presets!=='undefined'?presets.find(p=>p.id===type)?.adapter:null)||type,
+   id,name,...(type==='deepseek'?{streaming:document.getElementById('providerStreaming').checked}:{}),adapter:(typeof presets!=='undefined'?presets.find(p=>p.id===type)?.adapter:null)||type,
    ...(typeof presets!=='undefined'&&presets.some(p=>p.id===type)?{providerType:type}:{}),endpoint,credentialRef,model,timeoutMs,
    ...(typeof modelDraft!=='undefined'&&modelDraft.length?{models:structuredClone(modelDraft)}:{}),
    backendModelIdentity:backendModelIdentity||null,
@@ -214,13 +215,15 @@
 
  function updateType(prefill){
   const p=presets.find(p=>p.id===document.getElementById('providerType').value);if(!p)return;
-  if(prefill&&p.id==='deepseek'){document.getElementById('providerCredentialRef').value=p.credentialRef;document.getElementById('providerModel').value=p.models[0];modelDraft=p.models.map(id=>({id,name:id,enabled:true,chat:true,parameters:['max_tokens','temperature'],defaults:{max_tokens:128}}));renderModels();}
-  if(prefill){document.getElementById('providerEndpoint').value=p.endpoint;document.getElementById('providerAuthMode').value=p.cloud?'env':'none';}
-  document.getElementById('providerProtocolStatus').textContent=['openai-responses','deepseek-chat'].includes(p.adapter)?'Native text inference requires the server feature gate (disabled by default), a credential reference and an approved model. Enable only model parameters verified as supported.':['anthropic-messages','gemini-native'].includes(p.adapter)?'Configuration and discovery only. Native inference is not implemented.':'Uses the existing adapter; individual model compatibility requires qualification.';
+  if(prefill&&p.id==='deepseek'){document.getElementById('providerCredentialRef').value='';document.getElementById('providerName').value='DeepSeek';document.getElementById('providerEnabled').checked=false;document.getElementById('providerModel').value=p.models[0];modelDraft=p.models.map(id=>({id,name:id,enabled:true,chat:true,parameters:['max_tokens','temperature'],defaults:{max_tokens:128}}));renderModels();}
+  if(prefill){document.getElementById('providerEndpoint').value=p.endpoint;document.getElementById('providerAuthMode').value=p.id==='deepseek'?'protected':p.cloud?'env':'none';}
+  document.getElementById('providerProtocolStatus').textContent=p.id==='deepseek'?'Save a protected key and enable DeepSeek safeguards below. Environment references still require the deployment environment gate.':['openai-responses','deepseek-chat'].includes(p.adapter)?'Native text inference requires the server feature gate (disabled by default), a credential reference and an approved model. Enable only model parameters verified as supported.':['anthropic-messages','gemini-native'].includes(p.adapter)?'Configuration and discovery only. Native inference is not implemented.':'Uses the existing adapter; individual model compatibility requires qualification.';
   document.getElementById('providerBackendIdentity').closest('.field-group').querySelector('small').hidden=p.adapter!=='llama.cpp';
   document.getElementById('providerBackendIdentity').disabled=p.adapter!=='llama.cpp';
   if(prefill&&p.adapter!=='llama.cpp')document.getElementById('providerBackendIdentity').value='';
   for(const id of ['providerPrivateNetwork','providerAllowInsecureHttp']){document.getElementById(id).disabled=p.cloud;if(p.cloud&&prefill)document.getElementById(id).checked=false;}
+  document.getElementById('providerProtectedKey').hidden=p.id!=='deepseek';document.getElementById('providerStreamingLabel').hidden=p.id!=='deepseek';
+  if(p.id==='deepseek')void keyOperation('status');
   updateAuth();
  }
  function updateAuth(){document.getElementById('providerCredentialRef').disabled=document.getElementById('providerAuthMode').value!=='env';}
@@ -258,4 +261,21 @@
  });
 
  load();
+
+ async function keyOperation(action){
+  const indicator=document.getElementById('providerKeyStatus'),result=document.getElementById('providerTestStatus'),field=document.getElementById('providerApiKey');
+  if(!editingId){indicator.textContent='Not configured';if(action!=='status')result.textContent='Save the provider disabled first, then edit it.';return;}
+  const id=editingId;
+  try{
+   if(action==='test'&&!window.confirm('This test sends a paid DeepSeek request with at most 16 output tokens. Continue?'))return;
+   const options=action==='status'?{}:action==='delete'?{method:'DELETE'}:{method:'POST',body:JSON.stringify(action==='save'?{apiKey:field.value}:{confirmPaidTest:true,model:document.getElementById('providerModel').value})};
+   if(action==='save')field.value='';
+   const data=await api('/api/admin/ai/connections/'+encodeURIComponent(id)+'/'+(action==='test'?'test':'credential'),options);
+   if(editingId!==id)return;
+   if(action==='test')result.textContent=JSON.stringify(data,null,2);else{indicator.textContent=data.configured?'Configured':'Not configured';if(action!=='status')result.textContent='Credential change saved.';if(action==='delete'){document.getElementById('providerEnabled').checked=false;void load();}}
+  }catch{if(editingId===id)result.textContent='Operation failed. Check the saved provider, credential and DeepSeek safeguards.';}
+ }
+ document.getElementById('saveProviderKey').addEventListener('click',()=>keyOperation('save'));
+ document.getElementById('deleteProviderKey').addEventListener('click',()=>keyOperation('delete'));
+ document.getElementById('testProviderKey').addEventListener('click',()=>keyOperation('test'));
 })();

@@ -1435,6 +1435,10 @@ if(['/api/admin/ai/openai-usage','/api/admin/ai/deepseek-usage'].includes(req.ur
   reply(405,{error:'Method not allowed'});
  }catch{reply(400,{error:'Provider safeguards unavailable or invalid'});}return;
 }
+if(/^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/(credential|test)$/.test(req.url)){
+ const token=getSessionToken(req);
+ await require('./core/deepseek-admin').handle({req,res,db,connections,authenticate:()=>getSessionUser(db,token)});return;
+}
 // Named connection administration; credentials are references, never values.
 if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/check$/.test(req.url)) {
     const token = getSessionToken(req), admin = getAuthenticatedUser(req);
@@ -1449,7 +1453,10 @@ if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/a
             if (!require("./core/restart-request").validRestartRequest({...req,headers:{...req.headers,"x-chatbot-action":req.headers["x-chatbot-action"]==="configure-connections"?"restart-ai":null}})) {reply(403,{error:"Same-origin request required"});return;}
             let text="";for await(const chunk of req){text+=chunk;if(text.length>32768)throw Error("Invalid request");}
             const current=getSessionUser(db,token);if(!current||current.id!==admin.id||current.is_admin!==1){reply(401,{error:"Session no longer authorized"});return;}
-            if(req.url === "/api/admin/ai/connections"){reply(200,await connections.save(JSON.parse(text)));return;}
+            if(req.url === "/api/admin/ai/connections"){const input=JSON.parse(text),checked=require('./core/connections').validate(input);
+            for(const c of checked.connections){if(c.adapter==='deepseek-chat'&&c.credentialRef==='protected:'+c.id&&c.enabled!==false&&!await require('./core/protected-credentials').configured(c)){reply(400,{error:'Save this provider disabled, then save its API key before enabling.'});return;}}
+            const verified=getSessionUser(db,token);if(!verified||verified.id!==admin.id||verified.is_admin!==1){reply(401,{error:'Session no longer authorized'});return;}
+            reply(200,await connections.save(input));return;}
             const id=req.url.split('/')[5],config=await connections.read(),c=config.connections.find(c=>c.id===id);
             if(!c){reply(404,{error:"Connection not found"});return;}
             const result=await providers.testConnection(c,{signal:AbortSignal.timeout(8000)});

@@ -8,6 +8,7 @@ const modelConfig=require('./provider-models');
 const {createCloudFetch}=require('./cloud-transport');
 
 async function credential(connection){
+ if(connection.credentialRef?.startsWith('protected:'))return require('./protected-credentials').read(connection);
  if(connection.credentialRef===null)return null;
  const value=connection.credentialRef==='local-api-key'?await fs.readFile(API_KEY_FILE,'utf8'):process.env[connection.credentialRef.slice(4)];
  if(typeof value!=='string'||!value.trim()||/[\r\n]/.test(value.trim()))throw Error('Provider credential unavailable');return value.trim();

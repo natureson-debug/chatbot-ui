@@ -9,7 +9,7 @@ function buildRequest(c,input,maxOutputTokens=1024){
  });
  const requested=input.max_tokens??c.modelDefaults?.max_tokens??maxOutputTokens;
  if(!Number.isSafeInteger(requested)||requested<1||requested>32768||!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<1)throw Error('Invalid output limit');
- const body={model:c.model,messages,stream:true,stream_options:{include_usage:true},thinking:{type:'disabled'},max_tokens:Math.min(requested,maxOutputTokens)};
+ const body={model:c.model,messages,stream:c.streaming!==false,...(c.streaming!==false?{stream_options:{include_usage:true}}:{}),thinking:{type:'disabled'},max_tokens:Math.min(requested,maxOutputTokens)};
  if(c.parameters.includes('temperature')){
   const value=input.temperature??c.modelDefaults?.temperature;
   if(value!==undefined){if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>2)throw Error('Invalid temperature');body.temperature=value;}
@@ -27,7 +27,7 @@ function bounded(promise,signal){
   Promise.resolve(promise).then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));
  });
 }
-async function chat(c,input,{fetchImpl,secret,signal,onProgress=()=>{},beforeSend=()=>{},maxOutputTokens,clock=()=>performance.now()}={}){
+async function chat(c,input,{fetchImpl,secret,signal,onProgress=()=>{},beforeSend=()=>{},maxOutputTokens,onDiagnostics=()=>{},clock=()=>performance.now()}={}){
  const body=buildRequest(c,input,maxOutputTokens),started=clock(),controller=new AbortController();
  const combined=AbortSignal.any([controller.signal,AbortSignal.timeout(c.timeoutMs||120000),...(signal?[signal]:[])]);
  const reason=()=>combined.aborted?(combined.reason?.name==='TimeoutError'?'timeout':'cancelled'):'network';
@@ -43,7 +43,16 @@ async function chat(c,input,{fetchImpl,secret,signal,onProgress=()=>{},beforeSen
   if(typeof key!=='string'||!key.trim()||/[\r\n]/.test(key.trim()))return new Response(failure('auth'));
   combined.throwIfAborted();beforeSend();
   response=await bounded(Promise.resolve(fetchImpl(c.endpoint.replace(/\/$/,'')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Accept:'text/event-stream',Authorization:'Bearer '+key.trim()},body:JSON.stringify(body),signal:combined,redirect:'error',beforeConnect:beforeSend})).then(r=>{if(combined.aborted)void r.body?.cancel().catch(()=>{});return r;}),combined);
+  try{onDiagnostics({httpStatus:response.status});}catch{}
   if(!response.ok){void response.body?.cancel().catch(()=>{});return new Response(failure([401,403].includes(response.status)?'auth':response.status===429?'rate':response.status===404?'model':'failed'));}
+  if(c.streaming===false){
+   const r=response.body?.getReader();if(!r)return new Response(failure('malformed'));
+   try{let text='',decoder=new TextDecoder('utf-8',{fatal:true});for(;;){const part=await bounded(r.read(),combined);text+=decoder.decode(part.value,{stream:!part.done});if(text.length>1048576)throw Error();if(part.done)break;}
+    const result=JSON.parse(text),choice=result.choices?.[0];if(result.choices?.length!==1||choice?.message?.role!=='assistant'||typeof choice.message.content!=='string'||!['stop','length'].includes(choice.finish_reason))throw Error();
+    const status=choice.finish_reason==='stop'?'completed':'incomplete',metrics=usage(result.usage,Math.max(0,clock()-started));if(choice.message.content)onProgress({text:choice.message.content});onProgress({status,usage:metrics});
+    return new Response(frame({choices:[{delta:{content:choice.message.content},finish_reason:null}]})+frame({choices:[{delta:{},finish_reason:choice.finish_reason}],responseStatus:status,telemetry:metrics})+'data: [DONE]\n\n');
+   }catch{return new Response(failure(combined.aborted?reason():'malformed'));}finally{controller.abort();void r.cancel().catch(()=>{});r.releaseLock();}
+  }
   if(!response.body||!/^text\/event-stream(?:;|$)/i.test(response.headers.get('content-type')||'')){void response.body?.cancel().catch(()=>{});return new Response(failure('malformed'));}
  }catch{return new Response(failure(reason()));}
  const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true}),encoder=new TextEncoder();

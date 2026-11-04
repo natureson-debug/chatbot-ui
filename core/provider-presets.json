@@ -4,7 +4,7 @@
  {"id":"openai","name":"OpenAI","adapter":"openai-responses","endpoint":"https://api.openai.com/v1","cloud":true},
  {"id":"anthropic","name":"Anthropic Claude","adapter":"anthropic-messages","endpoint":"https://api.anthropic.com/v1","cloud":true},
  {"id":"gemini","name":"Google Gemini","adapter":"gemini-native","endpoint":"https://generativelanguage.googleapis.com/v1beta","cloud":true},
- {"id":"deepseek","name":"DeepSeek","adapter":"deepseek-chat","endpoint":"https://api.deepseek.com","cloud":true,"credentialRef":"env:CHATBOT_DEEPSEEK_API_KEY","models":["deepseek-flash","deepseek-v4-pro"]},
+ {"id":"deepseek","name":"DeepSeek","adapter":"deepseek-chat","endpoint":"https://api.deepseek.com","cloud":true,"credentialRef":"protected:provider-id","models":["deepseek-chat","deepseek-reasoner"]},
  {"id":"groq","name":"Groq","adapter":"openai-compatible","endpoint":"https://api.groq.com/openai/v1","cloud":true},
  {"id":"mistral","name":"Mistral AI","adapter":"openai-compatible","endpoint":"https://api.mistral.ai/v1","cloud":true},
  {"id":"openrouter","name":"OpenRouter","adapter":"openai-compatible","endpoint":"https://openrouter.ai/api/v1","cloud":true},
