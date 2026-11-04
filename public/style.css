@@ -644,7 +644,7 @@ textarea:focus {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    width: 84px;
+    width: 96px;
     height: 32px;
     min-height: 32px;
     padding: 5px 9px;
@@ -3655,4 +3655,330 @@ body.admin-page #providerProtectedKey {
     body.admin-page .provider-safeguards input:not([type="checkbox"]) { width: 100%; }
     body.admin-page #providerProtectedKey button { display: block; width: 100%; margin: .5rem 0; }
     body.admin-page .provider-form .toolbar-row button { width: 100%; }
+}
+
+body.admin-page .system-logs-panel {
+    position: relative;
+    min-width: 0;
+    width: 100%;
+}
+
+body.admin-page .system-logs-header,
+body.admin-page .system-logs-actions,
+body.admin-page .system-logs-filter-actions,
+body.admin-page .system-logs-pagination {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .65rem;
+}
+
+body.admin-page .system-logs-header {
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+body.admin-page .system-logs-header h2 {
+    margin-bottom: .35rem;
+}
+
+body.admin-page .system-logs-header p {
+    margin: 0;
+    color: var(--theme-muted);
+}
+
+body.admin-page .system-logs-actions label,
+body.admin-page .system-logs-pagination label {
+    color: var(--theme-text);
+}
+
+body.admin-page .system-logs-actions select,
+body.admin-page .system-logs-pagination select {
+    min-height: 40px;
+    border: 1px solid var(--theme-border);
+    border-radius: 5px;
+    background: var(--theme-input);
+    color: var(--theme-text);
+    padding: .45rem .6rem;
+}
+
+body.admin-page .system-logs-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    gap: .8rem;
+    padding: 1rem;
+    margin: 0 0 1rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 8px;
+    background: var(--theme-panel);
+}
+
+body.admin-page .system-logs-filters .field-group {
+    min-width: 0;
+}
+
+body.admin-page .system-logs-filters input,
+body.admin-page .system-logs-filters select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    border: 1px solid var(--theme-border);
+    border-radius: 5px;
+    background: var(--theme-input);
+    color: var(--theme-text);
+    padding: .45rem .6rem;
+}
+
+body.admin-page .system-logs-filters input:focus-visible,
+body.admin-page .system-logs-filters select:focus-visible,
+body.admin-page .system-logs-actions :focus-visible,
+body.admin-page .system-logs-pagination :focus-visible,
+body.admin-page .system-logs-table button:focus-visible {
+    outline: 2px solid var(--theme-focus);
+    outline-offset: 2px;
+}
+
+body.admin-page .system-logs-filter-actions {
+    align-self: end;
+}
+
+body.admin-page .system-logs-summary {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    margin: .75rem 0;
+    color: var(--theme-muted);
+}
+
+body.admin-page .system-logs-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: auto;
+    border: 1px solid var(--theme-border);
+    border-radius: 7px;
+    overscroll-behavior-x: contain;
+}
+
+body.admin-page .system-logs-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+    background: var(--theme-panel);
+}
+
+body.admin-page .system-logs-table :is(th, td) {
+    padding: .65rem .75rem;
+    border-bottom: 1px solid var(--theme-border);
+    color: var(--theme-text);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-logs-table th {
+    position: sticky;
+    top: 0;
+    background: var(--theme-raised);
+    color: var(--theme-text);
+}
+
+body.admin-page .system-logs-table tbody tr:hover {
+    background: var(--theme-hover);
+}
+
+body.admin-page .system-logs-table .system-logs-empty {
+    padding: 1.5rem;
+    color: var(--theme-muted);
+    text-align: center;
+}
+
+body.admin-page .system-log-severity {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: .1rem .45rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    color: var(--theme-accent);
+    font-size: .75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+body.admin-page .system-log-severity.severity-debug { color: var(--theme-muted); }
+body.admin-page .system-log-severity.severity-info { color: var(--theme-accent); }
+body.admin-page .system-log-severity.severity-warn { color: var(--theme-warning); }
+body.admin-page .system-log-severity.severity-error { color: var(--theme-error); }
+
+body.admin-page .system-log-event-link {
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--theme-accent);
+    font: inherit;
+    font-weight: 650;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: .15em;
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-log-event-link:hover {
+    background: transparent;
+    color: var(--theme-text);
+    box-shadow: none;
+}
+
+body.admin-page .system-logs-pagination {
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+body.admin-page .system-log-dialog {
+    width: min(44rem, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
+    max-height: min(82vh, 48rem);
+    overflow: auto;
+    padding: 1.25rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 10px;
+    background: var(--theme-panel);
+    color: var(--theme-text);
+    box-shadow: var(--theme-shadow);
+}
+
+body.admin-page .system-log-dialog::backdrop {
+    background: rgb(0 0 0 / 55%);
+}
+
+body.admin-page .system-log-dialog-header,
+body.admin-page .system-log-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+
+body.admin-page .system-log-dialog-header h2 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-log-detail-fields {
+    display: grid;
+    grid-template-columns: minmax(9rem, .35fr) minmax(0, 1fr);
+    gap: 0;
+    margin: 1rem 0;
+}
+
+body.admin-page .system-log-detail-field {
+    display: contents;
+}
+
+body.admin-page .system-log-detail-field dt,
+body.admin-page .system-log-detail-field dd {
+    min-width: 0;
+    margin: 0;
+    padding: .65rem .4rem;
+    border-bottom: 1px solid var(--theme-border);
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-log-detail-field dt {
+    color: var(--theme-muted);
+    font-weight: 650;
+}
+
+body.admin-page .system-log-metadata {
+    white-space: pre-wrap;
+    font-family: var(--theme-font);
+}
+
+body.admin-page .system-log-dialog-actions p {
+    margin: 0;
+    color: var(--theme-muted);
+}
+
+body.admin-page .system-logs-notifications {
+    position: fixed;
+    z-index: 20;
+    top: 1rem;
+    right: 1rem;
+    display: grid;
+    width: min(25rem, calc(100vw - 2rem));
+    gap: .6rem;
+    pointer-events: none;
+}
+
+body.admin-page .system-log-notification {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .8rem;
+    border: 1px solid var(--theme-border);
+    border-left: 4px solid var(--theme-warning);
+    border-radius: 7px;
+    background: var(--theme-panel);
+    color: var(--theme-text);
+    box-shadow: var(--theme-shadow);
+    pointer-events: auto;
+}
+
+body.admin-page .system-log-notification.severity-error {
+    border-left-color: var(--theme-error);
+}
+
+body.admin-page .system-log-notification strong {
+    color: var(--theme-text);
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-log-notification p {
+    margin: .35rem 0 0;
+    color: var(--theme-muted);
+    overflow-wrap: anywhere;
+}
+
+body.admin-page .system-log-notification button {
+    flex: 0 0 auto;
+    min-height: 34px;
+}
+
+@media (max-width: 600px) {
+    body.admin-page .system-logs-header,
+    body.admin-page .system-logs-actions {
+        align-items: stretch;
+        width: 100%;
+    }
+
+    body.admin-page .system-logs-actions > * {
+        flex: 1 1 100%;
+    }
+
+    body.admin-page .system-logs-filter-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    body.admin-page .system-logs-pagination {
+        justify-content: flex-start;
+    }
+
+    body.admin-page .system-log-detail-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.admin-page .system-log-detail-field dt {
+        padding-bottom: .15rem;
+        border-bottom: 0;
+    }
+
+    body.admin-page .system-log-detail-field dd {
+        padding-top: .15rem;
+    }
 }

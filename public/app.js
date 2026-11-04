@@ -364,6 +364,7 @@ function addCodeCopyButtons(messageElement) {
         button.type = "button";
         button.className = "code-copy-button";
         button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("aria-live", "polite");
         button.title = "Copy code";
 
         const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -398,6 +399,7 @@ function addCodeCopyButtons(messageElement) {
                 }, 1500);
             } catch (error) {
                 console.error("Failed to copy code block:", error);
+                button.classList.remove("copied");
                 label.textContent = "Failed";
                 button.setAttribute("aria-label", "Copy failed");
                 button.title = "Copy failed";

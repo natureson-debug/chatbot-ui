@@ -63,6 +63,7 @@ test('code copy controls have an icon, visible feedback, and retain clipboard be
     const button = pre.buttons[0];
     assert.equal(button.type, 'button');
     assert.equal(button.attributes['aria-label'], 'Copy code');
+    assert.equal(button.attributes['aria-live'], 'polite');
     assert.equal(button.children.length, 2);
     assert.equal(button.children[0].tagName, 'svg');
     const label = button.children[1];
@@ -79,7 +80,7 @@ test('code copy controls have an icon, visible feedback, and retain clipboard be
 
 test('code-copy controls and composer share theme-token styling and responsive layout', () => {
     assert.match(css, /\.message\.assistant pre\s*\{\s*position: relative;[\s\S]*?padding: 44px 12px 12px;[\s\S]*?background: var\(--theme-code-bg\)/);
-    assert.match(css, /\.message\.assistant pre \.code-copy-button\s*\{[\s\S]*?position: absolute;[\s\S]*?top: 6px;[\s\S]*?right: 6px;[\s\S]*?width: 84px;[\s\S]*?background: var\(--theme-panel\)/);
+    assert.match(css, /\.message\.assistant pre \.code-copy-button\s*\{[\s\S]*?position: absolute;[\s\S]*?top: 6px;[\s\S]*?right: 6px;[\s\S]*?width: 96px;[\s\S]*?background: var\(--theme-panel\)/);
     assert.match(css, /footer\s*\{[\s\S]*?display: flex;[\s\S]*?align-items: center;/);
     assert.match(css, /\.prompt-wrap\s*\{[\s\S]*?flex: 1 1 0;[\s\S]*?min-width: 0/);
     assert.match(css, /#prompt\s*\{[\s\S]*?min-width: 0;[\s\S]*?max-height: min\(30dvh, 220px\)/);
