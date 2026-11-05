@@ -21,6 +21,15 @@ const EVENT_DEFINITIONS = Object.freeze({
     CONFIG_ADMIN_SETTINGS_UPDATED: { severity: 'INFO', category: 'CONFIG', message: 'Administrator settings updated', outcome: 'SUCCESS', metadata: { changedFields: 'setting_fields' } },
     CONFIG_OPENAI_SAFEGUARDS_CHANGED: { severity: 'INFO', category: 'CONFIG', message: 'OpenAI safeguards changed', outcome: 'SUCCESS', metadata: { enabled: 'boolean', maxOutputTokens: 'number', maxConcurrent: 'number', perHour: 'number', perDay: 'number' } },
     CONFIG_DEEPSEEK_SAFEGUARDS_CHANGED: { severity: 'INFO', category: 'CONFIG', message: 'DeepSeek safeguards changed', outcome: 'SUCCESS', metadata: { enabled: 'boolean', maxOutputTokens: 'number', maxConcurrent: 'number', perHour: 'number', perDay: 'number' } },
+    MCP_TOOL_EXECUTION_FAILED: {
+        severity: 'WARN', category: 'SYSTEM', message: 'MCP tool execution failed', outcome: 'FAILURE',
+        metadata: {
+            toolName: 'mcp_tool_name',
+            stage: ['argument_parsing', 'policy_validation', 'process_launch', 'connection', 'initialization', 'tools_call', 'result_validation', 'result_serialization'],
+            errorCategory: ['invalid_tool_arguments', 'tool_not_authorized', 'policy_rejected', 'process_unavailable', 'mcp_connection_failed', 'mcp_initialization_failed', 'mcp_call_failed', 'invalid_tool_result', 'tool_result_too_large', 'serialization_failed'],
+            durationMs: 'number'
+        }
+    },
     RUNTIME_BACKEND_HEALTH_CHANGED: { severity: 'INFO', category: 'RUNTIME', message: 'Backend health state changed', outcome: 'UNKNOWN', metadata: { previousState: ['ready', 'unavailable', 'unsupported', 'authentication_failed', 'loading_or_unavailable'], currentState: ['ready', 'unavailable', 'unsupported', 'authentication_failed', 'loading_or_unavailable'] } }
 });
 const SETTING_FIELDS = new Set(['model', 'parallel', 'contextSize', 'gpuLayers', 'device', 'verbosity', 'metrics']);
@@ -36,6 +45,8 @@ function sanitizeMetadata(definition, value) {
         const candidate = value[key];
         if (rule === 'boolean' && typeof candidate === 'boolean') result[key] = candidate;
         else if (rule === 'number' && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 10000000) result[key] = candidate;
+        else if (rule === 'mcp_tool_name' && typeof candidate === 'string' &&
+            /^[A-Za-z0-9_-]{1,48}__[A-Za-z0-9_-]{1,48}$/.test(candidate)) result[key] = candidate;
         else if (rule === 'setting_fields' && Array.isArray(candidate)) {
             const fields = [...new Set(candidate.filter(field => typeof field === 'string' && SETTING_FIELDS.has(field)))].slice(0, SETTING_FIELDS.size);
             if (fields.length) result[key] = fields;

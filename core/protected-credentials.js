@@ -1,7 +1,12 @@
 'use strict';
 const fs=require('node:fs/promises'),path=require('node:path'),{spawn}=require('node:child_process'),{randomUUID}=require('node:crypto');
 const fail=()=>Error('Protected credential unavailable');
-function binding(c){if(c.adapter!=='deepseek-chat'||!/^[a-z][a-z0-9-]{0,47}$/.test(c.id)||c.credentialRef!=='protected:'+c.id)throw fail();return JSON.stringify(['chatbot-deepseek-v1',c.id,new URL(c.endpoint).href]);}
+const BRAVE_CREDENTIAL_REF='protected:brave-search';
+function binding(c){
+ if(c?.provider==='brave-search'&&c.credentialRef===BRAVE_CREDENTIAL_REF)return JSON.stringify(['chatbot-brave-search-v1']);
+ if(c?.adapter!=='deepseek-chat'||!/^[a-z][a-z0-9-]{0,47}$/.test(c.id)||c.credentialRef!=='protected:'+c.id)throw fail();
+ return JSON.stringify(['chatbot-deepseek-v1',c.id,new URL(c.endpoint).href]);
+}
 function transform(operation,data,entropy){
  if(process.platform!=='win32')return Promise.reject(fail());
  // The constant script takes all data on stdin, never in command lines or diagnostics.
@@ -18,12 +23,40 @@ function transform(operation,data,entropy){
 }
 function createStore(root,crypt=transform){
  const location=c=>path.join(root,c.id+'.dpapi');
+ const braveLocation=()=>path.join(root,'brave-search.dpapi');
+ async function readBrave(){
+  const entropy=binding({provider:'brave-search',credentialRef:BRAVE_CREDENTIAL_REF});
+  try{
+   const file=await fs.readFile(braveLocation());if(file.length>32768)throw fail();
+   const value=(await crypt('unprotect',file,entropy)).toString('utf8');
+   if(!value||value.length>4096||/[\r\n\x00]/.test(value))throw fail();
+   return value;
+  }catch{throw fail();}
+ }
+ async function saveBrave(key,authorize=()=>true){
+  const entropy=binding({provider:'brave-search',credentialRef:BRAVE_CREDENTIAL_REF});
+  if(typeof key!=='string'||!key.trim()||key.length>4096||/[\r\n\x00]/.test(key))throw fail();
+  const encrypted=await crypt('protect',Buffer.from(key.trim()),entropy);
+  await fs.mkdir(root,{recursive:true});
+  const target=braveLocation(),temp=target+'.'+randomUUID()+'.tmp';
+  try{await fs.writeFile(temp,encrypted,{flag:'wx',mode:0o600});if(!authorize())throw fail();await fs.rename(temp,target);}
+  finally{await fs.unlink(temp).catch(()=>{});}
+ }
+ async function removeBrave(authorize=()=>true){
+  binding({provider:'brave-search',credentialRef:BRAVE_CREDENTIAL_REF});
+  if(!authorize())throw fail();
+  try{await fs.unlink(braveLocation());}catch(error){if(error.code!=='ENOENT')throw fail();}
+ }
  return {
   async read(c){const entropy=binding(c);const file=await fs.readFile(location(c));if(file.length>32768)throw fail();const value=(await crypt('unprotect',file,entropy)).toString('utf8');if(!value||value.length>4096||/[\r\n\x00]/.test(value))throw fail();return value;},
   async configured(c){try{await this.read(c);return true;}catch{return false;}},
   async save(c,key,authorize=()=>true){const entropy=binding(c);if(typeof key!=='string'||!key.trim()||key.length>4096||/[\r\n\x00]/.test(key))throw fail();const encrypted=await crypt('protect',Buffer.from(key.trim()),entropy);await fs.mkdir(root,{recursive:true});const temp=location(c)+'.'+randomUUID()+'.tmp';try{await fs.writeFile(temp,encrypted,{flag:'wx',mode:0o600});if(!authorize())throw fail();await fs.rename(temp,location(c));}finally{await fs.unlink(temp).catch(()=>{});}},
-  async remove(c,authorize=()=>true){binding(c);if(!authorize())throw fail();await fs.unlink(location(c)).catch(e=>{if(e.code!=='ENOENT')throw fail();});}
+  async remove(c,authorize=()=>true){binding(c);if(!authorize())throw fail();await fs.unlink(location(c)).catch(e=>{if(e.code!=='ENOENT')throw fail();});},
+  readBrave,
+  async configuredBrave(){try{await readBrave();return true;}catch{return false;}},
+  saveBrave,
+  removeBrave
  };
 }
 const store=createStore(path.join(path.dirname(require('./paths').AI_CONFIG_FILE),'protected-credentials'));
-module.exports={...store,createStore,transform,binding};
+module.exports={...store,createStore,transform,binding,BRAVE_CREDENTIAL_REF};

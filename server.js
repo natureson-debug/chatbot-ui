@@ -815,7 +815,8 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                     const extensions=require('./core/extensions');
                     res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-cache","X-Chat-Connection":selectedConnection.id,"X-Chat-Model":encodeURIComponent(selectedConnection.model),"X-Chat-Provider":encodeURIComponent(selectedConnection.name),"X-Chat-Context":String(selectedConnection.contextLimit??"unknown")});
                     const emit=data=>{if(!res.destroyed)res.write('data: '+JSON.stringify(data)+'\n\n');};
-                    const final=await extensions.runToolLoop({complete:input=>providers.complete(selectedConnection,input,{signal:controller.signal}),messages:clientRequest.messages,policy:extensions.policy(extensionConfig),user:user.id,operationId:require('node:crypto').randomUUID(),signal:controller.signal,onActivity:toolActivity=>emit({toolActivity})});
+                    const operationId=require('node:crypto').randomUUID();
+                    const final=await extensions.runToolLoop({complete:input=>providers.complete(selectedConnection,input,{signal:controller.signal}),messages:clientRequest.messages,policy:extensions.policy(extensionConfig),user:user.id,operationId,signal:controller.signal,onActivity:toolActivity=>emit({toolActivity}),onDiagnostic:diagnostic=>systemLogs.log('MCP_TOOL_EXECUTION_FAILED',{correlationId:diagnostic.correlationId,metadata:{toolName:diagnostic.toolName,stage:diagnostic.stage,errorCategory:diagnostic.errorCategory,durationMs:diagnostic.durationMs}})});
                     if(typeof final.content!=='string'||!final.content.trim())throw Error('No final tool answer');
                     emit({choices:[{delta:{content:final.content},finish_reason:'stop'}],telemetry:final.telemetry});if(!res.destroyed)res.end('data: [DONE]\n\n');return;
                 }

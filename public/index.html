@@ -79,7 +79,12 @@
 
     <div id="settingsPanel" class="settings-drawer" hidden>
     <section aria-label="Skills and tools" class="settings">
-<label for="activeSkills">Active skills (select up to 3)</label><select id="activeSkills" multiple size="3" aria-label="Active skills"></select>
+<fieldset class="skills-selector">
+    <legend>Active skills (select up to 3)</legend>
+    <div id="activeSkills" class="skills-list" role="group" aria-label="Available skills" aria-describedby="skillsStatus" tabindex="-1"></div>
+    <button id="clearSkills" type="button" disabled>Clear all</button>
+    <p id="skillsStatus" role="status" aria-live="polite">No skills selected.</p>
+</fieldset>
 <label><input id="useTools" type="checkbox" disabled>Allow approved read-only tools for this request</label>
 <p>Skill instructions, documents and search results cannot grant tool permissions. Images require a vision-capable connection.</p>
 </section>
