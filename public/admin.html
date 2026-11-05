@@ -609,6 +609,20 @@
     </div>
 
     <p id="extensionStatus" role="status"></p>
+
+    <section class="provider-form-section" aria-labelledby="braveCredentialTitle">
+        <h3 id="braveCredentialTitle">Brave Search credential</h3>
+        <p>Enter or replace the key here. It is encrypted for this Windows user and is never returned to the browser. To enable the protected key, set search.credentialRef to <code>protected:brave-search</code> and enabled to true in the configuration above.</p>
+        <div class="field-group">
+            <label for="braveSearchCredential">Brave API key</label>
+            <input id="braveSearchCredential" type="password" autocomplete="new-password" maxlength="4096" spellcheck="false">
+        </div>
+        <div class="toolbar-row">
+            <button id="saveBraveCredential" type="button">Save / Replace Key</button>
+            <button id="clearBraveCredential" type="button" disabled>Clear Stored Key</button>
+            <span id="braveCredentialStatus" role="status" aria-live="polite">Checking stored credential...</span>
+        </div>
+    </section>
 </section>
 
             <a href="/" class="back-link">← Back to Chatbot</a>
@@ -647,17 +661,3 @@
 <script src="/admin-logs.js" defer></script>
 </body>
 </html>
-
-    <section class="provider-form-section" aria-labelledby="braveCredentialTitle">
-        <h3 id="braveCredentialTitle">Brave Search credential</h3>
-        <p>Enter or replace the key here. It is encrypted for this Windows user and is never returned to the browser. To enable the protected key, set search.credentialRef to <code>protected:brave-search</code> and enabled to true in the configuration above.</p>
-        <div class="field-group">
-            <label for="braveSearchCredential">Brave API key</label>
-            <input id="braveSearchCredential" type="password" autocomplete="new-password" maxlength="4096" spellcheck="false">
-        </div>
-        <div class="toolbar-row">
-            <button id="saveBraveCredential" type="button">Save / Replace Key</button>
-            <button id="clearBraveCredential" type="button" disabled>Clear Stored Key</button>
-            <span id="braveCredentialStatus" role="status" aria-live="polite">Checking stored credential...</span>
-        </div>
-    </section>
