@@ -785,6 +785,11 @@ async function sendMessage() {
         stopButton.disabled = true;
         controller = null;
         if (isOriginVisible()) statusText.textContent = "Could not read attachment.";
+        globalThis.ChatbotNotifications?.show({
+            severity: "error",
+            title: "Attachment unavailable",
+            message: "The selected attachment could not be read. Choose it again or continue without it."
+        });
         return;
     }
 
@@ -983,6 +988,18 @@ try {
         assistantMessage.notice.textContent = cancelled
             ? "Generation stopped. The response may be incomplete."
             : "Response interrupted: " + error.message;
+        if (!cancelled) {
+            globalThis.ChatbotNotifications?.show({
+                severity: "error",
+                title: "Response interrupted",
+                message: "The response could not be completed. Check the conversation for any partial response.",
+                details: {
+                    status: ['failed', 'incomplete', 'interrupted'].includes(error.responseStatus)
+                        ? error.responseStatus
+                        : ''
+                }
+            });
+        }
         if (isOriginVisible()) statusText.textContent = cancelled ? "Stopped" : "Error";
     } finally {
         if (!generationIsValid(generation)) return;

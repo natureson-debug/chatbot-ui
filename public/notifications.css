@@ -1,0 +1,150 @@
+.chatbot-notifications {
+    --notification-surface: #161E28;
+    --notification-surface-raised: #202938;
+    --notification-text: #EEF2F8;
+    --notification-muted: #A7B4C7;
+    --notification-border: #344154;
+    --notification-focus: #8CB8FF;
+    --notification-success: #67D79B;
+    --notification-info: #70B8FF;
+    --notification-warning: #F0BA62;
+    --notification-error: #EF7777;
+    --notification-critical: #E85E73;
+    position: fixed;
+    z-index: 1000;
+    top: calc(var(--notification-top, 72px) + env(safe-area-inset-top, 0px));
+    right: 16px;
+    display: grid;
+    width: min(390px, calc(100vw - 32px));
+    max-height: calc(100dvh - var(--notification-top, 72px) - 16px - env(safe-area-inset-top, 0px));
+    gap: 10px;
+    overflow: auto;
+    pointer-events: none;
+}
+
+.notification-toast {
+    --notification-color: var(--notification-info);
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--notification-border);
+    border-left: 4px solid var(--notification-color);
+    border-radius: 10px;
+    background: var(--notification-surface-raised);
+    color: var(--notification-text);
+    box-shadow: var(--theme-shadow);
+    pointer-events: auto;
+    animation: notification-enter 160ms ease-out;
+}
+
+.notification-toast--success { --notification-color: var(--notification-success); }
+.notification-toast--information { --notification-color: var(--notification-info); }
+.notification-toast--warning { --notification-color: var(--notification-warning); }
+.notification-toast--error { --notification-color: var(--notification-error); }
+.notification-toast--critical { --notification-color: var(--notification-critical); }
+
+.notification-toast__icon {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    color: var(--notification-color);
+    font: 700 16px/1 var(--theme-font);
+}
+
+.notification-toast__content { min-width: 0; }
+.notification-toast__title { display: block; color: var(--notification-color); }
+.notification-toast__message { margin: 4px 0 0; color: var(--notification-text); overflow-wrap: anywhere; }
+.notification-toast__actions { display: flex; align-items: flex-start; gap: 6px; }
+
+.notification-toast__close,
+.notification-toast__acknowledge,
+.notification-toast__details-toggle {
+    min-height: 32px;
+    padding: 4px 8px;
+    border: 1px solid var(--notification-border);
+    border-radius: 6px;
+    background: var(--notification-surface);
+    color: var(--notification-text);
+    font: inherit;
+}
+
+.notification-toast__close { min-width: 32px; font-size: 20px; line-height: 1; }
+.notification-toast__acknowledge { border-color: var(--notification-critical); color: var(--notification-critical); }
+.notification-toast__details-toggle { margin-top: 8px; color: var(--notification-muted); }
+.notification-toast__details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; font-size: .82rem; }
+.notification-toast__details[hidden] { display: none; }
+.notification-toast__details dt { color: var(--notification-muted); }
+.notification-toast__details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+
+.notification-toast :focus-visible {
+    outline: 2px solid var(--notification-focus);
+    outline-offset: 2px;
+}
+
+body[data-theme="normal-light"] .chatbot-notifications,
+body[data-theme="light"] .chatbot-notifications,
+body.admin-page[data-theme="normal-light"] .chatbot-notifications,
+body.admin-page[data-theme="light"] .chatbot-notifications {
+--notification-surface: #FFFFFF;
+--notification-surface-raised: #EAF0F7;
+--notification-text: #17212F;
+--notification-muted: #59677A;
+--notification-border: #B8C4D4;
+--notification-focus: #3468C0;
+    --notification-success: #16704A;
+    --notification-info: #1D63B8;
+    --notification-warning: #8F5400;
+    --notification-error: #B93131;
+    --notification-critical: #9E1239;
+}
+
+body[data-theme="dark"] .chatbot-notifications,
+body.admin-page[data-theme="dark"] .chatbot-notifications {
+    --notification-surface: #101A12;
+    --notification-surface-raised: #19281C;
+    --notification-text: #B7F7B9;
+    --notification-muted: #79A980;
+    --notification-border: #355B42;
+    --notification-focus: #59FF82;
+    --notification-success: #6EE79A;
+    --notification-info: #6FC8FF;
+    --notification-warning: #F2C14E;
+    --notification-error: #FF8080;
+    --notification-critical: #FF5C7A;
+}
+
+body[data-theme="dark"] .notification-toast__icon,
+body.admin-page[data-theme="dark"] .notification-toast__icon {
+    box-shadow: 0 0 10px var(--theme-glow);
+}
+
+@keyframes notification-enter {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+    .chatbot-notifications {
+        top: calc(var(--notification-top, 72px) + env(safe-area-inset-top, 0px));
+        right: auto;
+        left: 50%;
+        width: min(420px, calc(100vw - 24px));
+        max-height: calc(100dvh - var(--notification-top, 72px) - 16px - env(safe-area-inset-top, 0px));
+        transform: translateX(-50%);
+    }
+
+    .notification-toast__close,
+    .notification-toast__acknowledge,
+    .notification-toast__details-toggle {
+        min-height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notification-toast { animation: none; }
+}

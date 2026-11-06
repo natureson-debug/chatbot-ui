@@ -84,14 +84,14 @@ class Element {
 const IDS = [
     'tab-logs', 'systemLogsStatus', 'systemLogsRows', 'systemLogsCount', 'systemLogsLastRefresh',
     'systemLogsPage', 'systemLogsPageSize', 'systemLogsAutoRefresh', 'systemLogsRefresh',
-    'systemLogsPrevious', 'systemLogsNext', 'systemLogsFilters', 'systemLogsNotifications',
+    'systemLogsPrevious', 'systemLogsNext', 'systemLogsFilters',
     'systemLogsSeverity', 'systemLogsCategory', 'systemLogsEventCode', 'systemLogsProviderId',
     'systemLogsFrom', 'systemLogsTo', 'systemLogsCorrelationId', 'systemLogsClear',
     'systemLogDetailDialog', 'systemLogDetailTitle', 'systemLogDetailFields',
     'systemLogCopyStatus', 'systemLogCopy', 'systemLogClose'
 ];
 
-function setup(fetch) {
+function setup(fetch, notificationCenter = { calls: [], show(value) { this.calls.push(value); } }) {
     const nodes = Object.fromEntries(IDS.map(id => [id, new Element(null)]));
     const logsTab = new Element(null);
     logsTab.dataset.tab = 'logs';
@@ -120,6 +120,7 @@ function setup(fetch) {
         fetch,
         clipboard,
         windowObject,
+        notificationCenter,
         setTimer(callback, delay) {
             const id = ++timerId;
             timers.set(id, { callback, delay });
@@ -136,6 +137,7 @@ function setup(fetch) {
         otherTab,
         timers,
         clipboard,
+        notificationCenter,
         logs,
         async open() {
             nodes['tab-logs'].hidden = false;
@@ -256,7 +258,7 @@ test('automatic polling is opt-in, notifications exclude the initial snapshot an
     let current = [event('historical', { severity: 'ERROR', eventCode: 'OLD_ERROR' })];
     const ui = setup(async () => response(result(current)));
     await ui.open();
-    assert.equal(ui.nodes.systemLogsNotifications.children.length, 0);
+    assert.equal(ui.notificationCenter.calls.length, 0);
     assert.equal(ui.timers.size, 0);
 
     ui.nodes.systemLogsAutoRefresh.value = '15';
@@ -279,13 +281,46 @@ test('automatic polling is opt-in, notifications exclude the initial snapshot an
         ...current
     ];
     await ui.runTimer();
-    assert.equal(ui.nodes.systemLogsNotifications.children.length, 2);
+    assert.equal(ui.notificationCenter.calls.length, 2);
     await ui.runTimer();
-    assert.equal(ui.nodes.systemLogsNotifications.children.length, 2);
+    assert.equal(ui.notificationCenter.calls.length, 2);
 
     ui.nodes['tab-logs'].hidden = true;
     await ui.otherTab.dispatch('click');
     assert.equal(ui.timers.size, 0);
+    ui.logs.dispose();
+});
+
+test('persisted system event notifications use the shared toast with sanitized details', async () => {
+    let current = [event('historical')];
+    const calls = [];
+    const ui = setup(
+        async () => response(result(current)),
+        { show: value => calls.push(value) }
+    );
+    await ui.open();
+    ui.nodes.systemLogsAutoRefresh.value = '15';
+    await ui.nodes.systemLogsAutoRefresh.dispatch('change');
+    current = [
+        event('new-event', {
+            severity: 'WARN',
+            category: 'SYSTEM',
+            eventCode: 'MCP_TOOL_EXECUTION_FAILED',
+            message: 'raw payload that must not be surfaced',
+            correlationId: 'trace-123'
+        }),
+        ...current
+    ];
+    await ui.runTimer();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].severity, 'error');
+    assert.equal(calls[0].message, 'An MCP tool execution failed.');
+    assert.deepEqual(calls[0].details, {
+        eventCode: 'MCP_TOOL_EXECUTION_FAILED',
+        category: 'SYSTEM',
+        correlationId: 'trace-123'
+    });
+    assert.equal(JSON.stringify(calls).includes('raw payload'), false);
     ui.logs.dispose();
 });
 

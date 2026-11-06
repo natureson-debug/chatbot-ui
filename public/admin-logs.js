@@ -1,6 +1,6 @@
 'use strict';
 
-function createAdminLogs({ document, fetch, setTimer = setTimeout, clearTimer = clearTimeout, clipboard = globalThis.navigator?.clipboard, windowObject = globalThis.window }) {
+function createAdminLogs({ document, fetch, setTimer = setTimeout, clearTimer = clearTimeout, clipboard = globalThis.navigator?.clipboard, windowObject = globalThis.window, notificationCenter = globalThis.ChatbotNotifications }) {
     const panel = document.getElementById('tab-logs');
     const status = document.getElementById('systemLogsStatus');
     const rows = document.getElementById('systemLogsRows');
@@ -13,7 +13,6 @@ function createAdminLogs({ document, fetch, setTimer = setTimeout, clearTimer = 
     const previousButton = document.getElementById('systemLogsPrevious');
     const nextButton = document.getElementById('systemLogsNext');
     const filterForm = document.getElementById('systemLogsFilters');
-    const notifications = document.getElementById('systemLogsNotifications');
     const detailDialog = document.getElementById('systemLogDetailDialog');
     let page = 1;
     let total = 0;
@@ -142,22 +141,40 @@ function createAdminLogs({ document, fetch, setTimer = setTimeout, clearTimer = 
             'AUTH_ADMIN_ACCESS_DENIED',
             'AUTH_LOGIN_FAILED',
             'PROVIDER_CONNECTION_TEST_FAILED',
+            'MCP_TOOL_EXECUTION_FAILED',
             'RUNTIME_BACKEND_HEALTH_CHANGED'
         ].includes(event.eventCode);
     }
 
     function notify(event) {
-        const item = element('article', undefined, `system-log-notification severity-${String(event.severity).toLowerCase()}`);
-        const content = element('div');
-        content.append(element('strong', `${event.severity}: ${event.eventCode}`));
-        content.append(element('p', event.message || 'A significant system event occurred.'));
-        const dismiss = element('button', 'Dismiss');
-        dismiss.type = 'button';
-        dismiss.setAttribute('aria-label', `Dismiss notification for ${event.eventCode}`);
-        dismiss.addEventListener('click', () => item.remove());
-        item.append(content, dismiss);
-        notifications.prepend(item);
-        while (notifications.children.length > 5) notifications.lastElementChild.remove();
+        if (!notificationCenter || typeof notificationCenter.show !== 'function') return;
+        const severity = event.eventCode === 'MCP_TOOL_EXECUTION_FAILED'
+            ? 'error'
+            : event.outcome === 'SUCCESS'
+                ? 'success'
+                : event.severity === 'ERROR'
+                    ? 'error'
+                    : 'warning';
+        const knownMessages = {
+            AUTH_ADMIN_ACCESS_DENIED: 'Administrator access was denied.',
+            AUTH_LOGIN_FAILED: 'A sign-in attempt failed.',
+            PROVIDER_CONNECTION_TEST_FAILED: 'A provider connection test failed.',
+            MCP_TOOL_EXECUTION_FAILED: 'An MCP tool execution failed.',
+            RUNTIME_BACKEND_HEALTH_CHANGED: 'The inference backend health state changed.'
+        };
+        const safeEventCode = /^[A-Z][A-Z0-9_]{0,63}$/.test(event.eventCode || '')
+            ? event.eventCode
+            : '';
+        notificationCenter.show({
+            severity,
+            title: severity === 'error' ? 'System error' : severity === 'success' ? 'System event' : 'System warning',
+            message: knownMessages[safeEventCode] || 'A significant system event occurred.',
+            details: {
+                eventCode: safeEventCode,
+                category: ['AUTH', 'PROVIDER', 'CONFIG', 'RUNTIME', 'SYSTEM'].includes(event.category) ? event.category : '',
+                correlationId: typeof event.correlationId === 'string' ? event.correlationId : ''
+            }
+        });
     }
 
     function showDetails(event) {
@@ -216,7 +233,6 @@ function createAdminLogs({ document, fetch, setTimer = setTimeout, clearTimer = 
         clearTimer(timer);
         timer = null;
         rows.replaceChildren();
-        notifications.replaceChildren();
         total = 0;
         count.textContent = '0 matching events';
         status.textContent = httpStatus === 401
