@@ -54,3 +54,15 @@ Remaining work: wrap existing storage behind adapters; define accurate missing v
 inaccessible vs undecryptable mapping; qualify session/write guards and concurrency;
 then integrate individual consumers under separate approval. Existing routes,
 startup, UI, gates and persistence remain unchanged in this stage.
+
+## Native DPAPI qualification limitation
+
+The isolated DPAPI adapter reuses the existing Windows CurrentUser transform and
+blob format. Native round-trip testing in the current execution environment was
+blocked by `USER_PROFILE_UNAVAILABLE`; DPAPI returned a cryptographic failure
+because the current thread/process did not have a loaded Windows user profile.
+
+Successful native round-trip remains unverified. Production integration requires
+qualification under the intended Windows runtime account with a loaded profile.
+That qualification does not require accessing or decrypting existing production
+credentials; it can use a disposable temporary secret and directory.
