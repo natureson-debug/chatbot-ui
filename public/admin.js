@@ -657,12 +657,30 @@ saveAiConfig.addEventListener("click", async () => {
         }
 
         aiConfigStatus.textContent = "Configuration saved. Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them.";
+        try {
+            globalThis.ChatbotNotifications?.show({
+                severity: "warning",
+                title: "Configuration saved",
+                message: "Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them."
+            });
+        } catch {
+            console.warn("Could not display configuration notification.");
+        }
         await loadAiServerStatus();
 
     } catch (error) {
         console.error("Failed to save AI configuration:", error);
         aiConfigStatus.textContent =
             `Failed to save configuration: ${error.message}`;
+        try {
+            globalThis.ChatbotNotifications?.show({
+                severity: "error",
+                title: "Configuration save failed",
+                message: "Configuration could not be saved or confirmed. Check the settings and try again."
+            });
+        } catch {
+            console.warn("Could not display configuration notification.");
+        }
     } finally {
         saveAiConfig.disabled = false;
     }

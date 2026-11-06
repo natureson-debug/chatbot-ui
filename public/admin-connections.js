@@ -147,6 +147,16 @@
 
  async function saveProvider(event){
   event.preventDefault();
+  const validationMessages=new Set([
+   'Provider ID must start with a letter and contain only lowercase letters, digits, and dashes.',
+   'Display name is required.',
+   'Base URL is required.',
+   'Backend identity is only supported for llama.cpp. Clear it before changing provider type.',
+   'Default model is required.',
+   'Add and explicitly approve at least one chat model.',
+   'A provider with this ID already exists. Edit the existing provider instead.'
+  ]);
+  let outcome;
   try{
    const provider=collect();
    const prior=structuredClone(state);
@@ -162,11 +172,16 @@
     closeForm();
     render();
     setStatus('Provider saved.');
+    outcome={severity:'success',title:'Provider saved',message:'Provider configuration saved.'};
    }catch(error){
     state=prior;
     throw error;
    }
-  }catch(error){setStatus('Save failed: '+(error.message||'unknown error'),true);}
+  }catch(error){
+   setStatus('Save failed: '+(error.message||'unknown error'),true);
+   outcome={severity:'error',title:'Provider save failed',message:validationMessages.has(error.message)?error.message:'Provider configuration could not be saved. Check the settings and try again.'};
+  }
+  try{globalThis.ChatbotNotifications?.show(outcome);}catch{console.warn('Could not display provider notification.');}
  }
 
  async function save(){
