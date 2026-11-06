@@ -34,7 +34,7 @@ async function saveResponseFixture(reply) {
  const nodes=Object.fromEntries(Object.entries(values).map(([key,value])=>[key,{value}]));
  nodes.aiMetrics={checked:false};
  let click,calls=0,refreshes=0;
- const ctx={...nodes,aiConfigStatus:{},console:{error(){}},saveAiConfig:{addEventListener(_,fn){click=fn}},
+ const ctx={...nodes,aiConfigStatus:{},console:{error(){},warn(){}},saveAiConfig:{addEventListener(_,fn){click=fn}},
   loadAiServerStatus:async()=>{refreshes++;},fetch:async(_url,options)=>{calls++;const submitted=JSON.parse(options.body);return {ok:true,json:async()=>({config:reply(submitted)})};}};
  vm.runInNewContext(ui.slice(ui.indexOf('saveAiConfig.addEventListener("click"')),ctx);
  await click();assert.equal(calls,1);assert.equal(ctx.saveAiConfig.disabled,false);

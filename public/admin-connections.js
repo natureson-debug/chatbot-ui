@@ -16,6 +16,17 @@
   status.classList.toggle('error',isError);
  }
 
+ function showResult(severity,title,message,fallback=status){
+  try{
+   if(globalThis.ChatbotNotifications){
+    globalThis.ChatbotNotifications.show({severity,title,message});
+    fallback.textContent='';
+    return;
+   }
+  }catch{console.warn('Could not display provider notification.');}
+  fallback.textContent=message;
+ }
+
  async function api(url,options={}){
   const headers=Object.assign({'Content-Type':'application/json','X-Chatbot-Action':'configure-connections'},options.headers||{});
   const response=await fetch(url,{...options,headers,credentials:'same-origin',cache:'no-store'});
@@ -171,17 +182,15 @@
     await save();
     closeForm();
     render();
-    setStatus('Provider saved.');
     outcome={severity:'success',title:'Provider saved',message:'Provider configuration saved.'};
    }catch(error){
     state=prior;
     throw error;
    }
   }catch(error){
-   setStatus('Save failed: '+(error.message||'unknown error'),true);
    outcome={severity:'error',title:'Provider save failed',message:validationMessages.has(error.message)?error.message:'Provider configuration could not be saved. Check the settings and try again.'};
   }
-  try{globalThis.ChatbotNotifications?.show(outcome);}catch{console.warn('Could not display provider notification.');}
+  showResult(outcome.severity,outcome.title,outcome.message);
  }
 
  async function save(){
@@ -191,12 +200,12 @@
 
  async function toggleEnabled(provider){
   provider.enabled=provider.enabled===false;
-  try{await save();render();setStatus(provider.enabled?'Provider enabled.':'Provider disabled.');}catch(error){setStatus('Update failed: '+error.message,true);provider.enabled=!provider.enabled;}
+  try{await save();render();showResult('success','Provider updated',provider.enabled?'Provider enabled.':'Provider disabled.');}catch(error){provider.enabled=!provider.enabled;showResult('error','Provider update failed','Provider could not be updated. Check the settings and try again.');}
  }
 
  async function setDefault(id){
   state.defaultId=id;
-  try{await save();render();setStatus('Default provider updated.');}catch(error){setStatus('Update failed: '+error.message,true);}
+  try{await save();render();showResult('success','Provider updated','Default provider updated.');}catch(error){showResult('error','Provider update failed','Default provider could not be updated.');}
  }
 
  async function remove(provider){
@@ -204,7 +213,7 @@
   if(!confirmed)return;
   state.connections=state.connections.filter(c=>c.id!==provider.id);
   if(state.defaultId===provider.id)state.defaultId='legacy-local';
-  try{await save();render();setStatus('Provider deleted.');}catch(error){setStatus('Delete failed: '+error.message,true);}
+  try{await save();render();showResult('success','Provider deleted','Provider deleted.');}catch(error){showResult('error','Provider deletion failed','Provider could not be deleted.');}
  }
 
  function edit(id){
@@ -224,8 +233,9 @@
     modelChoices.appendChild(option);
    }
    discoverStatus.textContent='Discovered: '+(ids.join(', ')||'(none)')+'. Capability classification is unknown for OpenAI-compatible model lists.';
+   showResult('success','Model discovery complete','Model suggestions are available. Review capabilities before enabling them.',status);
    // Discovery is suggestions only: no approvals, deletions or defaults change.
-  }catch(error){discoverStatus.textContent='Discovery failed: '+(error.message||'unknown error');}
+  }catch(error){discoverStatus.textContent='';showResult('error','Model discovery failed','Model discovery failed. Check the provider connection and try again.',discoverStatus);}
  }
 
 
@@ -290,8 +300,12 @@
    if(action==='save')field.value='';
    const data=await api('/api/admin/ai/connections/'+encodeURIComponent(id)+'/'+(action==='test'?'test':'credential'),options);
    if(editingId!==id)return;
-   if(action==='test')result.textContent=globalThis.AdminProviderUI?AdminProviderUI.testResult(data):JSON.stringify(data,null,2);else{indicator.textContent=data.configured?'Configured':'Not configured';if(action!=='status')result.textContent='Credential change saved.';if(action==='delete'){document.getElementById('providerEnabled').checked=false;void load();}}
-  }catch{if(editingId===id)result.textContent='Operation failed. Check the saved provider, credential and DeepSeek safeguards.';}
+   if(action==='test'){
+    result.textContent=globalThis.AdminProviderUI?AdminProviderUI.testResult(data):'Connection test completed. See provider status.';
+    const success=data.success===true;
+    showResult(success?'success':'error',success?'Connection test complete':'Connection test failed',success?'Connection test succeeded. See the connection details.':'Connection test failed. See the connection details.',status);
+   }else{indicator.textContent=data.configured?'Configured':'Not configured';if(action!=='status')showResult('success','Credential updated','Provider credential change saved.',result);if(action==='delete'){document.getElementById('providerEnabled').checked=false;void load();}}
+  }catch{if(editingId===id){if(action==='status')result.textContent='Credential status unavailable.';else showResult('error','Provider operation failed','Operation failed. Check the saved provider, credential and DeepSeek safeguards.',result);}}
  }
  document.getElementById('saveProviderKey').addEventListener('click',()=>keyOperation('save'));
  document.getElementById('deleteProviderKey').addEventListener('click',()=>keyOperation('delete'));

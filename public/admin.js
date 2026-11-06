@@ -1,3 +1,14 @@
+function notifyUserOperation(severity, title, message) {
+    try {
+        if (!globalThis.ChatbotNotifications) return false;
+        globalThis.ChatbotNotifications.show({ severity, title, message });
+        return true;
+    } catch {
+        console.warn("Could not display user operation notification.");
+        return false;
+    }
+}
+
 let themeSettingsRequest = 0;
 
 async function loadThemeSettings() {
@@ -159,16 +170,14 @@ async function loadUsers() {
             throw new Error(result.error || "Password reset failed");
         }
 
-        if (typeof terminalAlert === "function") {
-            await terminalAlert(`Password reset successfully for "${user.username}".`, "RESET COMPLETE");
-        } else {
-            alert(`Password reset successfully for "${user.username}".`);
+        if (!notifyUserOperation("success", "Password reset", "Password reset successfully. Existing sessions were signed out.")) {
+            if (typeof terminalAlert === "function") await terminalAlert(`Password reset successfully for "${user.username}".`, "RESET COMPLETE");
+            else alert(`Password reset successfully for "${user.username}".`);
         }
     } catch (error) {
-        if (typeof terminalAlert === "function") {
-            await terminalAlert(error.message, "LINK ERROR");
-        } else {
-            alert(error.message);
+        if (!notifyUserOperation("error", "Password reset failed", "Password reset failed. Check the user and try again.")) {
+            if (typeof terminalAlert === "function") await terminalAlert("Password reset failed. Check the user and try again.", "LINK ERROR");
+            else alert("Password reset failed. Check the user and try again.");
         }
     } finally {
         resetButton.disabled = false;
@@ -215,17 +224,15 @@ async function loadUsers() {
             throw new Error(result.error || "Unable to delete user");
         }
 
-        if (typeof terminalAlert === "function") {
-            await terminalAlert(`User "${user.username}" deleted successfully.`, "DELETE COMPLETE");
-        } else {
-            alert(`User "${user.username}" deleted successfully.`);
+        if (!notifyUserOperation("success", "User deleted", "User deleted successfully.")) {
+            if (typeof terminalAlert === "function") await terminalAlert(`User "${user.username}" deleted successfully.`, "DELETE COMPLETE");
+            else alert(`User "${user.username}" deleted successfully.`);
         }
         await loadUsers();
     } catch (error) {
-        if (typeof terminalAlert === "function") {
-            await terminalAlert(error.message, "LINK ERROR");
-        } else {
-            alert(error.message);
+        if (!notifyUserOperation("error", "User deletion failed", "User could not be deleted. Check the user and try again.")) {
+            if (typeof terminalAlert === "function") await terminalAlert("User could not be deleted. Check the user and try again.", "LINK ERROR");
+            else alert("User could not be deleted. Check the user and try again.");
         }
     } finally {
         deleteButton.disabled = false;
@@ -293,15 +300,34 @@ createUserForm.addEventListener("submit", async (event) => {
             throw new Error(result.error || "Unable to create user");
         }
 
-        createUserStatus.textContent = `User "${result.username}" created successfully.`;
-        createUserStatus.hidden = false;
+        if (notifyUserOperation("success", "User created", "User created successfully.")) {
+            createUserStatus.textContent = "";
+        } else {
+            createUserStatus.textContent = "User created successfully.";
+            createUserStatus.hidden = false;
+        }
 
         createUserForm.reset();
         await loadUsers();
 
     } catch (error) {
-        createUserStatus.textContent = error.message;
-        createUserStatus.hidden = false;
+        const validationMessages = new Set([
+            "Username already exists",
+            "Invalid user details or password (minimum 12 characters)",
+            "Invalid account type"
+        ]);
+        if (validationMessages.has(error.message)) {
+            createUserStatus.textContent = error.message;
+            createUserStatus.hidden = false;
+            return;
+        }
+        const message = "User could not be created. Check the fields and try again.";
+        if (notifyUserOperation("error", "User creation failed", message)) {
+            createUserStatus.textContent = "";
+        } else {
+            createUserStatus.textContent = message;
+            createUserStatus.hidden = false;
+        }
     } finally {
         passwordInput.value = "";
         submitButton.disabled = false;
@@ -656,30 +682,39 @@ saveAiConfig.addEventListener("click", async () => {
             throw new Error(`Persistence mismatch: the server did not confirm all ${submittedFieldCount} submitted settings. Reload configuration before trying again.`);
         }
 
-        aiConfigStatus.textContent = "Configuration saved. Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them.";
+        const savedMessage = "Configuration saved. Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them.";
         try {
-            globalThis.ChatbotNotifications?.show({
+            if (!globalThis.ChatbotNotifications) throw new Error("Notifications unavailable");
+            globalThis.ChatbotNotifications.show({
                 severity: "warning",
                 title: "Configuration saved",
                 message: "Changes apply the next time llama.cpp starts. Restart required; run Restart-ChatbotAI from an elevated PowerShell to apply them."
             });
+            aiConfigStatus.textContent = "";
+            aiConfigStatus.hidden = true;
         } catch {
             console.warn("Could not display configuration notification.");
+            aiConfigStatus.textContent = savedMessage;
         }
         await loadAiServerStatus();
 
     } catch (error) {
         console.error("Failed to save AI configuration:", error);
-        aiConfigStatus.textContent =
-            `Failed to save configuration: ${error.message}`;
+        const message = /^Persistence mismatch: the server did not confirm all \d+ submitted settings\. Reload configuration before trying again\.$/.test(error.message)
+            ? error.message
+            : "Configuration could not be saved or confirmed. Check the settings and try again.";
         try {
-            globalThis.ChatbotNotifications?.show({
+            if (!globalThis.ChatbotNotifications) throw new Error("Notifications unavailable");
+            globalThis.ChatbotNotifications.show({
                 severity: "error",
                 title: "Configuration save failed",
-                message: "Configuration could not be saved or confirmed. Check the settings and try again."
+                message
             });
+            aiConfigStatus.textContent = "";
+            aiConfigStatus.hidden = true;
         } catch {
             console.warn("Could not display configuration notification.");
+            aiConfigStatus.textContent = `Failed to save configuration: ${message}`;
         }
     } finally {
         saveAiConfig.disabled = false;

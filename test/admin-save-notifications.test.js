@@ -19,7 +19,7 @@ function providerFixture({ id = 'local-provider', failSave = false, notification
         providerTimeoutMs: ''
     };
     const notices = [];
-    const statuses = [];
+    const status = { textContent: '' };
     let saves = 0;
     const context = {
         document: { getElementById: key => ({ value: values[key] || '', checked: false }) },
@@ -28,7 +28,7 @@ function providerFixture({ id = 'local-provider', failSave = false, notification
         presets: [],
         modelDraft: [{ id: 'test-model' }],
         structuredClone,
-        setStatus: (...args) => statuses.push(args),
+        status,
         closeForm() {},
         render() {},
         async save() {
@@ -44,9 +44,10 @@ function providerFixture({ id = 'local-provider', failSave = false, notification
         console: { warn() {} }
     };
     vm.createContext(context);
+    vm.runInContext(source.slice(source.indexOf(' function showResult('), source.indexOf(' async function api(')), context);
     vm.runInContext(source.slice(source.indexOf(' function collect()'), source.indexOf(' async function save(){')), context);
     return {
-        notices, statuses, context,
+        notices, status, context,
         saves: () => saves,
         run: () => context.saveProvider({ preventDefault() {} })
     };
@@ -86,13 +87,14 @@ function aiFixture({ mismatch = false, failSave = false, notificationThrows = fa
     return { notices, context, refreshes: () => refreshes, run: () => click() };
 }
 
-test('confirmed llama configuration save shows one restart warning and keeps inline status', async () => {
+test('confirmed llama configuration save shows one restart warning without duplicate inline status', async () => {
     const ui = aiFixture();
     await ui.run();
     assert.equal(ui.notices.length, 1);
     assert.equal(ui.notices[0].severity, 'warning');
     assert.match(ui.notices[0].message, /Restart required.*Restart-ChatbotAI/);
-    assert.match(ui.context.aiConfigStatus.textContent, /Restart required/);
+    assert.equal(ui.context.aiConfigStatus.textContent, '');
+    assert.equal(ui.context.aiConfigStatus.hidden, true);
     assert.equal(ui.refreshes(), 1);
 });
 
@@ -118,7 +120,7 @@ test('invalid provider ID shows its validation error without submitting or expos
     assert.equal(ui.notices.length, 1);
     assert.equal(ui.notices[0].severity, 'error');
     assert.match(ui.notices[0].message, /Provider ID must start with a letter/);
-    assert.match(ui.statuses[0][0], /Save failed: Provider ID/);
+    assert.equal(ui.status.textContent, '');
     assert.doesNotMatch(JSON.stringify(ui.notices), /synthetic-secret/);
 });
 
@@ -128,7 +130,7 @@ test('valid provider save shows one success and failures do not expose server er
     assert.equal(success.saves(), 1);
     assert.equal(success.notices.length, 1);
     assert.equal(success.notices[0].severity, 'success');
-    assert.equal(success.statuses[0][0], 'Provider saved.');
+    assert.equal(success.status.textContent, '');
 
     const failure = providerFixture({ failSave: true });
     await failure.run();
@@ -141,7 +143,7 @@ test('valid provider save shows one success and failures do not expose server er
 test('notification rendering failure does not turn a successful save into a failure', async () => {
     const provider = providerFixture({ notificationThrows: true });
     await provider.run();
-    assert.equal(provider.statuses[0][0], 'Provider saved.');
+    assert.equal(provider.status.textContent, 'Provider configuration saved.');
     const ai = aiFixture({ notificationThrows: true });
     await ai.run();
     assert.match(ai.context.aiConfigStatus.textContent, /Configuration saved/);
