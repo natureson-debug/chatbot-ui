@@ -62,4 +62,9 @@ function resolveDataPaths({ platform, env = {}, home, installationRoot, mode } =
     });
 }
 
-module.exports = { resolveDataPaths };
+function resolveStoragePaths(installationRoot, { env = {}, platform = process.platform, home = require('node:os').homedir() } = {}) {
+    const mode = Object.hasOwn(env, 'CHATBOT_STORAGE_MODE')
+        ? env.CHATBOT_STORAGE_MODE : platform === 'win32' ? 'legacy-windows' : 'installation';
+    return resolveDataPaths({ platform, env, home, installationRoot, mode });
+}
+module.exports = { resolveDataPaths, resolveStoragePaths };

@@ -4,10 +4,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { DatabaseSync } = require('node:sqlite');
 const { initializeSchema } = require('./database-schema');
-function databasePath(root, { env = {}, platform = process.platform, home = require('node:os').homedir() } = {}) {
- const mode = Object.hasOwn(env, 'CHATBOT_STORAGE_MODE')
-  ? env.CHATBOT_STORAGE_MODE : platform === 'win32' ? 'legacy-windows' : 'installation';
- return require('./data-paths').resolveDataPaths({ platform, env, home, installationRoot: root, mode }).database;
+function databasePath(root, options = {}) {
+ return require('./data-paths').resolveStoragePaths(root, options).database;
 }
 function failure(code, detail, cause) {
  const error = new Error(`${code}: ${detail}`, { cause }); error.code = code; return error;
