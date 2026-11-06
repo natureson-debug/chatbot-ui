@@ -79,7 +79,10 @@ function setup(createChatCompletion) {
         './core/admin-telemetry': {},
         './core/system-logs': { createSystemLogService: () => ({ log() {}, startRetention() {}, flush: async () => {}, stop() {} }), validateFilters() {} },
         './core/system-log-routes': { createSystemLogRoute: () => () => false },
-        './core/connections': {selected:async()=>null},
+        './core/connections': {
+            selected: async () => null,
+            read: async () => ({ defaultId: 'legacy-local', connections: [] })
+        },
         './core/provider-adapter': {
             chat: (_provider, input, options) => createChatCompletion(input, options),
             usable: () => ({vision:false, tools:false, thinking:true})

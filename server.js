@@ -16,7 +16,6 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 
 const { createChatCompletion, getHealth, getReportedModel } = require("./core/llama-client");
 
-const { getLlamaServerPid } = require("./core/llama-runtime");
 
 const { getAdminTelemetry } = require("./core/admin-telemetry");
 const { createSystemLogService, validateFilters } = require("./core/system-logs");
@@ -56,6 +55,7 @@ const contentTypes = {
 };
 
 function buildLegacyProvider() {
+    try {
     const aiConfig = JSON.parse(
         fs.readFileSync(AI_CONFIG_FILE, "utf8")
     );
@@ -88,6 +88,12 @@ function buildLegacyProvider() {
         contextLimit: Math.floor(aiConfig.contextSize / aiConfig.parallel),
         legacy: true
     };
+    } catch (error) {
+        // An absent optional installation is not an application startup failure.
+        // Malformed existing configuration still fails closed.
+        if (error.code === "ENOENT") return null;
+        throw error;
+    }
 }
 
 function serveFile(res, filePath) {
@@ -208,12 +214,18 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
             res.end(JSON.stringify({connectionId:selected.id,modelName:selected.model,contextLimit:selected.contextLimit,capabilities:providers.usable(selected),source:"provider-declared"}));
             return;
         }
-        const config = JSON.parse(
-            fs.readFileSync(AI_CONFIG_FILE, "utf8")
-        );
+        const registry = await connections.read();
+        const legacy = registry.defaultId === 'legacy-local' ? buildLegacyProvider() : null;
+        if (!legacy) {
+            res.writeHead(200, {"Content-Type":"application/json", "Cache-Control":"no-store"});
+            res.end(JSON.stringify({state:'configuration_required',code:'PROVIDER_CONFIGURATION_REQUIRED',
+                connectionId:null,modelName:null,contextLimit:null,
+                capabilities:{streaming:false,thinking:false,vision:false,tools:false,models:false}}));
+            return;
+        }
 
         const contextLimit =
-            Math.floor(config.contextSize / config.parallel);
+            legacy.contextLimit;
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
@@ -222,9 +234,7 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
 
         res.end(JSON.stringify({
             contextLimit,
-            modelName: typeof config.model === "string"
-                ? path.basename(config.model).replace(/\.gguf$/i, "")
-                : null
+            modelName: path.basename(legacy.model).replace(/\.gguf$/i, "")
         }));
 
     } catch (error) {
@@ -775,7 +785,15 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 } catch {res.writeHead(400,{"Content-Type":"application/json"});res.end(JSON.stringify({error:"Selected model is unavailable; reload the model list",code:"MODEL_SELECTION_UNAVAILABLE"}));return;}
             }
 
-            if (!provider) provider=buildLegacyProvider();
+            if (!provider) {
+                const registry = await connections.read();
+                if (registry.defaultId === 'legacy-local') provider=buildLegacyProvider();
+                if (!provider) {
+                    res.writeHead(503, {"Content-Type":"application/json"});
+                    res.end(JSON.stringify({error:'Configure an enabled inference provider before chatting',code:'PROVIDER_CONFIGURATION_REQUIRED'}));
+                    return;
+                }
+            }
             if(['openai-responses','deepseek-chat'].includes(provider.adapter)){
                 const token=getSessionToken(req);
                 await require('./core/openai-http').serve({db,req,res,user,provider,input:clientRequest,providers,authorize:()=>getSessionUser(db,token)?.id===user.id});
@@ -1407,7 +1425,8 @@ if (req.method === "GET" && req.url === "/api/admin/ai/status") {
     try {
         const health = await getHealth({ signal: AbortSignal.timeout(3000) });
 
-        const pid = await getLlamaServerPid();
+        const pid = process.platform === 'win32'
+            ? await require('./core/llama-runtime').getLlamaServerPid() : null;
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
