@@ -24,6 +24,21 @@ const attachmentInput = document.getElementById("attachment");
 const attachmentName = document.getElementById("attachmentName");
 const removeAttachmentButton = document.getElementById("removeAttachment");
 
+async function notifyChatOperation(severity, title, message) {
+    try {
+        if (globalThis.ChatbotNotifications) {
+            globalThis.ChatbotNotifications.show({ severity, title, message });
+            return;
+        }
+    } catch {
+        console.warn("Could not display chat notification.");
+    }
+    if (severity === "error" || severity === "warning") {
+        if (typeof terminalAlert === "function") await terminalAlert(message, "LINK ERROR");
+        else alert(message);
+    }
+}
+
 attachmentInput.addEventListener("change", () => {
     const file = attachmentInput.files[0];
 
@@ -523,8 +538,6 @@ async function renameChat(chatId) {
         return;
     }
 
-    chatData.title = trimmedTitle;
-
     try {
     const response = await fetch(
         `/api/chats/${encodeURIComponent(chatId)}`,
@@ -541,16 +554,14 @@ async function renameChat(chatId) {
     }
 } catch (error) {
     console.error("Could not rename chat:", error);
-    if (typeof terminalAlert === "function") {
-        await terminalAlert("Could not rename the chat. Please try again.", "LINK ERROR");
-    } else {
-        alert("Could not rename the chat. Please try again.");
-    }
+    await notifyChatOperation("error", "Chat rename failed", "Could not rename the chat. Please try again.");
     return;
 }
 
+    chatData.title = trimmedTitle;
     updateActiveChatTitle();
     renderChatList();
+    await notifyChatOperation("success", "Chat renamed", "Chat renamed successfully.");
 }
 
 function renderChatList() {
@@ -665,15 +676,12 @@ deleteChatAction.addEventListener("click", async () => {
         } else {
             chat.innerHTML = "";
         }
+        await notifyChatOperation("success", "Chat deleted", "Chat deleted successfully.");
     } catch (error) {
         if (epoch !== sessionEpoch) return;
         console.error("Could not delete chat:", error);
         activeChat.lifecyclePending = false;
-        if (typeof terminalAlert === "function") {
-            await terminalAlert("Could not delete the chat. Please try again.", "LINK ERROR");
-        } else {
-            alert("Could not delete the chat. Please try again.");
-        }
+        await notifyChatOperation("error", "Chat deletion failed", "Could not delete the chat. Please try again.");
     }
 });
 
@@ -1153,11 +1161,7 @@ try {
 } catch (error) {
         if (epoch !== sessionEpoch) return;
     console.error("Could not create chat:", error);
-    if (typeof terminalAlert === "function") {
-        await terminalAlert("Could not create a new chat. Please try again.", "LINK ERROR");
-    } else {
-        alert("Could not create a new chat. Please try again.");
-    }
+    await notifyChatOperation("error", "Chat creation failed", "Could not create a new chat. Please try again.");
     return;
 }
 
@@ -1177,6 +1181,7 @@ try {
 
         chat.innerHTML = "";
         promptBox.focus();
+        await notifyChatOperation("success", "Chat created", "New chat created.");
     }
 );
 
@@ -1209,10 +1214,12 @@ async function clearConversation(chatId) {
             restoreChat();
         }
         renderChatList();
+        await notifyChatOperation("success", "Chat cleared", "Chat history cleared.");
     } catch (error) {
         if (epoch !== sessionEpoch || chatStore.chats[chatId] !== target) return;
         console.error("Could not clear chat:", error);
         await reconcileConversation(chatId);
+        await notifyChatOperation("warning", "Chat clear unverified", "The chat history could not be confirmed as cleared. Check the conversation before retrying.");
     }
 }
 deleteChatButton.addEventListener("click", () => clearConversation(chatStore.activeChatId));
@@ -1495,10 +1502,6 @@ logoutButton.addEventListener("click", async () => {
     } catch (error) {
         if (epoch !== sessionEpoch) return;
         console.error("Logout failed:", error);
-        if (typeof terminalAlert === "function") {
-            await terminalAlert("Could not log out. Please try again.", "LINK ERROR");
-        } else {
-            alert("Could not log out. Please try again.");
-        }
+        await notifyChatOperation("error", "Sign out failed", "Could not log out. Please try again.");
     }
 });
