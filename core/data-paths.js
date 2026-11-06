@@ -1,6 +1,6 @@
 'use strict';
 
-// Planning API only: deliberately not imported by current storage consumers.
+// Pure path resolution; database startup is the first integrated consumer.
 const path = require('node:path');
 
 function resolveDataPaths({ platform, env = {}, home, installationRoot, mode } = {}) {
@@ -11,7 +11,7 @@ function resolveDataPaths({ platform, env = {}, home, installationRoot, mode } =
     };
     if (!['win32', 'darwin', 'linux'].includes(platform)) fail('platform');
     if (!env || typeof env !== 'object' || Array.isArray(env)) fail('environment');
-    if (!['legacy-windows', 'per-user'].includes(mode)) fail('explicit storage mode required');
+    if (!['legacy-windows', 'installation', 'per-user'].includes(mode)) fail('explicit storage mode required');
     if (mode === 'legacy-windows' && platform !== 'win32') fail('legacy mode requires Windows');
     const p = platform === 'win32' ? path.win32 : path.posix;
     function absolute(value, field) {
@@ -36,13 +36,14 @@ function resolveDataPaths({ platform, env = {}, home, installationRoot, mode } =
     let root = rootOverride || legacyOverride;
     let source = rootOverride ? 'CHATBOT_DATA_ROOT' : legacyOverride ? 'CHATBOT_HOME' : mode;
     if (!root) {
-        if (mode === 'legacy-windows') root = 'C:\\AI';
+        if (mode === 'installation') root = install;
+        else if (mode === 'legacy-windows') root = 'C:\\AI';
         else if (platform === 'win32') root = p.join(optional('LOCALAPPDATA') || p.join(absolute(home, 'home'), 'AppData', 'Local'), 'Renitech', 'Chatbot');
         else if (platform === 'darwin') root = p.join(absolute(home, 'home'), 'Library', 'Application Support', 'Renitech', 'Chatbot');
         else root = p.join(optional('XDG_DATA_HOME') || p.join(absolute(home, 'home'), '.local', 'share'), 'renitech-chatbot');
     }
     // Legacy CHATBOT_HOME never relocated the installation-relative database or attachments.
-    const persistent = mode === 'legacy-windows' ? p.join(install, 'data') : p.join(root, 'data');
+    const persistent = mode !== 'per-user' ? p.join(install, 'data') : p.join(root, 'data');
     const config = p.join(root, 'config');
     return Object.freeze({
         mode, source, installationRoot: install, dataRoot: root,

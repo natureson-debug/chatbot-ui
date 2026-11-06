@@ -1,7 +1,24 @@
 # MP-07.2B-1: portable data-path foundation
 
-Status: resolver and isolated tests only. No current consumer imports this module;
-production startup and storage selection are unchanged. No migration is performed.
+Status: MP-07.2B-2A integrates SQLite startup and the intentional first-run CLI.
+Other storage consumers remain unchanged. No data relocation is performed.
+
+SQLite startup and `scripts/initialize-database.cjs --create-new-database` use
+the same `databasePath()` selection. Unset `CHATBOT_STORAGE_MODE` preserves
+installation-relative SQLite: `legacy-windows` on Windows, `installation` on
+macOS/Linux. Set `CHATBOT_STORAGE_MODE=per-user` intentionally to select per-user
+storage. `installation` is an additional explicit resolver mode with its root
+and database under the installation directory. It never falls back to C:\AI.
+Root overrides alone do not relocate the legacy/installation database.
+Absolute `CHATBOT_DB_PATH` still takes precedence; empty or relative values fail
+with `APP_DATA_PATH_INVALID`. Existing relative-path deployments must supply an
+absolute path before upgrading; no working-directory conversion is performed.
+
+Missing databases always fail normal startup. First-run creation requires the
+explicit CLI flag and a pre-created parent directory; existing files cannot be
+overwritten. Set the same environment for initialization and startup. Neither
+command searches for, copies, or imports another database. Existing schema
+initialization/migration checks and SQLite journal/locking behavior are unchanged.
 
 ## API and precedence
 
@@ -10,7 +27,7 @@ installationRoot, mode })`. All inputs are injected; there is no ambient
 environment, filesystem probing, directory creation, database opening or credential
 reading. Returned paths are deployment metadata, not browser-facing information.
 
-The caller must explicitly choose `legacy-windows` or `per-user`. Existing Windows
+The resolver caller must explicitly choose `legacy-windows`, `installation`, or `per-user`. Existing Windows
 installations must retain legacy mode until a separately approved migration.
 There is deliberately no automatic installation detection or default mode.
 
@@ -62,7 +79,7 @@ database opener and must not initialize a missing database automatically. No
 filesystem existence-based fallback is permitted. Resolving a path never proves
 that it is safe to open or write.
 
-Current `db.js` permits relative CHATBOT_DB_PATH; this new API intentionally rejects
+Earlier `db.js` permitted relative CHATBOT_DB_PATH; this integration intentionally rejects
 relative overrides to avoid working-directory-dependent selection. Audit and
 explicitly convert such deployments before integration. Existing Linux `.chatbot`
 and macOS `Application Support/Chatbot` defaults differ from the new per-user layout:

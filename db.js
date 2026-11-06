@@ -1,12 +1,9 @@
 const { openExistingDatabase, databasePath } = require("./core/database-startup");
 
-const path = require("node:path");
-const configuredDbPath = typeof process !== "undefined" && process.env
-    ? process.env.CHATBOT_DB_PATH
-    : undefined;
-const dbPath = configuredDbPath
-    ? path.resolve(configuredDbPath)
-    : databasePath(__dirname);
+const databaseEnvironment = typeof process !== "undefined" && process.env
+    ? process.env
+    : {};
+const dbPath = databasePath(__dirname, { env: databaseEnvironment });
 const db = openExistingDatabase(dbPath);
 
 const { randomUUID } = require("node:crypto");
