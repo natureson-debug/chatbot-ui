@@ -53,7 +53,8 @@ function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
    if(key){if(c.adapter==='anthropic-messages')headers['x-api-key']=key;else if(c.adapter==='gemini-native')headers['x-goog-api-key']=key;else headers.Authorization='Bearer '+key;}
    if(c.adapter==='anthropic-messages')headers['anthropic-version']='2023-06-01';
    const bounded=timeout===null?null:AbortSignal.timeout(timeout);
-   const r=await transport(c)(native?ollamaStream.nativeEndpoint(c.endpoint,resource):c.endpoint.replace(/\/$/,'')+'/'+resource,{
+   const base=c.adapter==='llama.cpp'?(()=>{const u=new URL(c.endpoint);const p=u.pathname.replace(/\/$/,'');if(!p.endsWith('/v1'))u.pathname=(p||'')+'/v1';return u.href.replace(/\/$/,'');})():c.endpoint.replace(/\/$/,'');
+   const r=await transport(c)(native?ollamaStream.nativeEndpoint(c.endpoint,resource):base+'/'+resource,{
     method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,redirect:'error',
     signal:signal&&bounded?AbortSignal.any([signal,bounded]):signal||bounded||undefined
    });
