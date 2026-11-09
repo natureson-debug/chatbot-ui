@@ -62,6 +62,15 @@ limited to the owned loopback origin. Existing application authentication stays
 in place; TLS/LAN configuration and production services are unchanged. These
 settings follow [Electron's security guidance](https://www.electronjs.org/docs/latest/tutorial/security/).
 
+The desktop bootstrap explicitly opts into HTTP loopback session cookies before
+loading the server. Only that process-local policy omits `Secure`, and it rejects
+any configured host or actual local socket address other than `127.0.0.1`.
+Ordinary server startup always retains `Secure`; inherited environment variables
+and request/proxy headers cannot enable this policy. `HttpOnly`, `SameSite=Strict`,
+path, lifetime and server-side session validation are unchanged. Login and logout
+use the same policy. Native macOS cookie/browser acceptance remains separate from
+the HTTP fixture tests.
+
 ## Validation and remaining acceptance
 
 Disposable Windows tests verify explicit initialization, overwrite refusal,

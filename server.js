@@ -10,6 +10,7 @@ const { getSessionToken, getSessionUser, verifyPassword, hashPassword, createSes
 const {
     HOST, PORT, LLAMA_URL, LLAMA_BIND_HOST, LLAMA_PORT, AI_CONFIG_FILE, MODELS_DIR
 } = require("./core/config");
+const sessionCookie = require('./core/session-cookie').createSessionCookiePolicy(HOST);
 const connections = require("./core/connections");
 const providers = require("./core/provider-adapter");
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -1003,7 +1004,7 @@ if (req.method === "POST" && req.url === "/api/login") {
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
-            "Set-Cookie": `chatbot_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`,
+            "Set-Cookie": sessionCookie(token, req.socket.localAddress),
             "Cache-Control": "no-store"
         });
 
@@ -1042,7 +1043,7 @@ if (req.method === "POST" && req.url === "/api/logout") {
 
     res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
-        "Set-Cookie": "chatbot_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0",
+        "Set-Cookie": sessionCookie('', req.socket.localAddress),
         "Cache-Control": "no-store"
     });
 

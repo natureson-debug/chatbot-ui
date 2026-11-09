@@ -23,10 +23,11 @@ function setup(t, fault) {
     api.createChat('a','Chat','u'); api.createChat('b','Other','v');
     const token = auth.createSession(db,'u'); let handler;
     vm.runInNewContext(fs.readFileSync(path.join(root,'server.js'),'utf8'), {
-        __dirname: root, console: { error() {}, log() {} }, Buffer,
+        __dirname: root, console: { error() {}, log() {} }, Buffer, module: { exports: {} },
         require(name) {
             if (name === 'http') return { createServer(fn) { handler = fn; return { listen() {} }; } };
             if (name === './db') return api;
+            if (name === './core/session-cookie') return require('../core/session-cookie');
             if (name === './auth') return { ...auth, getSessionUser(...args) { if (fault) fault(db); return auth.getSessionUser(...args); } };
             if (name === './core/system-logs') return require('../core/system-logs');
             if (name === './core/system-log-routes') return require('../core/system-log-routes');

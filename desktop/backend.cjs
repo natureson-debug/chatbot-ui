@@ -3,6 +3,7 @@
 if (!process.send || !process.env.CHATBOT_DESKTOP_CHILD) throw new Error('DESKTOP_PARENT_REQUIRED');
 if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('NODE_24_REQUIRED');
 const config = require('../core/config');
+require('../core/session-cookie').enableDesktopLoopback(config.HOST);
 config.PORT = 0; // OS chooses the port atomically; no probe/release/rebind race.
 const { server } = require('../server');
 let stopping = false;

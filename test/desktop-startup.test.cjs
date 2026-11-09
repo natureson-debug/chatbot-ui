@@ -51,8 +51,13 @@ test('actual backend readiness, graceful exit and persistent administrator acros
             assert.equal((await fetch(origin + '/health')).status, 200);
             const login = await fetch(origin + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'desktop_admin', password: 'synthetic-fixture-password' }) });
             assert.equal(login.status, 200);
+            assert(!/; Secure(?:;|$)/.test(login.headers.get('set-cookie')));
+            assert.match(login.headers.get('set-cookie'), /; HttpOnly; SameSite=Strict; Path=\/; Max-Age=86400$/);
             const cookie = login.headers.get('set-cookie').split(';')[0];
             const request = (url, method = 'GET', body) => fetch(origin + url, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+            assert.equal((await request('/api/me')).status, 200);
+            assert.equal((await fetch(origin + '/api/me')).status, 401);
+            assert.equal((await fetch(origin + '/api/me', { headers: { Cookie: 'chatbot_session=invalid' } })).status, 401);
             if (!attempt) {
                 const created = await request('/api/chats', 'POST', { title: 'Desktop fixture' });
                 assert.equal(created.status, 201);
@@ -66,6 +71,10 @@ test('actual backend readiness, graceful exit and persistent administrator acros
             const db = new (require('node:sqlite').DatabaseSync)(path.join(root, 'data', 'chatbot.db'), { readOnly: true });
             try { assert.equal(db.prepare('SELECT username FROM users').get().username, 'desktop_admin'); }
             finally { db.close(); }
+            const logout = await request('/api/logout', 'POST');
+            assert.equal(logout.status, 200);
+            assert.match(logout.headers.get('set-cookie'), /^chatbot_session=; HttpOnly; SameSite=Strict; Path=\/; Max-Age=0$/);
+            assert.equal((await request('/api/me')).status, 401);
         } finally { await backend.stop(); }
         assert.notEqual(backend.child.exitCode, null);
     }
