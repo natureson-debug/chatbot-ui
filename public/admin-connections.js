@@ -188,7 +188,8 @@
     throw error;
    }
   }catch(error){
-   outcome={severity:'error',title:'Provider save failed',message:validationMessages.has(error.message)?error.message:'Provider configuration could not be saved. Check the settings and try again.'};
+   const safeMessage=error?.message||'Provider configuration could not be saved. Check the settings and try again.';
+   outcome={severity:'error',title:'Provider save failed',message:safeMessage};
   }
   showResult(outcome.severity,outcome.title,outcome.message);
  }

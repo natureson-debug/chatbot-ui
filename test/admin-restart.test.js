@@ -7,6 +7,13 @@ test('restart requires exact same origin and explicit action header',()=>{
  assert(validRestartRequest({headers}));
  for(const change of [{origin:undefined},{origin:'null'},{origin:'https://evil.invalid'},{origin:'http://192.168.100.1'},{'x-chatbot-action':undefined},{'sec-fetch-site':'cross-site'}])assert(!validRestartRequest({headers:{...headers,...change}}));
 });
+test('loopback desktop same-origin requests without Origin are accepted',()=>{
+ const base={host:'127.0.0.1:3000','x-chatbot-action':'restart-ai','sec-fetch-site':'same-origin'};
+ assert(validRestartRequest({headers:base}));
+ assert(validRestartRequest({headers:{...base,host:'localhost:3000'}}));
+ assert(!validRestartRequest({headers:{...base,host:'evil.invalid'}}));
+ assert(!validRestartRequest({headers:{...base,'sec-fetch-site':'cross-site'}}));
+});
 function fixture(fetch,confirm=()=>true,notifications){let click;const button={disabled:false,addEventListener(_,fn){click=fn}},status={};installAdminRestart({document:{getElementById:id=>id==='restartAiServer'?button:status},fetch,confirm,notifications});return{click,button,status};}
 test('cancelled confirmation never submits',async()=>{const f=fixture(()=>{throw Error('Must not request')},()=>false);await f.click();assert.equal(f.button.disabled,false);});
 test('duplicate clicks suppressed; unknown ownership refuses without success',async()=>{
