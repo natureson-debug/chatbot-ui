@@ -14,10 +14,11 @@ function statistics(value) {
  };
 }
 
-function nativeEndpoint(endpoint) {
+function nativeEndpoint(endpoint, resource = 'api/chat') {
+ resource = resource || 'api/chat';
  const url = new URL(endpoint);
  // Preserve reverse-proxy prefixes and the configured origin/security boundary.
- url.pathname = url.pathname.replace(/\/$/, '').replace(/\/v1$/, '') + '/api/chat';
+ url.pathname = url.pathname.replace(/\/$/, '').replace(/\/v1$/, '') + '/' + resource.replace(/^\//, '');
  return url.href;
 }
 

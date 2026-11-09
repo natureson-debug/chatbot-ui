@@ -14,8 +14,10 @@ const ollama=()=>({
 function jsonResponse(data,status=200){return new Response(JSON.stringify(data),{status});}
 
 test('ollama model discovery preserves exact ids and provider id',async()=>{
- const a=createAdapter({secret:async()=>null,fetchImpl:async()=>jsonResponse({data:[{id:'qwen2.5:32b'},{id:'mistral:latest'},{id:'nomic-embed-text:latest'}]})});
+ let url;
+ const a=createAdapter({secret:async()=>null,fetchImpl:async(u)=>{url=u;return jsonResponse({models:[{name:'qwen2.5:32b'},{name:'mistral:latest'},{name:'nomic-embed-text:latest'}]});}});
  const models=await a.models(ollama());
+ assert.equal(url,'http://127.0.0.1:11434/api/tags');
  assert.deepEqual(models,[
   {id:'qwen2.5:32b',name:'qwen2.5:32b',providerId:'mac-mini'},
   {id:'mistral:latest',name:'mistral:latest',providerId:'mac-mini'},
@@ -25,7 +27,7 @@ test('ollama model discovery preserves exact ids and provider id',async()=>{
 
 test('ollama no-auth connection omits authorization and reports usable capabilities',async()=>{
  let headers;
- const a=createAdapter({secret:async()=>null,fetchImpl:async(_u,o)=>{headers=o.headers;return jsonResponse({data:[{id:'mistral:latest'}]});}});
+ const a=createAdapter({secret:async()=>null,fetchImpl:async(_u,o)=>{headers=o.headers;return jsonResponse({models:[{name:'mistral:latest'}]});}});
  const result=await a.testConnection(ollama());
  assert.equal(result.ok,true);
  assert.equal(headers.Authorization,undefined);

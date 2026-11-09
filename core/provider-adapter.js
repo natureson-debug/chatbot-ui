@@ -53,7 +53,7 @@ function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
    if(key){if(c.adapter==='anthropic-messages')headers['x-api-key']=key;else if(c.adapter==='gemini-native')headers['x-goog-api-key']=key;else headers.Authorization='Bearer '+key;}
    if(c.adapter==='anthropic-messages')headers['anthropic-version']='2023-06-01';
    const bounded=timeout===null?null:AbortSignal.timeout(timeout);
-   const r=await transport(c)(native?ollamaStream.nativeEndpoint(c.endpoint):c.endpoint.replace(/\/$/,'')+'/'+resource,{
+   const r=await transport(c)(native?ollamaStream.nativeEndpoint(c.endpoint,resource):c.endpoint.replace(/\/$/,'')+'/'+resource,{
     method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,redirect:'error',
     signal:signal&&bounded?AbortSignal.any([signal,bounded]):signal||bounded||undefined
    });
@@ -99,6 +99,17 @@ function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
 
  async function models(c,{signal}={}){
   if(!usable(c).models)throw Error('Model discovery unsupported');
+  if(c.adapter==='ollama'){
+   const r=await request(c,'api/tags',{signal,timeout:5000,native:true});
+   let size=0;const chunks=[];
+   for await(const chunk of r.body){size+=chunk.length;if(size>262144)throw Error('Provider response too large');chunks.push(chunk);}
+   try{
+    const body=JSON.parse(Buffer.concat(chunks).toString());
+    if(!Array.isArray(body.models))throw Error();
+    const seen=new Set();
+    return body.models.slice(0,200).filter(m=>m&&typeof m.name==='string'&&m.name.length>0&&m.name.length<=512&&!seen.has(m.name)&&seen.add(m.name)).map(m=>({id:m.name,name:m.name,providerId:c.id}));
+   }catch{throw Error('Invalid model discovery response');}
+  }
   const r=await request(c,'models',{signal,timeout:5000});
   let size=0;const chunks=[];
   for await(const chunk of r.body){size+=chunk.length;if(size>262144)throw Error('Provider response too large');chunks.push(chunk);}
