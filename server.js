@@ -1905,3 +1905,6 @@ server.listen(PORT, HOST, () => {
     console.log(`Llama: ${LLAMA_URL}`);
     console.log("");
 });
+
+// Desktop bootstrap retains this exact server; normal command-line startup is unchanged.
+module.exports = { server };
