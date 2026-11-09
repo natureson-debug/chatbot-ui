@@ -73,7 +73,7 @@ function createStore(location=file){
  async function read(){try{return validate(JSON.parse(await fs.readFile(location,'utf8')));}catch(e){if(e.code==='ENOENT')return{version:1,revision:0,defaultId:'legacy-local',connections:[]};throw Error('Connection configuration unavailable');}}
  return {read,async selected(){const config=await read();if(config.defaultId==='legacy-local')return null;const found=config.connections.find(c=>c.id===config.defaultId);if(!found||found.enabled===false)return null;return modelConfig.ready(found)?modelConfig.select(found,found.model):structuredClone(found);},async save(input){
   if(writing)throw Error('CONNECTION_CONFLICT');writing=true;let temp;
-  try{const config=validate(input),current=await read();if(config.revision!==current.revision)throw Error('CONNECTION_CONFLICT');if(config.revision===Number.MAX_SAFE_INTEGER)fail();config.revision++;temp=location+'.'+require('node:crypto').randomUUID()+'.tmp';await fs.writeFile(temp,JSON.stringify(config,null,2)+'\n',{flag:'wx',mode:0o600});await fs.rename(temp,location);temp=null;return config;}finally{if(temp)await fs.unlink(temp).catch(()=>{});writing=false;}
+  try{const config=validate(input),current=await read();if(config.revision!==current.revision)throw Error('CONNECTION_CONFLICT');if(config.revision===Number.MAX_SAFE_INTEGER)fail();config.revision++;await fs.mkdir(path.dirname(location),{recursive:true,mode:0o700});temp=location+'.'+require('node:crypto').randomUUID()+'.tmp';await fs.writeFile(temp,JSON.stringify(config,null,2)+'\n',{flag:'wx',mode:0o600});await fs.rename(temp,location);temp=null;return config;}finally{if(temp)await fs.unlink(temp).catch(()=>{});writing=false;}
  }};
 }
 const store=createStore();
