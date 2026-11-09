@@ -1414,7 +1414,11 @@ const loginError = document.getElementById("loginError");
 const adminConsoleButton = document.getElementById("adminConsoleButton");
 
 adminConsoleButton.addEventListener("click", () => {
-    window.open("/admin", "_blank", "noopener");
+    if (navigator.userAgent && navigator.userAgent.includes("Electron")) {
+        window.location.assign("/admin");
+    } else {
+        window.open("/admin", "_blank", "noopener");
+    }
 });
 
 loginForm.addEventListener("submit", async (event) => {
