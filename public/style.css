@@ -961,6 +961,33 @@ textarea:focus {
     color: var(--theme-text);
 }
 
+.gpu-device-select,
+.gpu-split-select {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--theme-border);
+    border-radius: 10px;
+    background: var(--theme-input);
+    color: var(--theme-text);
+    padding: 10px 12px;
+    font: inherit;
+}
+
+.gpu-device-select {
+    min-height: 104px;
+}
+
+.gpu-device-select:focus,
+.gpu-split-select:focus {
+    outline: 2px solid color-mix(in srgb, var(--theme-focus) 70%, transparent);
+    outline-offset: 2px;
+}
+
+.ai-config-form .field-group small {
+    color: var(--theme-muted);
+    line-height: 1.4;
+}
+
 .username-field,
 .password-field {
     flex: 1 1 0;

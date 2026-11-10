@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { buildLlamaLaunchSpec } = require('../core/llama-launch');
+const gpuSettings = require('../core/ai-settings');
 const stage = 'C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4';
 const qualified = () => ({ platform: 'win32', executable: stage+'\\llama-server.exe', cwd: stage,
     modelPath: 'C:\\AI\\models\\Qwen3-8B-Q5_K_M.gguf', apiKeyFile: 'C:\\AI\\config\\llama-api-key.txt',
@@ -23,6 +24,7 @@ test('explicit construction cannot load filesystem, config, process or runtime m
     const m={exports:{}};
     vm.runInNewContext(source,{module:m,URL,require(n){
         if(n==='path'||n==='net')return require(n);
+        if(n==='./ai-settings')return gpuSettings;
         throw Error('Forbidden dependency: '+n);
     }});
     const s=Object.freeze(qualified()); const result=m.exports.buildLlamaLaunchSpec(s);
@@ -35,7 +37,8 @@ test('missing/relative paths, invalid values, conflicts and unknown options are 
         {parallel:0},{parallel:9},{contextSize:32767},{contextSize:Infinity},
         {gpuLayers:-1},{gpuLayers:1.5},{gpuLayers:'37'},{verbosity:-1},{verbosity:'4'},
         {metrics:'true'},
-        {device:'none',gpuLayers:37},{device:'CUDA0,CUDA1'},{device:'--device'},
+        {device:'none',gpuLayers:37},{device:'CUDA0,,CUDA1'},{device:'--device'},
+        {splitMode:'invalid'},{device:'CUDA0,CUDA1',tensorSplit:'3'},{device:'CUDA0,CUDA1',tensorSplit:'3,0'},
         {corsOrigin:'http://user:password@localhost'},{corsOrigin:'http://localhost/path'},
         {args:['--host','0.0.0.0']},{env:{PATH:'untrusted'}},{apiKey:'secret'}];
     // A leading dash is not a device identity supported by this API.
@@ -53,6 +56,25 @@ test('metrics flag is added only when enabled', () => {
     assert(enabled.args.includes('--metrics'));
     assert.equal(enabled.expected.metrics,true);
 });
+test('multi-GPU launch uses one process with layer split and optional tensor proportions', () => {
+    const s = qualified();
+    const multi = buildLlamaLaunchSpec({
+        ...s, device: 'CUDA0,CUDA1', splitMode: 'layer', tensorSplit: '3,2'
+    });
+    assert.deepEqual(multi.args.slice(multi.args.indexOf('--device')), [
+        '--device', 'CUDA0,CUDA1', '--split-mode', 'layer', '--tensor-split', '3,2',
+        '--n-gpu-layers', '37', '--verbosity', '4'
+    ]);
+    assert.equal(multi.expected.device, 'CUDA0,CUDA1');
+    assert.equal(multi.expected.splitMode, 'layer');
+    assert.equal(multi.expected.tensorSplit, '3,2');
+
+    const withoutTensorSplit = buildLlamaLaunchSpec({
+        ...s, device: 'CUDA0,CUDA1', splitMode: 'layer'
+    });
+    assert(withoutTensorSplit.args.includes('--split-mode'));
+    assert(!withoutTensorSplit.args.includes('--tensor-split'));
+});
 test('generic spec supports explicit POSIX paths and non-CUDA device labels without runtime support', () => {
     for(const platform of ['linux','darwin']) {
         const r=buildLlamaLaunchSpec({...qualified(),platform,executable:'/opt/chatbot/llama-server',cwd:'/opt/chatbot',
@@ -65,6 +87,8 @@ test('legacy wrapper preserves exact shape and configured launch settings', () =
     const source=fs.readFileSync(path.join(__dirname,'../core/llama-launch.js'),'utf8');
     vm.runInNewContext(source,{module:m,process:{platform:'win32'},require(n){
         if(n==='path'||n==='net')return require(n);
+        if(n==='./ai-settings')return gpuSettings;
+        if(n==='./llama-devices')return {listLlamaDevicesSync:()=>[{id:'CUDA0'},{id:'CUDA1'}]};
         if(n==='./config')return{AI_CONFIG_FILE:'config.json',MODELS_DIR:'C:\\models',API_KEY_FILE:'C:\\key',LLAMA_BIND_HOST:'127.0.0.1',LLAMA_PORT:8080,LLAMA_CORS_ORIGIN:'http://127.0.0.1:8080',LLAMA_DEVICE:'CUDA0'};
         if(n==='./paths')return{LLAMA_EXECUTABLE:'C:\\legacy\\llama-server.exe',LLAMA_CWD:'C:\\legacy'};
         if(n==='fs')return{readFileSync(p){assert.equal(p,'config.json');reads.push(p);return JSON.stringify(config)},readdirSync(){return['old.gguf','new.gguf']}};
@@ -75,6 +99,11 @@ test('legacy wrapper preserves exact shape and configured launch settings', () =
     assert.deepEqual(Array.from(r.args.slice(-3)),['--n-gpu-layers','45','--metrics']);
     assert(!r.args.includes('--verbosity'));
     config={...config,model:'new.gguf'};r=m.exports.buildLlamaLaunchSpec();assert.equal(r.args[1],'C:\\models\\new.gguf');assert.equal(reads.length,2);
+    config={...config,device:'CUDA0,CUDA1',splitMode:'layer',tensorSplit:'3,2'};
+    r=m.exports.buildLlamaLaunchSpec();
+    assert.deepEqual(Array.from(r.args.slice(r.args.indexOf('--device'))),[
+        '--device','CUDA0,CUDA1','--n-gpu-layers','45','--split-mode','layer','--tensor-split','3,2','--metrics'
+    ]);
     config={...config,model:'missing.gguf'};assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/Invalid AI model/);
 });
 test('configured GPU layer counts are validated and omitted only when absent', () => {
@@ -83,6 +112,8 @@ test('configured GPU layer counts are validated and omitted only when absent', (
     const source=fs.readFileSync(path.join(__dirname,'../core/llama-launch.js'),'utf8');
     vm.runInNewContext(source,{module:m,process:{platform:'win32'},require(n){
         if(n==='path'||n==='net')return require(n);
+        if(n==='./ai-settings')return gpuSettings;
+        if(n==='./llama-devices')return {listLlamaDevicesSync:()=>[{id:'CUDA0'},{id:'CUDA1'}]};
         if(n==='./config')return{AI_CONFIG_FILE:'config.json',MODELS_DIR:'C:\\models',API_KEY_FILE:'C:\\key',LLAMA_BIND_HOST:'127.0.0.1',LLAMA_PORT:8080,LLAMA_CORS_ORIGIN:'http://127.0.0.1:8080',LLAMA_DEVICE:'CUDA0'};
         if(n==='./paths')return{LLAMA_EXECUTABLE:'C:\\legacy\\llama-server.exe',LLAMA_CWD:'C:\\legacy'};
         if(n==='fs')return{readFileSync(){return JSON.stringify(config)},readdirSync(){return['model.gguf']}};
@@ -91,7 +122,7 @@ test('configured GPU layer counts are validated and omitted only when absent', (
     assert.deepEqual(Array.from(m.exports.buildLlamaLaunchSpec().args.slice(-2)),['--n-gpu-layers','45']);
     for(const gpuLayers of [-1,1.5,'45',1000]) {
         config={...config,gpuLayers};
-        assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/GPU layer count/);
+        assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/GPU layers|GPU layer count/);
     }
     delete config.gpuLayers;
     assert(!m.exports.buildLlamaLaunchSpec().args.includes('--n-gpu-layers'));

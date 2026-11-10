@@ -90,6 +90,17 @@ test('insertion persists fixed event text and allowlisted metadata only', async 
     assert.match(row.occurred_at, /^\d{4}-\d\d-\d\dT.*Z$/);
 });
 
+test('AI configuration audit logs allow split settings without arbitrary fields', async t => {
+    const { db, logs } = setup(t);
+    logs.log('CONFIG_ADMIN_SETTINGS_UPDATED', {
+        actorId: 'admin',
+        metadata: { changedFields: ['device', 'splitMode', 'tensorSplit', 'apiKey'] }
+    });
+    await logs.flush();
+    const row = db.prepare('SELECT metadata_json FROM system_events').get();
+    assert.equal(row.metadata_json, '{"changedFields":["device","splitMode","tensorSplit"]}');
+});
+
 test('pagination, descending order, and structured filters return sanitized records', async t => {
     const { logs } = setup(t);
     logs.log('PROVIDER_CONNECTION_TEST_STARTED', {

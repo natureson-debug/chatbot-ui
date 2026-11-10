@@ -64,9 +64,12 @@ function aiFixture({ mismatch = false, failSave = false, notificationThrows = fa
         aiContextSize: { value: '32768' },
         aiGpuLayers: { value: '45' },
         aiDevice: { value: 'CUDA0' },
+        aiSplitMode: { value: 'layer' },
+        aiTensorSplit: { value: '' },
         aiVerbosity: { value: '4' },
         aiMetrics: { checked: false },
         aiConfigStatus: {},
+        selectedGpuDevices: () => ['CUDA0'],
         saveAiConfig: { addEventListener(_type, callback) { click = callback; } },
         async fetch(_url, options) {
             if (failSave) throw new Error('synthetic-secret-upstream');

@@ -32,7 +32,9 @@ const EVENT_DEFINITIONS = Object.freeze({
     },
     RUNTIME_BACKEND_HEALTH_CHANGED: { severity: 'INFO', category: 'RUNTIME', message: 'Backend health state changed', outcome: 'UNKNOWN', metadata: { previousState: ['ready', 'unavailable', 'unsupported', 'authentication_failed', 'loading_or_unavailable'], currentState: ['ready', 'unavailable', 'unsupported', 'authentication_failed', 'loading_or_unavailable'] } }
 });
-const SETTING_FIELDS = new Set(['model', 'parallel', 'contextSize', 'gpuLayers', 'device', 'verbosity', 'metrics']);
+const SETTING_FIELDS = new Set([
+    'model', 'parallel', 'contextSize', 'gpuLayers', 'device', 'splitMode', 'tensorSplit', 'verbosity', 'metrics'
+]);
 
 function boundedId(value) {
     return typeof value === 'string' && ID_PATTERN.test(value) ? value : null;

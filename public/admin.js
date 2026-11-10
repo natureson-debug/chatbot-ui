@@ -336,6 +336,8 @@ createUserForm.addEventListener("submit", async (event) => {
 
 const aiGpuLayers = document.getElementById("aiGpuLayers");
 const aiDevice = document.getElementById("aiDevice");
+const aiSplitMode = document.getElementById("aiSplitMode");
+const aiTensorSplit = document.getElementById("aiTensorSplit");
 const aiVerbosity = document.getElementById("aiVerbosity");
 const aiParallel = document.getElementById("aiParallel");
 const aiContextSize = document.getElementById("aiContextSize");
@@ -522,7 +524,7 @@ function syncTerminalSelect(select) {
 }
 
 function enhanceAdminSelects() {
-    ["aiModel", "aiDevice", "newUserRole", "monitorRefreshRate"].forEach((id) => {
+    ["aiModel", "newUserRole", "monitorRefreshRate"].forEach((id) => {
         enhanceSelect(document.getElementById(id));
     });
 }
@@ -566,6 +568,74 @@ async function loadAiModels() {
 
     syncTerminalSelect(aiModel);
 }
+
+function selectedGpuDevices() {
+    if (aiDevice.selectedOptions) {
+        return Array.from(aiDevice.selectedOptions, option => option.value);
+    }
+    return String(aiDevice.value || "").split(",").filter(Boolean);
+}
+
+function setSelectedGpuDevices(value) {
+    const selected = String(value || "").split(",").map(device => device.trim()).filter(Boolean);
+    if (!aiDevice.options) {
+        aiDevice.value = selected.join(",");
+        updateGpuSplitControls();
+        return;
+    }
+
+    for (const id of selected) {
+        if (!Array.from(aiDevice.options).some(option => option.value === id)) {
+            const option = document.createElement("option");
+            option.value = id;
+            option.textContent = `${id} (saved; not currently discovered)`;
+            aiDevice.appendChild(option);
+        }
+    }
+    for (const option of aiDevice.options) {
+        option.selected = selected.includes(option.value);
+    }
+    updateGpuSplitControls();
+}
+
+function updateGpuSplitControls() {
+    const multipleDevices = selectedGpuDevices().length > 1;
+    document.getElementById("aiSplitModeGroup").hidden = !multipleDevices;
+    document.getElementById("aiTensorSplitGroup").hidden = !multipleDevices;
+    aiSplitMode.disabled = !multipleDevices;
+    aiTensorSplit.disabled = !multipleDevices;
+}
+
+async function loadAiDevices() {
+    const status = document.getElementById("aiDeviceStatus");
+    try {
+        const response = await fetch("/api/admin/ai/devices", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+        if (!Array.isArray(result.devices) || result.devices.some(device =>
+            typeof device?.id !== "string" || typeof device?.name !== "string")) {
+            throw new Error("Invalid GPU device list");
+        }
+
+        aiDevice.replaceChildren();
+        for (const device of result.devices) {
+            const option = document.createElement("option");
+            option.value = device.id;
+            const memory = Number.isSafeInteger(device.memoryMiB) && device.memoryMiB > 0
+                ? ` (${device.memoryMiB.toLocaleString()} MiB)` : "";
+            option.textContent = `${device.id} — ${device.name}${memory}`;
+            aiDevice.appendChild(option);
+        }
+        status.textContent = result.devices.length
+            ? "GPU devices discovered from the installed llama.cpp executable."
+            : "No NVIDIA CUDA devices were discovered.";
+    } catch (error) {
+        console.error("Failed to discover llama.cpp GPU devices:", error);
+        status.textContent = "GPU devices could not be discovered; saved selections are retained.";
+    }
+}
+
+aiDevice.addEventListener("change", updateGpuSplitControls);
 
 async function loadAiServerStatus() {
     try {
@@ -615,7 +685,9 @@ async function loadAiConfig() {
         aiParallel.value = config.parallel;
         aiContextSize.value = config.contextSize;
         aiGpuLayers.value = config.gpuLayers ?? 37;
-        aiDevice.value = config.device ?? "CUDA0";
+        setSelectedGpuDevices(config.device ?? "CUDA0");
+        aiSplitMode.value = config.splitMode ?? "layer";
+        aiTensorSplit.value = config.tensorSplit ?? "";
         aiVerbosity.value = config.verbosity ?? 4;
         aiMetrics.checked = config.metrics === true;
 
@@ -628,9 +700,9 @@ async function loadAiConfig() {
 
 async function initializeAiConfig() {
     await loadAiModels();
+    await loadAiDevices();
     await loadAiConfig();
     syncTerminalSelect(aiModel);
-    syncTerminalSelect(aiDevice);
     await loadAiServerStatus();
 }
 
@@ -646,7 +718,9 @@ saveAiConfig.addEventListener("click", async () => {
         parallel: Number(aiParallel.value),
         contextSize: Number(aiContextSize.value),
         gpuLayers: aiGpuLayers.value === "" ? null : Number(aiGpuLayers.value),
-        device: aiDevice.value,
+        device: selectedGpuDevices().join(","),
+        splitMode: aiSplitMode.value,
+        tensorSplit: aiTensorSplit.value.trim() || null,
         verbosity: aiVerbosity.value === "" ? null : Number(aiVerbosity.value),
         metrics: aiMetrics.checked
     };
@@ -700,7 +774,8 @@ saveAiConfig.addEventListener("click", async () => {
 
     } catch (error) {
         console.error("Failed to save AI configuration:", error);
-        const message = /^Persistence mismatch: the server did not confirm all \d+ submitted settings\. Reload configuration before trying again\.$/.test(error.message)
+        const isValidationMessage = /^(?:GPU device|GPU devices could not|A GPU device|Select one or more|Split mode|Tensor split)/.test(error.message);
+        const message = /^Persistence mismatch: the server did not confirm all \d+ submitted settings\. Reload configuration before trying again\.$/.test(error.message) || isValidationMessage
             ? error.message
             : "Configuration could not be saved or confirmed. Check the settings and try again.";
         try {

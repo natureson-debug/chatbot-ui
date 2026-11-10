@@ -1716,6 +1716,37 @@ if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/a
 }
 
 // Administrator-only AI configuration
+if (req.method === "GET" && req.url === "/api/admin/ai/devices") {
+    const user = getAuthenticatedUser(req);
+
+    if (!user) {
+        logAdminAccessDenied(req, user);
+        res.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: "Authentication required" }));
+        return;
+    }
+
+    if (user.is_admin !== 1) {
+        logAdminAccessDenied(req, user);
+        res.writeHead(403, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: "Administrator access required" }));
+        return;
+    }
+
+    try {
+        const devices = await require("./core/llama-devices").listLlamaDevices();
+        res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        });
+        res.end(JSON.stringify({ devices }));
+    } catch (_) {
+        res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: "GPU devices could not be discovered" }));
+    }
+    return;
+}
+
 if (req.method === "GET" && req.url === "/api/admin/ai/config") {
     const user = getAuthenticatedUser(req);
 
@@ -1845,14 +1876,22 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
 
         const previous = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, "utf8"));
         const additions = {};
-        for (const key of ["gpuLayers", "device", "verbosity", "metrics"]) {
+        for (const key of ["gpuLayers", "device", "splitMode", "tensorSplit", "verbosity", "metrics"]) {
             if (Object.hasOwn(payload, key)) additions[key] = payload[key];
+        }
+        let availableDevices;
+        try {
+            availableDevices = await require("./core/llama-devices").listLlamaDevices();
+        } catch (_) {
+            res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ error: "GPU devices could not be discovered; configuration was not saved" }));
+            return;
         }
         let config;
         try {
             const { validateAiSettings } = require("./core/ai-settings");
             if (!previous || typeof previous !== "object" || Array.isArray(previous)) throw Error("Invalid AI configuration");
-            config = validateAiSettings({ ...previous, model, parallel, contextSize, ...additions });
+            config = validateAiSettings({ ...previous, model, parallel, contextSize, ...additions }, availableDevices);
         } catch (error) {
             res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
             res.end(JSON.stringify({ error: error.message }));
@@ -1867,7 +1906,7 @@ if (req.method === "POST" && req.url === "/api/admin/ai/config") {
         } finally {
             if (fs.existsSync(temporaryConfig)) fs.unlinkSync(temporaryConfig);
         }
-        const changedFields = ["model", "parallel", "contextSize", "gpuLayers", "device", "verbosity", "metrics"]
+        const changedFields = ["model", "parallel", "contextSize", "gpuLayers", "device", "splitMode", "tensorSplit", "verbosity", "metrics"]
             .filter(key => Object.hasOwn(config, key) && config[key] !== previous[key]);
         if (changedFields.length) {
             logSystemEvent(req, "CONFIG_ADMIN_SETTINGS_UPDATED", {

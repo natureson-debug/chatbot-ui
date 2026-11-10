@@ -285,8 +285,24 @@
             <input id="aiGpuLayers" type="number" min="0" max="999" step="1" value="37">
         </div>
         <div class="field-group">
-            <label for="aiDevice">GPU device</label>
-            <select id="aiDevice"><option value="CUDA0">CUDA0</option></select>
+            <label for="aiDevice">GPU devices</label>
+            <select id="aiDevice" class="gpu-device-select" multiple size="3" required aria-describedby="aiDeviceHelp"></select>
+            <small id="aiDeviceHelp">Select one GPU, or use Ctrl/Command-click to select multiple GPUs.</small>
+            <small id="aiDeviceStatus" role="status"></small>
+        </div>
+        <div id="aiSplitModeGroup" class="field-group" hidden>
+            <label for="aiSplitMode">Multi-GPU split mode</label>
+            <select id="aiSplitMode" class="gpu-split-select">
+                <option value="none">none</option>
+                <option value="layer" selected>layer (default)</option>
+                <option value="row">row</option>
+                <option value="tensor">tensor</option>
+            </select>
+        </div>
+        <div id="aiTensorSplitGroup" class="field-group" hidden>
+            <label for="aiTensorSplit">Tensor split proportions (optional)</label>
+            <input id="aiTensorSplit" type="text" inputmode="decimal" placeholder="3,2" aria-describedby="aiTensorSplitHelp">
+            <small id="aiTensorSplitHelp">Enter one positive number per selected GPU, separated by commas.</small>
         </div>
         <div class="field-group">
             <label for="aiVerbosity">Verbosity (0-5)</label>
