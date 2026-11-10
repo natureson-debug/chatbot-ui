@@ -83,6 +83,16 @@
             >Extensions</button>
 
             <button
+                id="tab-benchmark-tab"
+                class="admin-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-benchmark"
+                data-tab="benchmark"
+            >Benchmark</button>
+
+            <button
                 id="tab-logs-tab"
                 class="admin-tab"
                 type="button"
@@ -191,16 +201,20 @@
                 <option value="5" selected>5 seconds</option>
                 <option value="10">10 seconds</option>
             </select>
+            <label for="monitorTimeRange" style="margin-left:20px;">History</label>
+            <select id="monitorTimeRange">
+                <option value="5m">5 minutes</option>
+                <option value="30m" selected>30 minutes</option>
+                <option value="1h">1 hour</option>
+            </select>
             <button id="monitorToggle" type="button">Pause monitoring</button>
         </div>
     </div>
     <p id="monitorStatus" role="status">Waiting for a real observation...</p>
     <div id="monitorCards" class="monitor-grid"></div>
-    <h3>Recent observations</h3>
-    <p>Last 12 samples, spaced by the selected refresh interval. Unavailable values are not zero. Inference metrics appear only when supported by the backend.</p>
-    <div class="monitor-history" tabindex="0" aria-label="Recent GPU and inference observations">
-        <table><thead><tr><th>Time</th><th>GPU</th><th>Utilization</th><th>VRAM used</th><th>Temperature</th><th>Generation</th></tr></thead><tbody id="monitorHistory"></tbody></table>
-    </div>
+    <h3>GPU History Charts</h3>
+    <p>Persistent telemetry from SQLite backend. Charts show utilization, temperature, power consumption, and VRAM usage. Gaps indicate missing data. Hover over data points for values.</p>
+    <div id="monitorCharts" class="monitor-charts"></div>
 </section>
 
 <section
@@ -572,6 +586,120 @@
 </section>
 
 <section
+    id="tab-benchmark"
+    class="admin-panel benchmark-panel"
+    role="tabpanel"
+    aria-labelledby="tab-benchmark-tab"
+    data-admin-tabpanel
+    hidden
+>
+    <div class="benchmark-header">
+        <div>
+            <h2>LLM benchmarking</h2>
+            <p>Run a bounded, single-concurrency benchmark against the local llama.cpp server. Prompts and responses are not saved.</p>
+        </div>
+        <label for="benchmarkRunSelect">Previous runs
+            <select id="benchmarkRunSelect">
+                <option value="">Select a run</option>
+            </select>
+        </label>
+    </div>
+    <form id="benchmarkForm" class="benchmark-form">
+        <div class="field-group">
+            <label for="benchmarkName">Benchmark name</label>
+            <input id="benchmarkName" name="name" type="text" maxlength="80" value="Local llama.cpp benchmark" required>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkTarget">Target provider/server</label>
+            <select id="benchmarkTarget" name="target">
+                <option value="local-llama">Local llama.cpp server</option>
+            </select>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkPromptTokens">Prompt token target (32-2048)</label>
+            <input id="benchmarkPromptTokens" name="promptTokenTarget" type="number" min="32" max="2048" step="1" value="256" required>
+            <small>The deterministic prompt is sized toward this target; actual server-reported input tokens are shown in results.</small>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkOutputTokens">Output token limit (1-1024)</label>
+            <input id="benchmarkOutputTokens" name="outputTokenLimit" type="number" min="1" max="1024" step="1" value="128" required>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkRepetitions">Measurement repetitions (1-20)</label>
+            <input id="benchmarkRepetitions" name="repetitions" type="number" min="1" max="20" step="1" value="5" required>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkWarmups">Warm-up repetitions (0-5)</label>
+            <input id="benchmarkWarmups" name="warmupRepetitions" type="number" min="0" max="5" step="1" value="1" required>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkConcurrency">Concurrency</label>
+            <select id="benchmarkConcurrency" name="concurrency">
+                <option value="1">1 (only supported setting)</option>
+            </select>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkTemperature">Temperature (0-2)</label>
+            <input id="benchmarkTemperature" name="temperature" type="number" min="0" max="2" step="0.1" value="0.2" required>
+        </div>
+        <div class="field-group">
+            <label for="benchmarkSeed">Seed (optional)</label>
+            <input id="benchmarkSeed" name="seed" type="number" min="0" max="2147483647" step="1" placeholder="Server default">
+        </div>
+        <div class="field-group">
+            <label for="benchmarkTimeout">Per-request timeout (seconds)</label>
+            <input id="benchmarkTimeout" name="timeoutSeconds" type="number" min="1" max="120" step="1" value="30" required>
+        </div>
+        <div class="benchmark-form-actions">
+            <button id="benchmarkStart" type="submit" class="primary-btn">Start benchmark</button>
+            <button id="benchmarkCancel" type="button" disabled>Cancel</button>
+        </div>
+    </form>
+    <p id="benchmarkStatus" role="status" aria-live="polite">No benchmark selected.</p>
+    <div class="benchmark-progress">
+        <progress id="benchmarkProgress" max="1" value="0">0%</progress>
+        <span id="benchmarkProgressLabel">0 / 0 repetitions</span>
+    </div>
+    <div class="benchmark-results" aria-live="polite">
+        <h3>Results summary</h3>
+        <dl id="benchmarkSummary" class="benchmark-summary">
+            <div><dt>Model</dt><dd id="benchmarkModel">Unavailable</dd></div>
+            <div><dt>Hardware</dt><dd id="benchmarkHardware">Unavailable</dd></div>
+            <div><dt>Successful / failed</dt><dd id="benchmarkSuccessCount">—</dd></div>
+            <div><dt>Average / median latency</dt><dd id="benchmarkLatency">—</dd></div>
+            <div><dt>Average / median end-to-end output throughput</dt><dd id="benchmarkThroughput">—</dd></div>
+            <div><dt>Average / median end-to-end time to first token</dt><dd id="benchmarkTtft">—</dd></div>
+            <div><dt>Prompt processing speed (server timing only)</dt><dd id="benchmarkPromptSpeed">Unavailable</dd></div>
+        </dl>
+        <div class="benchmark-table-wrap" role="region" aria-label="Benchmark repetition results" tabindex="0">
+            <table class="benchmark-table">
+                <thead><tr><th>Run</th><th>Phase</th><th>Status</th><th>Input tokens</th><th>Output tokens</th><th>Duration</th><th>End-to-end time to first token</th><th>End-to-end output tokens/s</th><th>Prompt tokens/s</th><th>Error</th></tr></thead>
+                <tbody id="benchmarkResults"></tbody>
+            </table>
+        </div>
+        <div class="benchmark-export-actions">
+            <button id="benchmarkExportJson" type="button" disabled>Export JSON</button>
+            <button id="benchmarkExportCsv" type="button" disabled>Export CSV</button>
+            <button id="benchmarkExportXlsx" type="button" disabled>Export Excel</button>
+            <button id="benchmarkExportPdf" type="button" disabled>Export PDF</button>
+        </div>
+        <section id="benchmarkAnalytics" aria-label="Benchmark analytics">
+            <h3>Analytics</h3>
+            <p>Measured successes determine averages and medians. Warm-ups are gray; measurements are blue. Dashed references show average and median. Missing values are unavailable.</p>
+            <label for="benchmarkMetric">Metric</label>
+            <select id="benchmarkMetric"></select>
+            <div id="benchmarkChart" aria-live="polite"></div>
+            <h3>Historical comparison</h3>
+            <label for="benchmarkCompareSelect">Select two to six saved runs (Ctrl/Command-click or Shift-click)</label>
+            <select id="benchmarkCompareSelect" multiple size="6"></select>
+            <p id="benchmarkCompareWarning" role="status"></p>
+            <div class="benchmark-table-wrap" tabindex="0" role="region" aria-label="Historical benchmark comparison"><table class="benchmark-table" id="benchmarkComparison"></table></div>
+            <div id="benchmarkCompareChart" aria-live="polite"></div>
+        </section>
+    </div>
+</section>
+
+<section
     id="tab-extensions"
     class="admin-panel extensions-panel"
     role="tabpanel"
@@ -661,5 +789,8 @@
 <script src="/admin-openai.js" defer></script>
 <script src="/notifications.js" defer></script>
 <script src="/admin-logs.js" defer></script>
+<script src="/benchmark-analytics.js" defer></script>
+<script src="/admin-benchmark-analytics.js" defer></script>
+<script src="/admin-benchmark.js" defer></script>
 </body>
 </html>

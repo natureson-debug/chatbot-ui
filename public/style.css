@@ -3914,6 +3914,182 @@ body.admin-page .system-logs-notifications {
     pointer-events: none;
 }
 
+body.admin-page .benchmark-panel {
+    min-width: 0;
+    width: 100%;
+}
+
+body.admin-page .benchmark-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+body.admin-page .benchmark-header p {
+    margin: .35rem 0 0;
+    color: var(--theme-muted);
+}
+
+body.admin-page .benchmark-header label,
+body.admin-page .benchmark-form .field-group label {
+    color: var(--theme-text);
+}
+
+body.admin-page .benchmark-header select,
+body.admin-page .benchmark-form input,
+body.admin-page .benchmark-form select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    border: 1px solid var(--theme-border);
+    border-radius: 5px;
+    background: var(--theme-input);
+    color: var(--theme-text);
+    padding: .45rem .6rem;
+}
+
+body.admin-page .benchmark-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    gap: .85rem;
+    padding: 1rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 8px;
+    background: var(--theme-panel);
+}
+
+body.admin-page .benchmark-form .field-group {
+    min-width: 0;
+}
+
+body.admin-page .benchmark-form-actions {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: .65rem;
+}
+
+body.admin-page .benchmark-form input:focus-visible,
+body.admin-page .benchmark-form select:focus-visible,
+body.admin-page .benchmark-header select:focus-visible,
+body.admin-page .benchmark-panel button:focus-visible,
+body.admin-page .benchmark-run-select:focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+}
+
+body.admin-page #benchmarkStatus {
+    color: var(--theme-muted);
+    min-height: 1.5em;
+}
+
+body.admin-page .benchmark-progress {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: .75rem 0 1.25rem;
+    color: var(--theme-muted);
+}
+
+body.admin-page .benchmark-progress progress {
+    flex: 1 1 12rem;
+    min-width: 0;
+    height: 1rem;
+    accent-color: var(--theme-accent);
+}
+
+body.admin-page .benchmark-results {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 8px;
+    background: var(--theme-panel);
+}
+
+body.admin-page .benchmark-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: .75rem;
+    margin: 0 0 1rem;
+}
+
+body.admin-page .benchmark-summary > div {
+    min-width: 0;
+    padding: .65rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 5px;
+}
+
+body.admin-page .benchmark-summary dt {
+    color: var(--theme-muted);
+    font-size: .85rem;
+}
+
+body.admin-page .benchmark-summary dd {
+    margin: .25rem 0 0;
+    overflow-wrap: anywhere;
+    color: var(--theme-text);
+}
+
+body.admin-page .benchmark-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--theme-border);
+}
+
+body.admin-page .benchmark-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+}
+
+body.admin-page .benchmark-table th,
+body.admin-page .benchmark-table td {
+    padding: .55rem;
+    border-bottom: 1px solid var(--theme-border);
+    text-align: left;
+    white-space: nowrap;
+}
+
+body.admin-page .benchmark-table th {
+    background: var(--theme-panel);
+    color: var(--theme-muted);
+}
+
+body.admin-page .benchmark-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .65rem;
+    margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+    body.admin-page .benchmark-header {
+        flex-direction: column;
+    }
+
+    body.admin-page .benchmark-header label,
+    body.admin-page .benchmark-form-actions {
+        width: 100%;
+    }
+
+    body.admin-page .benchmark-form-actions button {
+        flex: 1 1 9rem;
+    }
+
+    body.admin-page .benchmark-progress {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    body.admin-page .benchmark-progress progress {
+        width: 100%;
+        flex-basis: auto;
+    }
+}
+
 body.admin-page .system-log-notification {
     display: flex;
     align-items: flex-start;
@@ -3982,6 +4158,19 @@ body.admin-page .system-log-notification button {
         padding-top: .15rem;
     }
 }
+
+/* Benchmark analytics uses existing theme colors and scrollable tables. */
+#benchmarkAnalytics { margin-top: 1.5rem; }
+#benchmarkAnalytics select { max-width: 100%; width: 100%; margin: .5rem 0 1rem; color: inherit; background: var(--input-bg, transparent); }
+.benchmark-chart-row { display: grid; grid-template-columns: minmax(8rem, 1fr) 2fr 6rem; gap: .6rem; align-items: center; padding: .35rem 0; font-size: .85rem; overflow-wrap: anywhere; }
+.benchmark-chart-track { position: relative; background: rgba(128,128,128,.15); height: 1rem; }
+.benchmark-chart-bar { height: 100%; background: #3986bf; }
+.benchmark-chart-bar.warmup { background: #888; }
+.benchmark-chart-reference { position: absolute; top: -.2rem; height: 1.4rem; border-left: 2px dashed currentColor; }
+.benchmark-chart-reference.median { border-left-style: dotted; }
+#benchmarkCompareWarning { padding: .5rem; border-left: 3px solid currentColor; }
+@media(max-width: 600px) { .benchmark-chart-row { grid-template-columns: minmax(6rem,1fr) 1fr 5rem; } }
+
 .skills-selector { min-width: 0; margin: 0; padding: .75rem; border: 1px solid var(--theme-border); border-radius: .5rem; }
 .skills-list { display: grid; gap: .35rem; max-height: 16rem; overflow-y: auto; margin-bottom: .6rem; }
 .skills-list .skill-choice { display: flex; align-items: flex-start; gap: .6rem; padding: .4rem; margin: 0; color: var(--theme-text); cursor: pointer; overflow-wrap: anywhere; }
@@ -3989,3 +4178,14 @@ body.admin-page .system-log-notification button {
 .skills-list .skill-choice:focus-within { outline: 2px solid var(--theme-accent); outline-offset: -2px; border-radius: .25rem; }
 .skills-list .skill-choice:has(input:disabled) { opacity: .65; cursor: default; }
 #skillsStatus { margin: .5rem 0 0; }
+
+/* GPU History Charts */
+.monitor-charts { display: flex; flex-direction: column; gap: 2rem; margin-top: 1.5rem; }
+.monitor-gpu-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr)); gap: 1.5rem; }
+.monitor-gpu-section h2 { grid-column: 1 / -1; margin: 1.5rem 0 0.5rem; font-size: 1.1rem; }
+.monitor-chart-container { position: relative; background: var(--theme-raised); border: 1px solid var(--theme-border); border-radius: 6px; padding: 1rem; }
+.chart-svg { width: 100%; height: auto; display: block; }
+.chart-svg line, .chart-svg text { font-family: var(--theme-font); }
+.chart-tooltip { position: absolute; background: var(--theme-panel); color: var(--theme-text); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--theme-border); font-size: 0.85rem; white-space: nowrap; z-index: 1000; pointer-events: none; box-shadow: var(--theme-shadow); }
+@media (max-width: 768px) { .monitor-gpu-section { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .monitor-chart-container { padding: 0.75rem; } .chart-svg { height: 250px; } }

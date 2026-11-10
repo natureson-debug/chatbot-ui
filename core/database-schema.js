@@ -182,6 +182,70 @@ if (!messageColumns.some((column) => column.name === "display_content")) {
  CREATE INDEX IF NOT EXISTS system_events_category_time ON system_events(category, occurred_at DESC);
  CREATE INDEX IF NOT EXISTS system_events_provider_time ON system_events(provider_id, occurred_at DESC);
  CREATE INDEX IF NOT EXISTS system_events_correlation ON system_events(correlation_id) WHERE correlation_id IS NOT NULL;`);
+ db.exec(`CREATE TABLE IF NOT EXISTS llm_benchmarks (
+  benchmark_id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
+  target TEXT NOT NULL CHECK(target = 'local-llama'),
+  configuration_json TEXT NOT NULL CHECK(length(configuration_json) <= 2048),
+  created_at TEXT NOT NULL
+ );
+ CREATE TABLE IF NOT EXISTS llm_benchmark_runs (
+  run_id TEXT PRIMARY KEY,
+  benchmark_id TEXT NOT NULL REFERENCES llm_benchmarks(benchmark_id),
+  status TEXT NOT NULL CHECK(status IN ('queued','running','completed','failed','cancelled')),
+  created_at TEXT NOT NULL,
+  finished_at TEXT,
+  total_repetitions INTEGER NOT NULL,
+  completed_repetitions INTEGER NOT NULL DEFAULT 0,
+  model TEXT,
+  hardware_json TEXT,
+  error_category TEXT
+ );
+ CREATE INDEX IF NOT EXISTS llm_benchmark_runs_created ON llm_benchmark_runs(created_at DESC);
+ CREATE UNIQUE INDEX IF NOT EXISTS llm_benchmark_one_active
+  ON llm_benchmark_runs((1)) WHERE status IN ('queued','running');
+ CREATE TABLE IF NOT EXISTS llm_benchmark_results (
+  run_id TEXT NOT NULL REFERENCES llm_benchmark_runs(run_id) ON DELETE CASCADE,
+  repetition INTEGER NOT NULL,
+  phase TEXT NOT NULL CHECK(phase IN ('warmup','measurement')),
+  status TEXT NOT NULL CHECK(status IN ('success','failed','cancelled')),
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  duration_ms REAL,
+  time_to_first_token_ms REAL,
+  end_to_end_output_tokens_per_second REAL,
+  prompt_tokens_per_second REAL,
+  error_category TEXT,
+  PRIMARY KEY(run_id, repetition)
+ );
+ CREATE INDEX IF NOT EXISTS llm_benchmark_results_run ON llm_benchmark_results(run_id, repetition);
+ CREATE TABLE IF NOT EXISTS gpu_telemetry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sampled_at TEXT NOT NULL,
+  sampled_at_unix_ms INTEGER NOT NULL,
+  gpu_index INTEGER NOT NULL,
+  gpu_uuid TEXT,
+  gpu_name TEXT,
+  driver TEXT,
+  utilization_percent REAL,
+  memory_used_mib REAL,
+  memory_total_mib REAL,
+  temperature_c REAL,
+  power_w REAL,
+  power_limit_w REAL,
+  backend_state TEXT,
+  backend_model TEXT,
+  context_per_slot INTEGER,
+  parallel_slots INTEGER,
+  metrics_state TEXT,
+  generated_tokens_per_second REAL,
+  prompt_tokens_per_second REAL,
+  active_requests INTEGER,
+  CHECK (gpu_index >= -1 AND gpu_index < 16)
+ );
+ CREATE INDEX IF NOT EXISTS gpu_telemetry_time_idx ON gpu_telemetry(sampled_at_unix_ms DESC);
+ CREATE INDEX IF NOT EXISTS gpu_telemetry_gpu_time_idx ON gpu_telemetry(gpu_index, sampled_at_unix_ms DESC);`);
  db.exec('COMMIT');
  } catch(error) { if(db.isTransaction)db.exec('ROLLBACK'); throw error; }
 }

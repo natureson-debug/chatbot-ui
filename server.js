@@ -15,12 +15,16 @@ const connections = require("./core/connections");
 const providers = require("./core/provider-adapter");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const { createChatCompletion, getHealth, getReportedModel } = require("./core/llama-client");
+const { createChatCompletion, getHealth, getReportedModel, readTelemetryResource } = require("./core/llama-client");
 
 
 const { getAdminTelemetry } = require("./core/admin-telemetry");
+const { createGpuTelemetryStorage } = require("./core/gpu-telemetry-storage");
+const { createBackgroundTelemetryCollector } = require("./core/background-telemetry-collector");
 const { createSystemLogService, validateFilters } = require("./core/system-logs");
 const { createSystemLogRoute } = require("./core/system-log-routes");
+const { createBenchmarkRunner } = require("./core/benchmark-runner");
+const { createBenchmarkRoutes } = require("./core/benchmark-routes");
 const { blockedActivation } = require("./core/ai-activation");
 const { createRequestTracker } = require("./core/request-tracker");
 const { withHttpErrorBoundary } = require("./core/http-error-boundary");
@@ -34,6 +38,31 @@ const systemLogRoute = createSystemLogRoute({
     authenticate: req => getAuthenticatedUser(req),
     revalidate: req => getAuthenticatedUser(req)
 });
+const benchmarkRunner = createBenchmarkRunner({
+    db,
+    createChatCompletion,
+    readSlots: options => readTelemetryResource('/slots', options),
+    getModel: getReportedModel,
+    getHardware: async () => {
+        const telemetry = await getAdminTelemetry();
+        return telemetry.gpu.state === 'available'
+            ? { gpus: telemetry.gpu.devices.map(device => ({
+                name: device.name,
+                uuid: device.uuid,
+                driver: device.driver
+            })) }
+            : null;
+    }
+});
+const benchmarkRoute = createBenchmarkRoutes({
+    runner: benchmarkRunner,
+    authenticate: req => getAuthenticatedUser(req),
+    revalidate: req => getAuthenticatedUser(req),
+    logAdminAccessDenied
+});
+
+const gpuTelemetryStorage = createGpuTelemetryStorage(db);
+const backgroundTelemetryCollector = createBackgroundTelemetryCollector(gpuTelemetryStorage, getAdminTelemetry);
 
 function logSystemEvent(req, eventCode, fields = {}) {
     systemLogs.log(eventCode, fields);
@@ -149,6 +178,13 @@ const server = http.createServer(
     withHttpErrorBoundary(
         requestTracker.track(async (req, res) => {
 
+    const benchmarkPath = req.url.split("?")[0];
+    if (
+        benchmarkPath === "/api/admin/benchmarks" ||
+        benchmarkPath.startsWith("/api/admin/benchmarks/")
+    ) {
+        if (await benchmarkRoute(req, res)) return;
+    }
     if (systemLogRoute(req, res)) return;
 
     // Health check
@@ -751,7 +787,6 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
 
     // Streaming chat proxy
     if (req.method === "POST" && req.url === "/api/chat") {
-        
             const user = getAuthenticatedUser(req);
 
             if (!user) {
@@ -766,6 +801,15 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
 
                 return;
         }
+
+        const releaseBenchmarkChat = await benchmarkRunner.beginChatRequest();
+        const releaseChatAdmission = () => {
+            res.off("finish", releaseChatAdmission);
+            res.off("close", releaseChatAdmission);
+            releaseBenchmarkChat();
+        };
+        res.once("finish", releaseChatAdmission);
+        res.once("close", releaseChatAdmission);
 
         try {
             let selectedConnection = await connections.selected();
@@ -1355,6 +1399,42 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
     return;
 }
 
+// Read-only GPU telemetry history; authorize before serving stored observations.
+if (req.method === "GET" && /^\/api\/admin\/ai\/telemetry\/history\/(5m|30m|1h)$/.test(req.url)) {
+    const token = getSessionToken(req);
+    const admin = getAuthenticatedUser(req);
+    const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
+    if (!admin || admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
+        res.writeHead(admin ? 403 : 401, headers);
+        res.end(JSON.stringify({ error: "Administrator access required" })); return;
+    }
+    const current = getSessionUser(db, token);
+    if (!current || current.id !== admin.id || current.is_admin !== 1) {
+        logSystemEvent(req, "AUTH_ADMIN_ACCESS_DENIED", {
+            actorId: admin.id,
+            metadata: { resource: "admin_api", reason: "session_revoked" }
+        });
+        res.writeHead(401, headers); res.end(JSON.stringify({ error: "Session no longer authorized" })); return;
+    }
+    
+    const match = /\/telemetry\/history\/(\w+)$/.exec(req.url);
+    const range = match ? match[1] : '5m';
+    const timeRangeMs = range === '1h' ? 60*60*1000 : range === '30m' ? 30*60*1000 : 5*60*1000;
+    
+    try {
+        const history = gpuTelemetryStorage.getHistory(timeRangeMs);
+        const stats = gpuTelemetryStorage.getStatistics(timeRangeMs);
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ range, timeRangeMs, samples: history, statistics: stats }));
+    } catch (error) {
+        console.error('Failed to fetch GPU telemetry history:', error);
+        res.writeHead(500, headers);
+        res.end(JSON.stringify({ error: "Failed to fetch telemetry history" }));
+    }
+    return;
+}
+
 // Read-only telemetry; authorize before collecting or serving cached observations.
 if (req.method === "GET" && ["/api/admin/ai/telemetry", "/api/admin/ai/telemetry/status"].includes(req.url)) {
     const token = getSessionToken(req);
@@ -1892,9 +1972,12 @@ server.listen(PORT, HOST, () => {
     systemLogs.startRetention();
     require('./core/openai-usage').reconcile(db);
     require('./core/openai-usage').forProvider('deepseek').reconcile(db);
+    backgroundTelemetryCollector.start();
     require("./core/application-lifecycle").installApplicationLifecycle({
         server, requestTracker, db,
         beforeDatabaseClose: async () => {
+            backgroundTelemetryCollector.stop();
+            await benchmarkRunner.stop();
             await systemLogs.flush();
             systemLogs.stop();
         }
