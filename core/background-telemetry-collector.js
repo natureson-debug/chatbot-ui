@@ -1,11 +1,13 @@
 'use strict';
 
-function createBackgroundTelemetryCollector(storage, getAdminTelemetry) {
+function createBackgroundTelemetryCollector(storage, getAdminTelemetry, cache) {
     let timer = null, isRunning = false, collectionIntervalMs = 5000;
 
     async function collect() {
         try {
-            await storage.pollAndStore(getAdminTelemetry);
+            const sample = await getAdminTelemetry();
+            if (cache) cache.setCachedSample(sample);
+            await storage.pollAndStore(async () => sample);
         } catch (error) {
             console.error('Background telemetry collection failed:', error.message);
         }

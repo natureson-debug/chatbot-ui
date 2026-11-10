@@ -4,21 +4,32 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
     const chartsContainer=document.getElementById('monitorCharts'),toggle=document.getElementById('monitorToggle');
     const timeRangeSelect=document.getElementById('monitorTimeRange'),refreshRate=document.getElementById('monitorRefreshRate');
     let paused=false,stopped=false,inFlight=false,timer=null,controller=null,epoch=0,lastSampleTime=null;
-    let currentTimeRange='5m',historyData=[],gpuDevices=[];
+    let currentTimeRange='realtime',historyData=[],gpuDevices=[];
+    let realtimeData={},realtimeTimer=null;
+    const realtimeMaxSamples=60,realtimeBuffers={};
     
     const format=(n,unit='')=>typeof n==='number'&&Number.isFinite(n)?`${n.toLocaleString(undefined,{maximumFractionDigits:1})}${unit}`:'Unavailable';
     const refreshMs=()=>{
+        if(currentTimeRange==='realtime')return 1000; // Real-time: 1Hz
         const seconds=Number(refreshRate?.value);
         return [1,5,10].includes(seconds)?seconds*1000:5000;
     };
+    
     if(refreshRate){
         refreshRate.disabled=true;
         if(typeof window!=='undefined'&&typeof window.syncTerminalSelect==='function')window.syncTerminalSelect(refreshRate);
     }
+    
     if(timeRangeSelect){
         timeRangeSelect.addEventListener('change',(e)=>{
             currentTimeRange=e.target.value;
-            loadAndRenderCharts();
+            if(currentTimeRange==='realtime'){
+                realtimeBuffers={};
+                startRealtimePolling();
+            }else{
+                stopRealtimePolling();
+                loadAndRenderCharts();
+            }
         });
     }
     
@@ -153,8 +164,109 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
         chart.append(titleEl,svg);container.append(chart);
     }
     
+    function addRealtimeSample(sample){
+        if(!sample||!sample.gpu||!sample.gpu.devices)return;
+        const now=Date.now();
+        for(const gpu of sample.gpu.devices){
+            const key=`gpu_${gpu.uuid||gpu.name||'unknown'}`;
+            if(!realtimeBuffers[key]){
+                realtimeBuffers[key]={
+                    name:gpu.name||`GPU ${Object.keys(realtimeBuffers).length}`,
+                    uuid:gpu.uuid,
+                    util:[],temp:[],power:[],vram:[]
+                };
+            }
+            const buf=realtimeBuffers[key];
+            buf.util.push({t:now,v:gpu.utilizationPercent});
+            buf.temp.push({t:now,v:gpu.temperatureC});
+            buf.power.push({t:now,v:gpu.powerW});
+            buf.vram.push({t:now,v:gpu.memoryUsedMiB});
+            [buf.util,buf.temp,buf.power,buf.vram].forEach(arr=>{if(arr.length>realtimeMaxSamples)arr.shift();});
+        }
+    }
+    
+    function renderRealtimeCharts(){
+        if(!chartsContainer||Object.keys(realtimeBuffers).length===0){
+            if(chartsContainer)chartsContainer.innerHTML='<p style="text-align:center;color:#999;">Waiting for real-time data...</p>';
+            return;
+        }
+        chartsContainer.replaceChildren();
+        for(const [key,buf] of Object.entries(realtimeBuffers)){
+            const gpuSection=document.createElement('section');gpuSection.className='monitor-gpu-section';
+            const header=document.createElement('h2');header.textContent=buf.name;gpuSection.appendChild(header);
+            
+            if(buf.util.length>0){
+                const div=document.createElement('div');div.id=`rt-util-${key}`;div.className='monitor-chart-container';
+                gpuSection.appendChild(div);
+                renderChart(div.id,`${buf.name} Utilization`,buf.util.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
+                            '%',100,n=>`${n}%`);
+            }
+            if(buf.temp.length>0){
+                const div=document.createElement('div');div.id=`rt-temp-${key}`;div.className='monitor-chart-container';
+                gpuSection.appendChild(div);
+                const maxTemp=Math.max(...buf.temp.map(p=>p.v||0),100);
+                renderChart(div.id,`${buf.name} Temperature`,buf.temp.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
+                            '°C',maxTemp,n=>`${n}°C`);
+            }
+            if(buf.power.length>0){
+                const div=document.createElement('div');div.id=`rt-power-${key}`;div.className='monitor-chart-container';
+                gpuSection.appendChild(div);
+                const maxPower=Math.max(...buf.power.map(p=>p.v||0),500);
+                renderChart(div.id,`${buf.name} Power`,buf.power.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
+                            'W',maxPower,n=>`${n}W`);
+            }
+            if(buf.vram.length>0){
+                const div=document.createElement('div');div.id=`rt-vram-${key}`;div.className='monitor-chart-container';
+                gpuSection.appendChild(div);
+                const maxVram=Math.max(...buf.vram.map(p=>p.v||0),24576);
+                renderChart(div.id,`${buf.name} VRAM`,buf.vram.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
+                            'GiB',maxVram,n=>`${(n/1024).toFixed(1)}GiB`);
+            }
+            chartsContainer.appendChild(gpuSection);
+        }
+    }
+    
+    async function pollRealtime(){
+        if(paused||stopped||document.hidden||currentTimeRange!=='realtime')return;
+        clearTimer(realtimeTimer);
+        try{
+            const response=await fetch('/api/admin/ai/telemetry/realtime',{credentials:'same-origin',cache:'no-store'});
+            if(response.status===401||response.status===403){stopped=true;suspend();status.textContent='Administrator session required. Reload after signing in.';return;}
+            if(!response.ok)throw Error('unavailable');
+            const data=await response.json();
+            if(data.sample){
+                renderLiveCards(data.sample);
+                addRealtimeSample(data.sample);
+                renderRealtimeCharts();
+                status.textContent=`Real-time monitoring (${Object.keys(realtimeBuffers).length} GPU${Object.keys(realtimeBuffers).length!==1?'s':''}, 60-second window). Source: ${data.source}`;
+            }
+        }catch(e){
+            console.error('Real-time poll failed:',e);
+            if(!document.hidden&&!paused)status.textContent='Real-time data unavailable. Retrying...';
+        }finally{
+            if(currentTimeRange==='realtime'&&!paused&&!stopped&&!document.hidden){
+                realtimeTimer=setTimer(pollRealtime,1000);
+            }
+        }
+    }
+    
+    function startRealtimePolling(){
+        if(currentTimeRange!=='realtime')return;
+        clearTimer(realtimeTimer);
+        pollRealtime();
+    }
+    
+    function stopRealtimePolling(){
+        clearTimer(realtimeTimer);
+        realtimeTimer=null;
+    }
+    
     async function loadAndRenderCharts(){
         if(!chartsContainer)return;
+        if(currentTimeRange==='realtime'){
+            renderRealtimeCharts();
+            return;
+        }
         try{
             const response=await fetch(`/api/admin/ai/telemetry/history/${currentTimeRange}`,{credentials:'same-origin',cache:'no-store'});
             if(!response.ok)throw Error('Failed to load history');
@@ -201,6 +313,10 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
     }
     
     async function poll(){
+        if(currentTimeRange==='realtime'){
+            pollRealtime();
+            return;
+        }
         if(paused||stopped||document.hidden||inFlight)return;
         clearTimer(timer);inFlight=true;const generation=epoch;controller=new AbortController();
         const deadline=setTimer(()=>controller?.abort(),8000);
@@ -222,7 +338,7 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             if(!paused&&!stopped&&!document.hidden)timer=setTimer(poll,refreshMs());
         }
     }
-    function suspend(){epoch++;clearTimer(timer);controller?.abort();}
+    function suspend(){epoch++;clearTimer(timer);clearTimer(realtimeTimer);controller?.abort();}
     toggle.addEventListener('click',()=>{
         paused=!paused;
         suspend();

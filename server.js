@@ -20,6 +20,7 @@ const { createChatCompletion, getHealth, getReportedModel, readTelemetryResource
 
 const { getAdminTelemetry } = require("./core/admin-telemetry");
 const { createGpuTelemetryStorage } = require("./core/gpu-telemetry-storage");
+const createGpuTelemetryCache = require("./core/gpu-telemetry-cache");
 const { createBackgroundTelemetryCollector } = require("./core/background-telemetry-collector");
 const { createSystemLogService, validateFilters } = require("./core/system-logs");
 const { createSystemLogRoute } = require("./core/system-log-routes");
@@ -61,8 +62,9 @@ const benchmarkRoute = createBenchmarkRoutes({
     logAdminAccessDenied
 });
 
+const gpuTelemetryCache = createGpuTelemetryCache();
 const gpuTelemetryStorage = createGpuTelemetryStorage(db);
-const backgroundTelemetryCollector = createBackgroundTelemetryCollector(gpuTelemetryStorage, getAdminTelemetry);
+const backgroundTelemetryCollector = createBackgroundTelemetryCollector(gpuTelemetryStorage, getAdminTelemetry, gpuTelemetryCache);
 
 function logSystemEvent(req, eventCode, fields = {}) {
     systemLogs.log(eventCode, fields);
@@ -1396,6 +1398,49 @@ if (req.method === "GET" && req.url === "/api/admin/users") {
         "Cache-Control": "no-store"
     });
     res.end(JSON.stringify(users));
+    return;
+}
+
+// Real-time GPU telemetry; return cached sample if available, else on-demand collection
+if (req.method === "GET" && req.url === "/api/admin/ai/telemetry/realtime") {
+    const token = getSessionToken(req);
+    const admin = getAuthenticatedUser(req);
+    const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
+    if (!admin || admin.is_admin !== 1) {
+        logAdminAccessDenied(req, admin);
+        res.writeHead(admin ? 403 : 401, headers);
+        res.end(JSON.stringify({ error: "Administrator access required" })); return;
+    }
+    
+    const current = getSessionUser(db, token);
+    if (!current || current.id !== admin.id || current.is_admin !== 1) {
+        logSystemEvent(req, "AUTH_ADMIN_ACCESS_DENIED", {
+            actorId: admin.id,
+            metadata: { resource: "admin_api", reason: "session_revoked" }
+        });
+        res.writeHead(401, headers); res.end(JSON.stringify({ error: "Session no longer authorized" })); return;
+    }
+    
+    try {
+        // Try to use cached sample (from background collector)
+        let sample = gpuTelemetryCache.getCachedSample();
+        
+        // If cache is stale, don't perform on-demand collection - just indicate cache miss
+        // Real-time clients should retry; this prevents overlapping nvidia-smi calls
+        const source = sample ? 'cached' : 'unavailable';
+        
+        if (res.destroyed || res.writableEnded) return;
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ 
+            source,
+            sample: sample || null,
+            timestamp: Date.now()
+        }));
+    } catch (error) {
+        console.error('Failed to fetch real-time telemetry:', error);
+        res.writeHead(500, headers);
+        res.end(JSON.stringify({ error: "Failed to fetch real-time telemetry" }));
+    }
     return;
 }
 
