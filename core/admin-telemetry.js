@@ -35,6 +35,30 @@ function parseMetrics(text) {
     }
     return result;
 }
+function parseSlots(value) {
+    if (!Array.isArray(value) || value.length > 16) {
+        return {state:'unavailable',activeRequests:null,promptTokens:null,slots:[]};
+    }
+    const seen=new Set(),slots=[];
+    for(const slot of value) {
+        if(!slot||typeof slot!=='object'||!Number.isSafeInteger(slot.id)||slot.id<0||
+            seen.has(slot.id)||typeof slot.is_processing!=='boolean') {
+            return {state:'unavailable',activeRequests:null,promptTokens:null,slots:[]};
+        }
+        seen.add(slot.id);
+        const contextCapacityTokens=positiveInt(slot.n_ctx);
+        const promptTokens=Number.isSafeInteger(slot.n_prompt_tokens)&&slot.n_prompt_tokens>=0
+            ?slot.n_prompt_tokens:null;
+        slots.push({id:slot.id,isProcessing:slot.is_processing,contextCapacityTokens,promptTokens});
+    }
+    const promptCounts=slots.map(slot=>slot.promptTokens).filter(value=>value!==null);
+    return {
+        state:'available',
+        activeRequests:slots.filter(slot=>slot.isProcessing).length,
+        promptTokens:promptCounts.length?promptCounts.reduce((total,value)=>total+value,0):null,
+        slots
+    };
+}
 function readGpu() {
     return new Promise((resolve,reject)=>{
         // Fixed executable and arguments, no shell/PATH lookup or browser-supplied options.
@@ -56,18 +80,23 @@ function createTelemetry({request,gpu=readGpu,now=()=>performance.now(),timestam
         } catch {return {state:'unavailable'};}
     }
     async function collect() {
-        const [gpuResult,health,models,props,metrics]=await Promise.all([
+        const [gpuResult,health,models,props,metrics,slotObservation]=await Promise.all([
             gpu().then(text=>({state:'available',devices:parseGpu(text)})).catch(()=>({state:'unavailable',devices:[]})),
-            observe('/health'),observe('/v1/models'),observe('/props'),observe('/metrics')
+            observe('/health'),observe('/v1/models'),observe('/props'),observe('/metrics'),observe('/slots')
         ]);
         const modelList=models.value?.data;
         const model=Array.isArray(modelList)&&modelList.length===1?label(modelList[0]?.id):null;
         const runtime=props.value;
+        const slots=parseSlots(slotObservation.value);
+        const slotState=slotObservation.state==='available'?slots.state:slotObservation.state;
         return {sampledAt:timestamp(),pollIntervalMs:5000,gpu:gpuResult,backend:{
             state:health.state==='available'?(health.value?.status==='ok'?'ready':'unavailable'):health.state,
             model,modelState:models.state,contextPerSlot:positiveInt(runtime?.default_generation_settings?.n_ctx),
             parallelSlots:positiveInt(runtime?.total_slots),propertiesState:props.state,
-            metricsState:metrics.state,metrics:metrics.state==='available'?parseMetrics(metrics.value):parseMetrics('')
+            metricsState:metrics.state,metrics:metrics.state==='available'?parseMetrics(metrics.value):parseMetrics(''),
+            slotState,activeRequests:slotState==='available'?slots.activeRequests:null,
+            slotPromptTokens:slotState==='available'?slots.promptTokens:null,contextUsedTokens:null,
+            slots:slotState==='available'?slots.slots:[]
         }};
     }
     return async function sample() {
@@ -82,4 +111,4 @@ function getAdminTelemetry() {
     if(!sampler)sampler=createTelemetry({request:require('./llama-client').readTelemetryResource});
     return sampler();
 }
-module.exports={getAdminTelemetry,createTelemetry,parseGpu,parseMetrics};
+module.exports={getAdminTelemetry,createTelemetry,parseGpu,parseMetrics,parseSlots};

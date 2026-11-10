@@ -51,6 +51,10 @@ function setup({ readFileError = null } = {}) {
         './core/llama-client': {},
         './core/llama-runtime': {},
         './core/admin-telemetry': {},
+        './core/benchmark-runner': {
+            createBenchmarkRunner: () => ({ beginChatRequest: async () => () => {}, stop: async () => {} })
+        },
+        './core/benchmark-routes': { createBenchmarkRoutes: () => () => false },
         './core/system-logs': { createSystemLogService: () => ({ log() {}, startRetention() {}, flush: async () => {}, stop() {} }), validateFilters() {} },
         './core/system-log-routes': { createSystemLogRoute: () => () => false },
         './core/connections': {selected:async()=>null},

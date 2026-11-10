@@ -41,10 +41,13 @@ async function getReportedModel() {
         typeof result.data[0].id === "string" && result.data[0].id.length > 0 ? result.data[0].id : null;
 }
 // Fixed, read-only monitoring resources; never accept an arbitrary upstream URL.
-async function readTelemetryResource(resource) {
-    if (!['/health', '/v1/models', '/props', '/metrics'].includes(resource)) throw Error('INVALID_RESOURCE');
+async function readTelemetryResource(resource, { signal } = {}) {
+    if (!['/health', '/v1/models', '/props', '/metrics', '/slots'].includes(resource)) throw Error('INVALID_RESOURCE');
+    const requestSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(2500)])
+        : AbortSignal.timeout(2500);
     const response = await fetch(new URL(resource, LLAMA_URL), {
-        method: 'GET', redirect: 'error', signal: AbortSignal.timeout(2500),
+        method: 'GET', redirect: 'error', signal: requestSignal,
         headers: { Authorization: 'Bearer ' + readApiKey() }
     });
     if (!response.ok) {

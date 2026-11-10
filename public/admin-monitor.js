@@ -195,34 +195,32 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             const gpuSection=document.createElement('section');gpuSection.className='monitor-gpu-section';
             const header=document.createElement('h2');header.textContent=buf.name;gpuSection.appendChild(header);
             
+            const containerDivs=[];
             if(buf.util.length>0){
                 const div=document.createElement('div');div.id=`rt-util-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
-                renderChart(div.id,`${buf.name} Utilization`,buf.util.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
-                            '%',100,n=>`${n}%`);
+                containerDivs.push({id:div.id,title:`${buf.name} Utilization`,data:buf.util.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:100,fmt:n=>`${n}%`,yLabel:'%'});
             }
             if(buf.temp.length>0){
                 const div=document.createElement('div');div.id=`rt-temp-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxTemp=Math.max(...buf.temp.map(p=>p.v||0),100);
-                renderChart(div.id,`${buf.name} Temperature`,buf.temp.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
-                            '°C',maxTemp,n=>`${n}°C`);
+                containerDivs.push({id:div.id,title:`${buf.name} Temperature`,data:buf.temp.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxTemp,fmt:n=>`${n}°C`,yLabel:'°C'});
             }
             if(buf.power.length>0){
                 const div=document.createElement('div');div.id=`rt-power-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxPower=Math.max(...buf.power.map(p=>p.v||0),500);
-                renderChart(div.id,`${buf.name} Power`,buf.power.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
-                            'W',maxPower,n=>`${n}W`);
+                containerDivs.push({id:div.id,title:`${buf.name} Power`,data:buf.power.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxPower,fmt:n=>`${n}W`,yLabel:'W'});
             }
             if(buf.vram.length>0){
                 const div=document.createElement('div');div.id=`rt-vram-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxVram=Math.max(...buf.vram.map(p=>p.v||0),24576);
-                renderChart(div.id,`${buf.name} VRAM`,buf.vram.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),
-                            'GiB',maxVram,n=>`${(n/1024).toFixed(1)}GiB`);
+                containerDivs.push({id:div.id,title:`${buf.name} VRAM`,data:buf.vram.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxVram,fmt:n=>`${(n/1024).toFixed(1)}GiB`,yLabel:'GiB'});
             }
             chartsContainer.appendChild(gpuSection);
+            containerDivs.forEach(c=>renderChart(c.id,c.title,c.data,c.yLabel,c.yMax,c.fmt));
         }
     }
     

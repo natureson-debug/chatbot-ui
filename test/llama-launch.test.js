@@ -60,19 +60,39 @@ test('generic spec supports explicit POSIX paths and non-CUDA device labels with
         assert.equal(r.expected.device,'none');assert.equal(r.expected.gpuLayers,0);
     }
 });
-test('legacy wrapper preserves exact shape/default arguments and reads fresh config only', () => {
-    let model='old.gguf';const reads=[];const m={exports:{}};
+test('legacy wrapper preserves exact shape and configured launch settings', () => {
+    let config={model:'old.gguf',parallel:1,contextSize:32768,gpuLayers:45,metrics:true};const reads=[];const m={exports:{}};
     const source=fs.readFileSync(path.join(__dirname,'../core/llama-launch.js'),'utf8');
     vm.runInNewContext(source,{module:m,process:{platform:'win32'},require(n){
         if(n==='path'||n==='net')return require(n);
         if(n==='./config')return{AI_CONFIG_FILE:'config.json',MODELS_DIR:'C:\\models',API_KEY_FILE:'C:\\key',LLAMA_BIND_HOST:'127.0.0.1',LLAMA_PORT:8080,LLAMA_CORS_ORIGIN:'http://127.0.0.1:8080',LLAMA_DEVICE:'CUDA0'};
         if(n==='./paths')return{LLAMA_EXECUTABLE:'C:\\legacy\\llama-server.exe',LLAMA_CWD:'C:\\legacy'};
-        if(n==='fs')return{readFileSync(p){assert.equal(p,'config.json');reads.push(p);return JSON.stringify({model,parallel:1,contextSize:32768})},readdirSync(){return['old.gguf','new.gguf']}};
+        if(n==='fs')return{readFileSync(p){assert.equal(p,'config.json');reads.push(p);return JSON.stringify(config)},readdirSync(){return['old.gguf','new.gguf']}};
         throw Error('Forbidden dependency '+n);
     }});
     let r=m.exports.buildLlamaLaunchSpec();assert.deepEqual(Object.keys(r),['executable','cwd','args']);
     assert.equal(r.executable,'C:\\legacy\\llama-server.exe');assert.equal(r.args[1],'C:\\models\\old.gguf');
-    assert(!r.args.includes('--verbosity'));assert(!r.args.includes('--n-gpu-layers'));
-    model='new.gguf';r=m.exports.buildLlamaLaunchSpec();assert.equal(r.args[1],'C:\\models\\new.gguf');assert.equal(reads.length,2);
-    model='missing.gguf';assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/Invalid AI model/);
+    assert.deepEqual(Array.from(r.args.slice(-3)),['--n-gpu-layers','45','--metrics']);
+    assert(!r.args.includes('--verbosity'));
+    config={...config,model:'new.gguf'};r=m.exports.buildLlamaLaunchSpec();assert.equal(r.args[1],'C:\\models\\new.gguf');assert.equal(reads.length,2);
+    config={...config,model:'missing.gguf'};assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/Invalid AI model/);
+});
+test('configured GPU layer counts are validated and omitted only when absent', () => {
+    let config={model:'model.gguf',parallel:1,contextSize:32768,gpuLayers:45};
+    const m={exports:{}};
+    const source=fs.readFileSync(path.join(__dirname,'../core/llama-launch.js'),'utf8');
+    vm.runInNewContext(source,{module:m,process:{platform:'win32'},require(n){
+        if(n==='path'||n==='net')return require(n);
+        if(n==='./config')return{AI_CONFIG_FILE:'config.json',MODELS_DIR:'C:\\models',API_KEY_FILE:'C:\\key',LLAMA_BIND_HOST:'127.0.0.1',LLAMA_PORT:8080,LLAMA_CORS_ORIGIN:'http://127.0.0.1:8080',LLAMA_DEVICE:'CUDA0'};
+        if(n==='./paths')return{LLAMA_EXECUTABLE:'C:\\legacy\\llama-server.exe',LLAMA_CWD:'C:\\legacy'};
+        if(n==='fs')return{readFileSync(){return JSON.stringify(config)},readdirSync(){return['model.gguf']}};
+        throw Error('Forbidden dependency '+n);
+    }});
+    assert.deepEqual(Array.from(m.exports.buildLlamaLaunchSpec().args.slice(-2)),['--n-gpu-layers','45']);
+    for(const gpuLayers of [-1,1.5,'45',1000]) {
+        config={...config,gpuLayers};
+        assert.throws(()=>m.exports.buildLlamaLaunchSpec(),/GPU layer count/);
+    }
+    delete config.gpuLayers;
+    assert(!m.exports.buildLlamaLaunchSpec().args.includes('--n-gpu-layers'));
 });

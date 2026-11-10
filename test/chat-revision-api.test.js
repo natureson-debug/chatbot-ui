@@ -31,6 +31,10 @@ function setup(t, fault) {
             if (name === './auth') return { ...auth, getSessionUser(...args) { if (fault) fault(db); return auth.getSessionUser(...args); } };
             if (name === './core/system-logs') return require('../core/system-logs');
             if (name === './core/system-log-routes') return require('../core/system-log-routes');
+            if (name === './core/benchmark-runner') return {
+                createBenchmarkRunner: () => ({ beginChatRequest: async () => () => {}, stop: async () => {} })
+            };
+            if (name === './core/benchmark-routes') return { createBenchmarkRoutes: () => () => false };
             if (name === './core/request-tracker') return { createRequestTracker: () => ({ track: handler => handler }) };
             if (name === './core/http-error-boundary') return { withHttpErrorBoundary: handler => handler };
             if (name.startsWith('./core/')) return {};

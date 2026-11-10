@@ -73,7 +73,7 @@ function buildConfiguredSpec() {
         throw new Error("Invalid AI configuration");
     }
 
-    const { model, parallel, contextSize, metrics } = config;
+    const { model, parallel, contextSize, gpuLayers, metrics } = config;
     const availableModels = fs.readdirSync(MODELS_DIR)
         .filter(file => file.toLowerCase().endsWith(".gguf"));
 
@@ -94,6 +94,11 @@ function buildConfiguredSpec() {
         throw new Error("Invalid context size");
     }
 
+    if (gpuLayers !== undefined &&
+        (!Number.isInteger(gpuLayers) || gpuLayers < 0 || gpuLayers > 999)) {
+        throw new Error("Invalid GPU layer count");
+    }
+
     if (metrics !== undefined && typeof metrics !== "boolean") {
         throw new Error("Invalid metrics flag");
     }
@@ -109,6 +114,7 @@ function buildConfiguredSpec() {
         "--device", LLAMA_DEVICE
     ];
 
+    if (gpuLayers !== undefined) args.push("--n-gpu-layers", String(gpuLayers));
     if (metrics === true) args.push("--metrics");
 
     return {
