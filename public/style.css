@@ -1116,7 +1116,7 @@ textarea:focus {
     margin-top: 8px;
     border: 1px solid var(--theme-border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow: visible;
 }
 
 #usersTable th,
@@ -1149,8 +1149,20 @@ textarea:focus {
     width: 40%;
 }
 
-#usersTable tbody tr:last-child td {
-    border-bottom: 0;
+#usersTable th:first-child {
+    border-radius: 12px 0 0 0;
+}
+
+#usersTable th:last-child {
+    border-radius: 0 12px 0 0;
+}
+
+#usersTable tbody tr:last-child td:first-child {
+    border-radius: 0 0 0 12px;
+}
+
+#usersTable tbody tr:last-child td:last-child {
+    border-radius: 0 0 12px 0;
 }
 
 #usersTable tbody td {
