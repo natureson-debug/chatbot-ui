@@ -297,12 +297,14 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             charts.forEach(gpu=>{
                 const gpuSection=document.createElement('section');gpuSection.className='monitor-gpu-section';
                 const header=document.createElement('h2');header.textContent=gpu.name;gpuSection.appendChild(header);
+                const chartsToRender=[];
                 gpu.data.forEach(c=>{
                     const div=document.createElement('div');div.id=c.id;div.className='monitor-chart-container';
                     gpuSection.appendChild(div);
-                    renderChart(c.id,c.title,c.points,c.title.split(' ').pop(),c.yMax,c.fmt);
+                    chartsToRender.push({id:c.id,title:c.title,points:c.points,yLabel:c.title.split(' ').pop(),yMax:c.yMax,fmt:c.fmt});
                 });
                 chartsContainer.appendChild(gpuSection);
+                chartsToRender.forEach(c=>renderChart(c.id,c.title,c.points,c.yLabel,c.yMax,c.fmt));
             });
         }catch(e){
             console.error('Chart load failed:',e);
