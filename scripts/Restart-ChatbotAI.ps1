@@ -195,7 +195,7 @@ function Restart-ChatbotAI {
                 $stopped = Invoke-ChatbotOwnedBackendStop -Observe { Read-OwnershipEvidence } `
                     -Terminate $termination -ExpectedExecutable $expectedExe -LauncherScript $launcherScript `
                     -PowerShellExecutable $powershellExe -BindAddress '127.0.0.1' -Port 8080 `
-                    -ExpectedArguments $expectedArguments
+                    -ModelDirectory 'C:\AI\models'
                 if (-not $stopped.Stopped) {
                     throw 'Backend remains after task stop and ownership could not be verified. No process was terminated and no replacement will start.'
                 }
