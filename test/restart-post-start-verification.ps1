@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 # output. Never invoke Restart-ChatbotAI or a production executable/task.
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile(
-    (Join-Path $PSScriptRoot '..\scripts\Restart-ChatbotAI.ps1'), [ref]$tokens, [ref]$errors)
+    (Join-Path $PSScriptRoot '..\scripts\chatbot-backend-evidence.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Restart script did not parse.' }
 $builder = $ast.Find({ param($node)
     $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-ExpectedBackendArguments'
