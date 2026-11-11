@@ -143,8 +143,15 @@ function Test-ChatbotBackendOwnershipEvidence {
         if (-not (Test-ChatbotSafeBackendArguments $backendArguments $ExpectedExecutable $ModelDirectory)) { return $false }
 
         $launcherArguments = ConvertFrom-ChatbotCommandLine $parent.CommandLine
+        # Task Scheduler may preserve a bare argv[0]. ExecutablePath above is
+        # still required to match the trusted absolute PowerShell executable.
+        # Do not resolve argv[0] through PATH or accept other relative aliases.
+        $launcherExecutableMatches = $null -ne $launcherArguments -and (
+            (Get-ChatbotNormalizedPath $launcherArguments[0]) -ceq (Get-ChatbotNormalizedPath $PowerShellExecutable) -or
+            ($launcherArguments[0] -ieq 'powershell.exe' -and
+             [IO.Path]::GetFileName($PowerShellExecutable) -ieq 'powershell.exe'))
         if ($null -eq $launcherArguments -or $launcherArguments.Count -ne 6 -or
-            (Get-ChatbotNormalizedPath $launcherArguments[0]) -cne (Get-ChatbotNormalizedPath $PowerShellExecutable) -or
+            -not $launcherExecutableMatches -or
             $launcherArguments[1] -cne '-NoProfile' -or
             $launcherArguments[2] -cne '-ExecutionPolicy' -or
             $launcherArguments[3] -cne 'Bypass' -or
