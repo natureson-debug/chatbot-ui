@@ -187,6 +187,14 @@ const server = http.createServer(
     ) {
         if (await benchmarkRoute(req, res)) return;
     }
+    if (req.url.split('?')[0] === '/api/admin/watchdog/status') {
+        await require('./core/watchdog-status-route').createWatchdogStatusRoute({
+            token: getSessionToken,
+            authenticate: token => getSessionUser(db, token),
+            sample: require('./core/watchdog-status').getWatchdogStatus
+        })(req, res);
+        return;
+    }
     if (systemLogRoute(req, res)) return;
 
     // Health check
