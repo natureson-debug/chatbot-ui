@@ -3,6 +3,8 @@ const { execFile } = require('node:child_process');
 const path = require('node:path');
 const states = ['healthy','starting','unhealthy','absent','uncertain'];
 const reasons = ['lock-unavailable','absence-not-stable','recovery-latched','recovery-timeout','recovery-verified','recovery-not-verified','observation-or-recovery-failed','backend-task-disabled','task-starting','verified-absence','task-state-unverified','listener-not-ready','process-or-listener-unverified','ownership-or-configuration-unverified','evidence-changed','evidence-unavailable','health-healthy','health-starting','health-unhealthy','health-uncertain'];
+const taskReasons = ['task-access-denied','task-not-found','task-unavailable'];
+const backendReasons = ['evidence-unavailable','ownership-unverified','ownership-changed','configuration-changed'];
 function normalize(raw, now) {
     const date = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
     const task = raw?.task;
@@ -10,12 +12,18 @@ function normalize(raw, now) {
     const log = raw?.log;
     const updatedAt = date(log?.updatedAt);
     const observations = Array.isArray(log?.observations) ? log.observations.slice(-12).filter(o => states.includes(o?.state) && reasons.includes(o?.reason) && typeof o.recoveryAttempted === 'boolean').map(o => ({state:o.state,reason:o.reason,recoveryAttempted:o.recoveryAttempted})) : [];
+    const taskValid = task && ['Disabled','Ready','Running','Queued','Unknown'].includes(task.state) && typeof task.enabled === 'boolean' && Number.isSafeInteger(task.lastResult);
+    const backendVerified = backend?.verified === true && Number.isSafeInteger(backend.pid) && backend.pid>0 &&
+        ((backend.reason === 'verified' && backend.configurationMatched === true) ||
+         (backend.reason === 'configuration-mismatch' && backend.configurationMatched === false));
     return {
         sampledAt:new Date(now).toISOString(), pollIntervalMs:15000,
-        task:task && ['Disabled','Ready','Running','Queued','Unknown'].includes(task.state) && typeof task.enabled === 'boolean' && Number.isSafeInteger(task.lastResult)
-            ? {state:task.state,enabled:task.enabled,lastRun:date(task.lastRun),nextRun:date(task.nextRun),lastResult:task.lastResult} : null,
-        backend:backend && typeof backend.verified === 'boolean' && typeof backend.configurationMatched === 'boolean' && (!backend.verified || (Number.isSafeInteger(backend.pid) && backend.pid>0))
-            ? {verified:backend.verified,configurationMatched:backend.configurationMatched,pid:backend.verified && Number.isSafeInteger(backend.pid) && backend.pid>0 ? backend.pid : null} : null,
+        task:taskValid ? {state:task.state,enabled:task.enabled,lastRun:date(task.lastRun),nextRun:date(task.nextRun),lastResult:task.lastResult} : null,
+        taskReason:taskValid ? null : taskReasons.includes(raw?.taskReason) ? raw.taskReason : 'task-unavailable',
+        backend:backend ? backendVerified
+            ? {verified:true,configurationMatched:backend.configurationMatched,pid:backend.pid,reason:backend.reason}
+            : {verified:null,configurationMatched:null,pid:null,reason:backendReasons.includes(backend.reason) ? backend.reason : 'evidence-unavailable'} : null,
+        observedListenerPid:Number.isSafeInteger(raw?.observedListenerPid) && raw.observedListenerPid>0 ? raw.observedListenerPid : null,
         marker:['present','absent'].includes(raw?.marker) ? raw.marker : 'unavailable',
         log:log && updatedAt ? {updatedAt,stale:now-Date.parse(updatedAt)>300000 || Date.parse(updatedAt)>now+5000,observations,malformed:log.malformed!==false || observations.length!==(log.observations?.length ?? 0)} : null
     };

@@ -14,14 +14,17 @@ function createWatchdogMonitor({document,fetch,setTimer=setTimeout,clearTimer=cl
         if(!data || !Number.isFinite(Date.parse(data.sampledAt))) throw Error('Malformed');
         values.replaceChildren();history.replaceChildren();
         const stale=now()-Date.parse(data.sampledAt)>30000 || Date.parse(data.sampledAt)>now()+5000;
-        status.textContent=(stale?'Stale snapshot. ':data.availability==='observed'?'Observed. ':'Status unavailable or unsupported. ')+date(data.sampledAt);
         const task=data.task,b=data.backend,log=data.log;
+        status.textContent=(stale?'Stale snapshot. ':data.availability==='observed'?(task && b?.verified===true?'Observed. ':'Partial snapshot. '):'Status unavailable or unsupported. ')+date(data.sampledAt);
+        const taskStatus={'task-access-denied':'Unavailable (access denied)','task-not-found':'Not found','task-unavailable':'Unavailable'};
+        const backendStatus={'evidence-unavailable':'Unavailable (evidence unavailable)','ownership-unverified':'Unavailable (ownership unverified)','ownership-changed':'Unavailable (ownership changed)','configuration-changed':'Unavailable (configuration changed)'};
         for(const [label,value] of [
-            ['Task',task?`${task.state} (${task.enabled?'enabled':'disabled'})`:'Unavailable'],
+            ['Task',task?`${task.state} (${task.enabled?'enabled':'disabled'})`:(taskStatus[data.taskReason]||'Unavailable')],
             ['Last run',date(task?.lastRun)],['Last result',Number.isSafeInteger(task?.lastResult)?String(task.lastResult):'Unavailable'],
             ['Next run',date(task?.nextRun)],['Backend PID',b?.pid??'Unavailable'],
-            ['Backend ownership',b?(b.verified?'Verified observation':'Unverified'):'Unavailable'],
-            ['Saved configuration',b?(b.configurationMatched?'Matched':'Not verified/mismatched'):'Unavailable'],
+            ['Observed listener PID (Unverified)',data.observedListenerPid??'Unavailable'],
+            ['Backend ownership',b?.verified===true?'Verified observation':(backendStatus[b?.reason]||'Unavailable')],
+            ['Saved configuration',b?.verified===true && b.configurationMatched===true?'Matched':b?.verified===true && b.configurationMatched===false?'Mismatch (verified comparison)':'Unavailable (not verified)'],
             ['Recovery marker',data.marker||'unavailable'],['Log last modified',date(log?.updatedAt)]
         ]) values.append(el('p',`${label}: ${value}`));
         if(!log) history.append(el('li','Log unavailable.'));

@@ -1,17 +1,45 @@
 # Fixed read-only collector. No browser-controlled arguments and no recovery call.
 $ErrorActionPreference='Stop'
-$result=[ordered]@{task=$null;backend=$null;marker='unavailable';log=$null}
+$result=[ordered]@{task=$null;taskReason='task-unavailable';backend=$null;observedListenerPid=$null;marker='unavailable';log=$null}
 function IsoDate($value) { if($value -is [datetime] -and $value.Year -ge 2000){return $value.ToUniversalTime().ToString('o')}; return $null }
 try {
-    $task=Get-ScheduledTask -TaskName 'AI Chatbot - Watchdog' -TaskPath '\' -ErrorAction Stop
     $info=Get-ScheduledTaskInfo -TaskName 'AI Chatbot - Watchdog' -TaskPath '\' -ErrorAction Stop
-    $result.task=@{state=[string]$task.State;enabled=[bool]$task.Settings.Enabled;lastRun=(IsoDate $info.LastRunTime);nextRun=(IsoDate $info.NextRunTime);lastResult=[long]$info.LastTaskResult}
-} catch {}
+    try {
+        $task=Get-ScheduledTask -TaskName 'AI Chatbot - Watchdog' -TaskPath '\' -ErrorAction Stop
+        $result.task=@{state=[string]$task.State;enabled=[bool]$task.Settings.Enabled;lastRun=(IsoDate $info.LastRunTime);nextRun=(IsoDate $info.NextRunTime);lastResult=[long]$info.LastTaskResult}
+        $result.taskReason=$null
+    } catch {
+        if($_.CategoryInfo.Category -eq 'PermissionDenied' -or $_.FullyQualifiedErrorId -match '0x80070005'){$result.taskReason='task-access-denied'}
+    }
+} catch {
+    if($_.CategoryInfo.Category -eq 'PermissionDenied' -or $_.FullyQualifiedErrorId -match '0x80070005'){$result.taskReason='task-access-denied'}
+    elseif($_.FullyQualifiedErrorId -match '0x80070002'){$result.taskReason='task-not-found'}
+}
 try {
     . (Join-Path $PSScriptRoot '..\scripts\Test-ChatbotLiveBackendOwnership.ps1')
     $e=Test-ChatbotLiveBackendOwnership
-    $result.backend=@{verified=[bool]$e.OwnershipVerified;configurationMatched=[bool]$e.ConfigurationMatched;pid=$e.BackendPid}
-} catch {}
+    $result.backend=@{verified=$null;configurationMatched=$null;pid=$null;reason='evidence-unavailable'}
+    if($e.OwnershipVerified -is [bool] -and $e.OwnershipVerified -eq $true -and
+       $e.ConfigurationMatched -is [bool] -and $e.BackendPid -is [int] -and $e.BackendPid -gt 0 -and
+       (($e.Reason -ceq 'verified' -and $e.ConfigurationMatched -eq $true) -or
+        ($e.Reason -ceq 'configuration-mismatch' -and $e.ConfigurationMatched -eq $false))) {
+        $result.backend=@{verified=$true;configurationMatched=[bool]$e.ConfigurationMatched;pid=$e.BackendPid;reason=$e.Reason}
+    } elseif($e.Reason -cin @('ownership-unverified','ownership-changed','configuration-changed','evidence-unavailable')) {
+        $result.backend.reason=$e.Reason
+    }
+} catch {
+    $result.backend=@{verified=$null;configurationMatched=$null;pid=$null;reason='evidence-unavailable'}
+}
+if($null -eq $result.backend -or $result.backend.verified -ne $true) {
+    try {
+        $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq 8080)
+        if($listeners.Count -eq 1 -and $listeners[0].LocalAddress -ceq '127.0.0.1' -and $listeners[0].OwningProcess -gt 0) {
+            $result.observedListenerPid=[int]$listeners[0].OwningProcess
+        }
+    } catch {
+        $result.observedListenerPid=$null
+    }
+}
 try {
     $exists=Test-Path -LiteralPath 'C:\AI\logs\watchdog-recovery.pending' -ErrorAction Stop
     $result.marker=if($exists){'present'}else{'absent'}
