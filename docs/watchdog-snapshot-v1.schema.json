@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Signed watchdog snapshot payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "collectedAt", "producer", "task", "taskReason", "backend"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "collectedAt": { "$ref": "#/$defs/date" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "verified"],
+      "properties": { "identity": { "const": "S-1-5-18" }, "verified": { "const": true } }
+    },
+    "task": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "enabled", "lastRun", "nextRun", "lastResult"],
+          "properties": {
+            "state": { "enum": ["Disabled", "Ready", "Running", "Queued", "Unknown"] },
+            "enabled": { "type": "boolean" },
+            "lastRun": { "$ref": "#/$defs/nullableDate" },
+            "nextRun": { "$ref": "#/$defs/nullableDate" },
+            "lastResult": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
+          }
+        }
+      ]
+    },
+    "taskReason": { "enum": [null, "task-access-denied", "task-not-found", "task-unavailable"] },
+    "backend": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verified", "configurationMatched", "pid", "reason"],
+          "properties": {
+            "verified": { "const": true },
+            "configurationMatched": { "const": true },
+            "pid": { "$ref": "#/$defs/pid" },
+            "reason": { "const": "verified" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verified", "configurationMatched", "pid", "reason"],
+          "properties": {
+            "verified": { "const": true },
+            "configurationMatched": { "const": false },
+            "pid": { "$ref": "#/$defs/pid" },
+            "reason": { "const": "configuration-mismatch" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verified", "configurationMatched", "pid", "reason"],
+          "properties": {
+            "verified": { "type": "null" },
+            "configurationMatched": { "type": "null" },
+            "pid": { "type": "null" },
+            "reason": { "enum": ["evidence-unavailable", "ownership-unverified", "ownership-changed", "configuration-changed"] }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "task": { "type": "null" } } },
+      "then": { "properties": { "taskReason": { "enum": ["task-access-denied", "task-not-found", "task-unavailable"] } } },
+      "else": { "properties": { "taskReason": { "type": "null" } } }
+    }
+  ],
+  "$defs": {
+    "date": { "type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" },
+    "nullableDate": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/date" }] },
+    "pid": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+  }
+}
