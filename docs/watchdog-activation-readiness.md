@@ -59,41 +59,53 @@ or benchmark is necessary.
 
 ## Phase B — approved wrapper and retry-only change, still disabled
 
-Do not construct a new settings object with defaults: it can reset unrelated
-settings. Modify only RestartCount on the existing settings instance. This uses
-the documented [ScheduledTasks settings interface](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).
+Do not set RestartCount to zero through the CIM settings object. The observed
+HRESULT 0x80041319 left the definition unchanged: a present RestartOnFailure
+requires both Interval and Count, with Count at least 1. Remove the **entire**
+optional RestartOnFailure element instead. Its Interval is removed with it;
+all other settings, triggers, principal and actions must remain identical.
+See Microsoft's [RestartOnFailure schema](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-restartonfailure-settingstype-element)
+and [Count minimum](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-count-restarttype-element).
+
+MP-GPU-02G.1 validated this on a unique, current-user temporary task using native
+Task Scheduler: baseline registration with retries, removal/update, export,
+exact preservation of all other XML, retry count zero, and successful harmless
+execution. The temporary task was removed. This was not a production or SYSTEM
+task update. The production task remains disabled; no wrapper was changed.
+
+The following is a **separately approved production procedure**, not executed
+by this task. Continue in the Phase A session with its checkpoint and beforeXml:
 
 ```powershell
+. 'C:\AI\chatbot-ui\scripts\watchdog-retry-xml.ps1'
 $fresh=Get-ScheduledTask -TaskName $name -TaskPath '\'
 if($fresh.Settings.Enabled -or $fresh.State -in @('Running','Queued') -or
    (Export-ScheduledTask -TaskName $name -TaskPath '\') -cne $beforeXml) { throw 'Task changed during preparation' }
-$settings=$fresh.Settings
-$settings.RestartCount=0
-Set-ScheduledTask -TaskName $name -TaskPath '\' -Settings $settings | Out-Null
+$proposedXml=Remove-ChatbotTaskRetryPolicy $beforeXml
+$service=New-Object -ComObject 'Schedule.Service'
+$service.Connect()
+$folder=$service.GetFolder('\')
+$existing=$folder.GetTask($name)
+$securityBefore=$existing.GetSecurityDescriptor(7) # Owner, group, DACL; no SACL.
+# TASK_UPDATE (4) + TASK_DONT_ADD_PRINCIPAL_ACE (16). No create/enable flags.
+# Existing SYSTEM principal and all other XML remain as exported.
+$updated=$folder.RegisterTask($name,$proposedXml,20,'SYSTEM',$null,5,$null)
 $afterXml=Export-ScheduledTask -TaskName $name -TaskPath '\'
-# Compare every serialized task property except the requested Count change.
-function WithoutRestartCount([string]$Xml) {
-    $doc=New-Object Xml.XmlDocument
-    $doc.LoadXml($Xml)
-    $ns=New-Object Xml.XmlNamespaceManager($doc.NameTable)
-    $ns.AddNamespace('t','http://schemas.microsoft.com/windows/2004/02/mit/task')
-    $node=$doc.SelectSingleNode('/t:Task/t:Settings/t:RestartOnFailure/t:Count',$ns)
-    if($null -eq $node) { throw 'Scheduler serialization changed; manual review required' }
-    $node.InnerText='0'
-    return $doc.OuterXml
-}
-if((WithoutRestartCount $beforeXml) -cne (WithoutRestartCount $afterXml)) { throw 'Other task properties changed; keep disabled and review' }
+$afterDoc=New-Object Xml.XmlDocument
+$afterDoc.LoadXml($afterXml)
+if($afterDoc.OuterXml -cne $proposedXml -or $afterXml -match '<RestartOnFailure') { throw 'Unexpected task XML change; keep disabled and review' }
+if($updated.GetSecurityDescriptor(7) -cne $securityBefore) { throw 'Unexpected task security change; keep disabled and review' }
 $verified=Get-ScheduledTask -TaskName $name -TaskPath '\'
-if($verified.Settings.RestartCount -ne 0 -or $verified.Settings.Enabled -or $verified.State -in @('Running','Queued')) { throw 'Retry-only update not verified' }
+if($verified.Settings.RestartCount -ne 0 -or $verified.Settings.Enabled -or $verified.State -in @('Running','Queued')) { throw 'Retry-policy update not verified' }
 Copy-Item -LiteralPath $replacement -Destination $wrapper -Force
 if((Get-FileHash -LiteralPath $wrapper).Hash -cne (Get-FileHash -LiteralPath $replacement).Hash) { throw 'Wrapper deployment mismatch' }
 ```
 
-If Windows normalizes/removes RestartOnFailure when count becomes zero, the strict
-XML comparison intentionally stops. Review the actual XML difference while still
-disabled; do not bypass it or silently accept changes to interval, action,
-principal, trigger, execution limit or any other property. The scheduler update
-has not been tested against production in this task.
+If the update fails, re-export and compare to the checkpoint; do not assume any
+change committed. Any unexpected serialization, security, principal or other
+setting difference blocks activation. Do not weaken the comparisons. Removing
+RestartOnFailure intentionally removes its now-inapplicable PT1M interval; the
+PT2M trigger, PT10M execution timeout, IgnoreNew policy and disabled state stay.
 
 ## Phase C — separate activation approval
 
@@ -135,8 +147,8 @@ the task fails, disable **only** the watchdog task to prevent further triggers.
 Do not stop a running diagnostic/watchdog or backend. Wait for the watchdog run
 to finish; investigate a timeout rather than killing processes. Preserve marker
 and logs. Once disabled and idle, restore the checkpoint wrapper if appropriate;
-restore the old RestartCount only on explicit rollback approval, keeping the task
-disabled. Change only that settings property and verify the exported task again.
+restore the original checkpoint XML only on explicit rollback approval, keeping
+the task disabled. Verify the current definition has no unrelated changes first.
 Never automatically re-enable the old wrapper or reset a recovery marker.
 
 ```powershell
@@ -144,9 +156,16 @@ Disable-ScheduledTask -TaskName $name -TaskPath '\' | Out-Null
 $rollbackTask=Get-ScheduledTask -TaskName $name -TaskPath '\'
 if($rollbackTask.State -in @('Running','Queued')) { throw 'Wait for current run; no forced stop authorized' }
 Copy-Item -LiteralPath (Join-Path $checkpoint 'wrapper-before.ps1') -Destination $wrapper -Force
-# Optional, separately approved restoration of the original retry count:
-# $restore=$rollbackTask.Settings; $restore.RestartCount=3
-# Set-ScheduledTask -TaskName $name -TaskPath '\' -Settings $restore | Out-Null
+# Optional, separately approved restoration from the existing Phase A checkpoint:
+# $restoreXml=[IO.File]::ReadAllText((Join-Path $checkpoint 'task-before.xml'))
+# $restoreDoc=New-Object Xml.XmlDocument; $restoreDoc.LoadXml($restoreXml)
+# if($restoreDoc.Task.Settings.Enabled -ne 'false') { throw 'Checkpoint must be disabled' }
+# $currentXml=Export-ScheduledTask -TaskName $name -TaskPath '\'
+# $currentDoc=New-Object Xml.XmlDocument; $currentDoc.LoadXml($currentXml)
+# if($currentDoc.OuterXml -cne (Remove-ChatbotTaskRetryPolicy $restoreXml)) { throw 'Unrelated changes: rollback needs review' }
+# $restored=$folder.RegisterTask($name,$restoreXml,20,'SYSTEM',$null,5,$null)
+# $check=New-Object Xml.XmlDocument; $check.LoadXml((Export-ScheduledTask -TaskName $name -TaskPath '\'))
+# if($check.OuterXml -cne $restoreDoc.OuterXml -or $restored.GetSecurityDescriptor(7) -cne $securityBefore) { throw 'Rollback not verified; keep disabled' }
 ```
 
 Limits remain: SYSTEM qualification is supplied evidence, current live recovery
