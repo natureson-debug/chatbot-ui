@@ -45,6 +45,31 @@ function dependencies(ds,p) {
   for(const d of ds){if(!exact(d,['path','sha256'])||!digest(d.sha256))fail('invalid-runtime-dependency');winPath(d.path);if(path.win32.dirname(d.path)!==p.runtime||! /\.(exe|dll)$/i.test(d.path)||seen.has(d.path.toLowerCase()))fail('invalid-runtime-dependency');seen.add(d.path.toLowerCase());}
   if(!seen.has(p.executable.toLowerCase()))fail('missing-runtime-dependency');
 }
+function isolateEnumeration(name,text,p) {
+  if(!['chatbot-backend-evidence.ps1','start-chatbot-ai.ps1'].includes(name))return text;
+  const variable=name==='start-chatbot-ai.ps1'?'ServerExe':'expectedExe';
+  const pattern=new RegExp('^([ \\t]*)\\$(output|availableOutput) = @\\(& \\$'+variable+' --list-devices 2>&1\\)', 'gm');
+  let count=0;
+  text=text.replace(pattern,(_line,indent,result)=>{
+    count++;
+    const lines=[
+      `$enumerationRuntime = '${p.runtime}'`,
+      `$enumerationExecutable = '${p.executable}'`,
+      `if ($${variable} -isnot [string] -or $${variable} -ine $enumerationExecutable -or [IO.Path]::GetFullPath($${variable}) -ine $enumerationExecutable) { throw 'Enumeration executable is not approved.' }`,
+      `$enumerationDirectory = Get-Item -LiteralPath $enumerationRuntime -ErrorAction Stop`,
+      `$enumerationFile = Get-Item -LiteralPath $enumerationExecutable -ErrorAction Stop`,
+      `if (-not $enumerationDirectory.PSIsContainer -or $enumerationFile.PSIsContainer -or ($enumerationDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint) -or ($enumerationFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Enumeration runtime is invalid.' }`,
+      `Push-Location -LiteralPath $enumerationRuntime -ErrorAction Stop`,
+      `try {`,
+      `    $${result} = @(& $enumerationExecutable --list-devices 2>&1)`,
+      `    if ($LASTEXITCODE -ne 0) { throw 'GPU enumeration failed.' }`,
+      `} finally { Pop-Location -ErrorAction Stop }`
+    ];
+    return lines.map(line=>indent+line).join('\n');
+  });
+  if(count!==1)fail('enumeration-source-changed');
+  return text;
+}
 function build(plan, temporaryParent) {
   validatePlan(plan);
   const parent=path.resolve(temporaryParent), temp=path.resolve(os.tmpdir());
@@ -60,7 +85,7 @@ function build(plan, temporaryParent) {
     for(const [k,v] of Object.entries(OLD))text=text.replace(new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),match=>match===match.toLowerCase()?plan.paths[k].toLowerCase():plan.paths[k]);
     if(/C:\\AI\\|Chatbot-upgrade-17E2/i.test(text))fail('unmapped-legacy-path');
     if(name==='chatbot-lifecycle-lock.ps1' && !text.includes("'Global\\Chatbot.LlamaLifecycle'"))fail('lock-identity-mismatch');
-    output[name]=text;
+    output[name]=isolateEnumeration(name,text,plan.paths);
   }
   const manifest={schemaVersion:1,releaseId:plan.releaseId,sourceCommit:plan.sourceCommit,paths:plan.paths,
     entryPoints:{watchdog:'chatbot-watchdog.ps1',launcher:'start-chatbot-ai.ps1'},lockIdentity:'Global\\Chatbot.LlamaLifecycle',

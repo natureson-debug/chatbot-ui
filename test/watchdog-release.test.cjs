@@ -6,7 +6,7 @@ function fixture(t){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'watchdog-offline-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const sources={};
  for(const name of FILES){const repo=path.join(__dirname,'..','scripts',name);
- const text=fs.existsSync(repo)?fs.readFileSync(repo,'utf8'):name==='chatbot-lifecycle-lock.ps1'?"# fixture\n$identity='Global\\Chatbot.LlamaLifecycle'\n":"# harmless launcher fixture\n$LlamaDir='C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4'\n";
+ const text=fs.existsSync(repo)?fs.readFileSync(repo,'utf8'):name==='chatbot-lifecycle-lock.ps1'?"# fixture\n$identity='Global\\Chatbot.LlamaLifecycle'\n":"# harmless launcher fixture\n$output = @(& $ServerExe --list-devices 2>&1)\n$LlamaDir='C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4'\n";
  const file=path.join(dir,name);fs.writeFileSync(file,text);sources[name]={path:file,sha256:hash(text)};}
  const paths={scripts:'C:\\Protected\\releases\\v1',runtime:'C:\\Protected\\runtime',executable:'C:\\Protected\\runtime\\llama-server.exe',config:'C:\\ProtectedData\\config',models:'C:\\ProtectedData\\models',logs:'C:\\ProtectedData\\state'};
  const plan={releaseId:'v1',sourceCommit:'a'.repeat(40),sources,paths,runtimeDependencies:[{path:paths.executable,sha256:'b'.repeat(64)}]};
@@ -36,4 +36,18 @@ test('transformed PowerShell scripts parse without execution',{skip:process.plat
  ['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; foreach($f in Get-ChildItem -LiteralPath $env:RELEASE_TEST_ROOT -Filter *.ps1){$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName,[ref]$null,[ref]$e);if($e){exit 1}}"],
  {env:{...process.env,RELEASE_TEST_ROOT:f.built.root},timeout:10000,windowsHide:true,encoding:'utf8'});
  assert.equal(r.status,0,'PowerShell parse failed');
+});
+test('actual staged enumeration guards enforce directory, executable, failures and restoration',{skip:process.platform!=='win32'},t=>{
+ const f=fixture(t);
+ const r=require('node:child_process').spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+ ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'staged-gpu-enumeration.ps1'),'-Release',f.built.root],
+ {timeout:10000,windowsHide:true,encoding:'utf8'});
+ assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/PASS: 16 staged enumeration cases/);
+ assert.equal(validate(f.built.root,f.built.manifestSha256).reason,'security-unverified');
+});
+test('changed enumeration source fails closed before staging',t=>{
+ const f=fixture(t);f.plan.releaseId='v2';const s=f.plan.sources['start-chatbot-ai.ps1'];
+ fs.writeFileSync(s.path,'# missing enumeration');s.sha256=hash(fs.readFileSync(s.path));
+ assert.throws(()=>build(f.plan,f.dir),/enumeration-source-changed/);
+ assert(!fs.existsSync(path.join(f.dir,'v2')));
 });

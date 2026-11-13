@@ -56,13 +56,35 @@ tests use harmless substitutes. Source commit is provenance metadata, not proof
 that external inputs came from Git. Their individual hashes are authoritative
 only when approved independently.
 
-The builder replaces only the known legacy path prefixes in copies. It does not
+The builder replaces the known legacy path prefixes in copies. It does not
 rewrite task names, flags, mutex SID policy, argument matching or process identity
 checks. It rejects remaining known legacy prefixes. Exact task actions must use
 the resulting versioned paths. There is no repository wrapper dependency.
 Source review must approve imports and dependency closure: hashes cannot prove
 that an arbitrary script is safe. Do not approve sources containing embedded
 secrets. Pattern scanning is defense in depth, not a universal secret detector.
+
+### Deterministic enumeration (MP-GPU-03F-5A)
+
+In addition to path substitutions, staged `chatbot-backend-evidence.ps1` and
+`start-chatbot-ai.ps1` each receive a guard around their one `--list-devices`
+invocation. A missing or changed recognized source call aborts the build. The
+guard pins the executable and runtime to the approved path profile, rejects
+missing paths and direct reparse points, uses terminating `Push-Location`, and
+restores the caller location with `finally`. Invocation errors/nonzero exit codes
+fail; there is no inherited-working-directory fallback. GPU parsing, selection,
+launch arguments, locking and ownership predicates remain unchanged.
+
+`test/staged-gpu-enumeration.ps1` parses the actual staged scripts and exercises
+their generated guard with only the native invocation and filesystem/location
+observations mocked. Sixteen cases cover both sites. It never executes llama.cpp.
+The release tests also verify syntax, hashes and source-drift rejection. Actual
+installed launcher copies were staged offline and passed the same 16 cases plus
+the existing ownership fixtures and 58 injected watchdog assertions.
+
+These checks do not qualify native DLL resolution, SYSTEM access or ancestor
+TOCTOU protection. The validator still returns `security-unverified` without a
+qualified native evidence provider. No installed script is changed by this fix.
 
 `manifest.json` contains exactly `schemaVersion:1`, `releaseId`, `sourceCommit`,
 `paths`, `entryPoints` (watchdog/launcher fixed names), `lockIdentity`
