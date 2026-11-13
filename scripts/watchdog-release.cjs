@@ -17,12 +17,14 @@ const digest = s => typeof s==='string' && /^[a-f0-9]{64}$/.test(s);
 function winPath(p) {
   if(typeof p!=='string' || !/^[A-Za-z]:\\/.test(p) || /['"`$\r\n\x00]/.test(p) || p.slice(2).includes(':') || p.split('\\').some(s=>s==='..'||s==='.'||/[. ]$/.test(s)) || path.win32.normalize(p)!==p) fail('invalid-reference');
 }
-function profile(p) {
-  if(!exact(p,Object.keys(OLD))) fail('invalid-profile');
+const V2_KEYS=['scripts','runtime','executable','models','configFile','apiKeyFile','logsDirectory','stateDirectory','evidenceDirectory'];
+function profile(p,version=1) {
+  if(!exact(p,version===2?V2_KEYS:Object.keys(OLD))) fail('invalid-profile');
   Object.values(p).forEach(winPath);
+  if(version===2 && Object.values(p).some(v=>/[<>|?*\x00-\x1f]/.test(v)||v.endsWith('\\')||v.split('\\').some(s=>/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(s))))fail('invalid-reference');
   if(path.win32.dirname(p.executable)!==p.runtime || path.win32.basename(p.executable)!=='llama-server.exe') fail('invalid-runtime');
   if(new Set(Object.values(p)).size!==Object.keys(p).length) fail('conflicting-paths');
-  const dirs=['runtime','scripts','config','models','logs'].map(k=>p[k].toLowerCase());
+  const dirs=(version===2?[p.runtime,p.scripts,p.models,path.win32.dirname(p.configFile),path.win32.dirname(p.apiKeyFile),p.logsDirectory,p.stateDirectory,p.evidenceDirectory]:['runtime','scripts','config','models','logs'].map(k=>p[k])).map(p=>p.toLowerCase());
   if(dirs.some((a,i)=>dirs.some((b,j)=>i!==j && (a===b || a.startsWith(b+'\\'))))) fail('conflicting-paths');
 }
 function noLinks(p) {
@@ -33,11 +35,28 @@ function secretCheck(s) {
   if(/-----BEGIN .*PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9_.-]{20,}/.test(s)) fail('secret-material');
 }
 function validatePlan(p) {
-  if(!exact(p,['releaseId','sourceCommit','sources','paths','runtimeDependencies']) || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(p.releaseId) || !/^[a-f0-9]{40}$/.test(p.sourceCommit)) fail('invalid-plan');
-  profile(p.paths);
+  const fields=['releaseId','sourceCommit','sources','paths','runtimeDependencies'];
+  if(Object.hasOwn(p,'schemaVersion'))fields.push('schemaVersion');
+  if(!exact(p,fields) || (p.schemaVersion!==undefined && ![1,2].includes(p.schemaVersion)) || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(p.releaseId) || !/^[a-f0-9]{40}$/.test(p.sourceCommit)) fail('invalid-plan');
+  profile(p.paths,p.schemaVersion||1);
   if(!exact(p.sources,FILES))fail('invalid-source-list');
   for(const s of Object.values(p.sources))if(!exact(s,['path','sha256'])||!path.isAbsolute(s.path)||!digest(s.sha256))fail('invalid-source');
   dependencies(p.runtimeDependencies,p.paths);
+}
+function transformPaths(text,p,version) {
+  const mappings=version===2?[
+    [OLD.config+'\\chatbot-ai-config.json',p.configFile],
+    [OLD.config+'\\llama-api-key.txt',p.apiKeyFile],
+    [OLD.logs+'\\watchdog-recovery.pending',path.win32.join(p.stateDirectory,'watchdog-recovery.pending')],
+    [OLD.executable,p.executable],[OLD.runtime,p.runtime],[OLD.scripts,p.scripts],[OLD.models,p.models],[OLD.logs,p.logsDirectory]
+  ]:Object.entries(OLD).map(([k,v])=>[v,p[k]]);
+  // One pass over original text: inserted destinations can never be rewritten.
+  const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp(mappings.map(([from])=>escape(from)+(version===2?(/\.(json|txt|pending|exe)$/i.test(from)?'(?=[\'\"])':'(?=[\'\"\\\\])'):'')).join('|'),'gi');
+  return text.replace(re,match=>{
+    const target=mappings.find(([from])=>from.toLowerCase()===match.toLowerCase())[1];
+    return match===match.toLowerCase()?target.toLowerCase():target;
+  });
 }
 function dependencies(ds,p) {
   if(!Array.isArray(ds)||!ds.length||ds.length>128)fail('missing-runtime-dependency');
@@ -82,12 +101,23 @@ function build(plan, temporaryParent) {
     const src=plan.sources[name];noLinks(src.path);const b=fs.readFileSync(src.path);
     if(hash(b)!==src.sha256)fail('source-hash-mismatch');
     let text=b.toString('utf8');secretCheck(text);
-    for(const [k,v] of Object.entries(OLD))text=text.replace(new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),match=>match===match.toLowerCase()?plan.paths[k].toLowerCase():plan.paths[k]);
+    if(plan.schemaVersion===2){
+      const required={
+        'chatbot-watchdog.ps1':['config\\chatbot-ai-config.json','config\\llama-api-key.txt','logs\\watchdog.log','logs\\watchdog-recovery.pending'],
+        'Restart-ChatbotAI.ps1':['config\\chatbot-ai-config.json','config\\llama-api-key.txt'],
+        'Test-ChatbotLiveBackendOwnership.ps1':['config\\chatbot-ai-config.json'],
+        'chatbot-backend-evidence.ps1':['config\\llama-api-key.txt'],
+        'chatbot-owned-backend.ps1':['config\\llama-api-key.txt'],
+        'start-chatbot-ai.ps1':['config\\chatbot-ai-config.json','config\\llama-api-key.txt','logs']
+      };
+      for(const suffix of required[name]||[])if(!text.toLowerCase().includes('c:\\ai\\'+suffix))fail('resource-source-changed');
+    }
+    text=transformPaths(text,plan.paths,plan.schemaVersion||1);
     if(/C:\\AI\\|Chatbot-upgrade-17E2/i.test(text))fail('unmapped-legacy-path');
     if(name==='chatbot-lifecycle-lock.ps1' && !text.includes("'Global\\Chatbot.LlamaLifecycle'"))fail('lock-identity-mismatch');
     output[name]=isolateEnumeration(name,text,plan.paths);
   }
-  const manifest={schemaVersion:1,releaseId:plan.releaseId,sourceCommit:plan.sourceCommit,paths:plan.paths,
+  const manifest={schemaVersion:plan.schemaVersion||1,releaseId:plan.releaseId,sourceCommit:plan.sourceCommit,paths:plan.paths,
     entryPoints:{watchdog:'chatbot-watchdog.ps1',launcher:'start-chatbot-ai.ps1'},lockIdentity:'Global\\Chatbot.LlamaLifecycle',
     files:FILES.map(name=>({path:name,sha256:hash(output[name]),sourceSha256:plan.sources[name].sha256})),runtimeDependencies:plan.runtimeDependencies};
   fs.mkdirSync(root); // Existing parent only; a failed build is never qualified.
@@ -95,13 +125,13 @@ function build(plan, temporaryParent) {
   fs.writeFileSync(path.join(root,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
   return {root,manifestSha256:hash(fs.readFileSync(path.join(root,'manifest.json'))),deploymentQualified:false};
 }
-function validate(root, expectedManifestHash, {inspectSecurity,inspectRuntime}={}) {
+function validate(root, expectedManifestHash, {inspectSecurity,inspectRuntime,inspectResourceSecurity}={}) {
   try {
     noLinks(root);const bytes=fs.readFileSync(path.join(root,'manifest.json'));
     if(!digest(expectedManifestHash)||hash(bytes)!==expectedManifestHash)fail('manifest-untrusted');
     const m=JSON.parse(bytes);
-    if(!exact(m,['schemaVersion','releaseId','sourceCommit','paths','entryPoints','lockIdentity','files','runtimeDependencies'])||m.schemaVersion!==1||! /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(m.releaseId)||! /^[a-f0-9]{40}$/.test(m.sourceCommit))fail('invalid-manifest');
-    profile(m.paths);dependencies(m.runtimeDependencies,m.paths);
+    if(!exact(m,['schemaVersion','releaseId','sourceCommit','paths','entryPoints','lockIdentity','files','runtimeDependencies'])||![1,2].includes(m.schemaVersion)||! /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(m.releaseId)||! /^[a-f0-9]{40}$/.test(m.sourceCommit))fail('invalid-manifest');
+    profile(m.paths,m.schemaVersion);dependencies(m.runtimeDependencies,m.paths);
     if(!exact(m.entryPoints,['watchdog','launcher'])||m.entryPoints.watchdog!=='chatbot-watchdog.ps1'||m.entryPoints.launcher!=='start-chatbot-ai.ps1')fail('invalid-entry-point');
     if(m.lockIdentity!=='Global\\Chatbot.LlamaLifecycle')fail('lock-identity-mismatch');
     if(!Array.isArray(m.files)||m.files.length!==FILES.length||new Set(m.files.map(f=>f.path)).size!==FILES.length)fail('invalid-file-list');
@@ -117,6 +147,16 @@ function validate(root, expectedManifestHash, {inspectSecurity,inspectRuntime}={
     if(typeof inspectSecurity!=='function'||typeof inspectRuntime!=='function')fail('security-unverified');
     const securityPaths=[path.resolve(root),path.join(path.resolve(root),'manifest.json'),...FILES.map(f=>path.join(path.resolve(root),f)),...Object.values(m.paths),...m.runtimeDependencies.map(d=>d.path)];
     for(const p of securityPaths){const e=inspectSecurity(p);if(!e||e.path!==p||e.ancestorsVerified!==true||e.effectiveAccessVerified!==true)fail('security-unverified');if(e.reparsePoint!==false)fail('reparse-point');if(e.untrustedWrite!==false||e.replaceable!==false)fail('writable-ancestor');}
+    if(m.schemaVersion===2){
+      if(typeof inspectResourceSecurity!=='function')fail('security-unverified');
+      for(const role of V2_KEYS){
+        const kind=['executable','configFile','apiKeyFile'].includes(role)?'file':'directory';
+        const systemAccess=['logsDirectory','stateDirectory','evidenceDirectory'].includes(role)?'modify':['scripts','runtime','executable'].includes(role)?'readExecute':'read';
+        const request={path:m.paths[role],role,kind,systemAccess,nodeWriteAllowed:false,confidential:role==='apiKeyFile'};
+        const e=inspectResourceSecurity(request);
+        if(!e||e.path!==request.path||e.role!==role||e.kind!==kind||e.systemAccess!==systemAccess||e.nativeVerified!==true||e.nodeWriteDenied!==true||e.ancestorsVerified!==true||e.reparsePoint!==false||e.replaceable!==false||(request.confidential&&e.unauthorizedReadDenied!==true))fail('security-unverified');
+      }
+    }
     for(const d of m.runtimeDependencies){const e=inspectRuntime(d.path);if(!e||e.path!==d.path||e.sha256!==d.sha256||e.regularFile!==true||e.dependenciesComplete!==true)fail('runtime-unverified');}
     return {valid:true,releaseId:m.releaseId,qualification:'injected-evidence-only'};
   } catch(e){return {valid:false,reason:e.code && /^[a-z-]+$/.test(e.code)?e.code:'release-invalid'};}

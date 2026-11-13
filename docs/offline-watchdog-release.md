@@ -6,7 +6,7 @@ and native permission qualification remain blocked. No production inputs are rea
 automatically. No keys, snapshots, models, runtime binaries or configuration contents
 are copied. Only seven explicitly approved PowerShell sources are included.
 
-## Inputs and manifest v1
+## Inputs and manifest versions
 
 `node scripts/watchdog-release.cjs build <plan.json> <existing-temp-parent>`
 
@@ -15,7 +15,8 @@ The release directory must not exist. Symbolic links/junctions detected by Node
 are rejected along its ancestry. No protected deployment directories are written.
 On write failure a partial directory may remain: it is not valid or reusable.
 
-The plan has exactly these properties:
+Legacy v1 plans have exactly these properties (an explicit `schemaVersion: 1`
+is also accepted). New separated plans must declare `schemaVersion: 2`:
 
 * `releaseId`: 1–64 ASCII letters, digits, underscores or hyphens, starting alphanumeric.
 * `sourceCommit`: 40 lowercase hex characters identifying the reviewed repository commit.
@@ -42,10 +43,63 @@ Example path profile (not an activated configuration):
 }
 ```
 
-The current scripts share a configuration directory for settings and the key-file
+Version 1 scripts share a configuration directory for settings and the key-file
 reference, and one directory for logs and the recovery marker. This first builder
-preserves those relationships; separating them requires a later reviewed script
-change. No live marker may be reset or silently lost when those paths change.
+preserves those relationships. Version 2 below separates them only in staged copies.
+No live marker may be reset or silently lost when those paths change.
+
+### Separated v2 paths (MP-GPU-03F-8B)
+
+V2 retains `scripts`, `runtime`, `executable`, `models` and replaces `config`/`logs`
+with exactly these required fields:
+
+```json
+{
+  "scripts": "C:\\Program Files\\AIChatbot\\releases\\v2\\scripts",
+  "runtime": "C:\\Program Files\\AIChatbot\\releases\\v2\\runtime",
+  "executable": "C:\\Program Files\\AIChatbot\\releases\\v2\\runtime\\llama-server.exe",
+  "models": "C:\\ProtectedModels",
+  "configFile": "C:\\ProgramData\\AIChatbot\\config\\chatbot-ai-config.json",
+  "apiKeyFile": "C:\\ProgramData\\AIChatbot\\secrets\\llama-api-key.txt",
+  "logsDirectory": "C:\\ProgramData\\AIChatbot\\logs",
+  "stateDirectory": "C:\\ProgramData\\AIChatbot\\state",
+  "evidenceDirectory": "C:\\ProgramData\\AIChatbot\\evidence"
+}
+```
+
+All roots, including the parents of the two file paths, must be distinct and
+non-overlapping (case-insensitive). Noncanonical, traversal, reserved-device,
+wildcard and file/directory-conflicting references are rejected. Exact settings,
+key and marker paths are replaced before broad directory mappings in one pass;
+inserted destinations are never transformed again. Missing expected source
+references, unknown legacy references and ambiguous filename suffixes fail closed.
+Ownership validation retains the exact normalized key-file comparison. Marker
+creation, retention and deletion conditions remain unchanged. Evidence is a
+declared deployment resource only; no new producer or snapshot integration exists.
+
+V1 manifests remain v1 and must have the legacy fields. V2 manifests require the
+new fields; changing only the schema number is rejected. No implicit conversion,
+live migration, directory creation or resource copying is performed. Manifest
+hash pins and output hashes must be regenerated for each newly reviewed build.
+
+In addition to the existing injected security inspector, v2 requires a trusted
+`inspectResourceSecurity(request)` callback. Requests bind `path`, `role`, `kind`,
+`systemAccess`, `nodeWriteAllowed:false` and `confidential` (true for the key).
+Expected SYSTEM access is `readExecute` for code/runtime, `read` for configuration,
+key and models, and `modify` for logs/state/evidence. Evidence must echo path, role,
+kind and systemAccess and positively report `nativeVerified`, `nodeWriteDenied`,
+`ancestorsVerified`, `reparsePoint:false`, `replaceable:false`; key evidence must
+also report `unauthorizedReadDenied:true`. Missing or contradictory evidence yields
+`security-unverified`. Native inspection must cover actual resource type, parent
+replacement, token/group permissions, SYSTEM access and confidentiality. A boolean
+from an untrusted source is not native proof; never expose callback injection over
+HTTP or deserialize it from the manifest. Successful injected tests remain labeled
+`injected-evidence-only`; the default CLI still cannot qualify deployment.
+
+This conservative v2 policy does not authorize Node to write deployed configuration.
+Selecting an alternative configuration-promotion policy, Node key reads, monitoring
+path updates and real ACL qualification remains separate migration work. Existing
+Node paths and installed PowerShell scripts are not changed.
 
 The allowlist is `chatbot-watchdog.ps1`, `chatbot-owned-backend.ps1`,
 `chatbot-backend-evidence.ps1`, `Restart-ChatbotAI.ps1`,
@@ -86,7 +140,7 @@ These checks do not qualify native DLL resolution, SYSTEM access or ancestor
 TOCTOU protection. The validator still returns `security-unverified` without a
 qualified native evidence provider. No installed script is changed by this fix.
 
-`manifest.json` contains exactly `schemaVersion:1`, `releaseId`, `sourceCommit`,
+`manifest.json` contains exactly `schemaVersion` (1 or 2), `releaseId`, `sourceCommit`,
 `paths`, `entryPoints` (watchdog/launcher fixed names), `lockIdentity`
 (`Global\\Chatbot.LlamaLifecycle`), `files` (path/output SHA-256/source SHA-256),
 and `runtimeDependencies`. No source filesystem paths are persisted. The builder
@@ -155,4 +209,8 @@ launcher/lock scripts and mocked Windows evidence. They do not qualify the real
 launcher, DLL inventory, native ACLs, SYSTEM module search, deployment ancestry,
 API-key access, GPU initialization or task execution. Git/Codex and non-elevated
 Node remain unchanged. Production configuration save semantics and distinct
-secret/state roots remain migration decisions before activation.
+secret/state access policies remain migration decisions before activation. V2
+implements the separated path vocabulary described above; it does not provision
+those roots. Tests use temporary source copies, fixed synthetic launcher/lock
+fixtures (never an unrelated untracked launcher), mocked Windows evidence,
+staged enumeration guards and the existing lifecycle/ownership fixture assertions.
