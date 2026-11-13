@@ -38,8 +38,8 @@ function resolveDataPaths({ platform, env = {}, home, installationRoot, mode } =
     if (!root) {
         if (mode === 'installation') root = install;
         else if (mode === 'legacy-windows') root = 'C:\\AI';
-        else if (platform === 'win32') root = p.join(optional('LOCALAPPDATA') || p.join(absolute(home, 'home'), 'AppData', 'Local'), 'Renitech', 'Chatbot');
-        else if (platform === 'darwin') root = p.join(absolute(home, 'home'), 'Library', 'Application Support', 'Renitech', 'Chatbot');
+        else if (platform === 'win32') root = p.join(optional('LOCALAPPDATA') || p.join(absolute(home, 'home'), 'AppData', 'Local'), 'AIChatbot');
+        else if (platform === 'darwin') root = p.join(absolute(home, 'home'), 'Library', 'Application Support', 'AIChatbot');
         else root = p.join(optional('XDG_DATA_HOME') || p.join(absolute(home, 'home'), '.local', 'share'), 'renitech-chatbot');
     }
     // Legacy CHATBOT_HOME never relocated the installation-relative database or attachments.

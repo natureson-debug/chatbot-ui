@@ -33,12 +33,12 @@ Example path profile (not an activated configuration):
 
 ```json
 {
-  "scripts": "C:\\Program Files\\Renitech\\Watchdog\\releases\\v1",
-  "runtime": "C:\\Program Files\\Renitech\\Watchdog\\runtime\\b11609",
-  "executable": "C:\\Program Files\\Renitech\\Watchdog\\runtime\\b11609\\llama-server.exe",
-  "config": "C:\\ProgramData\\Renitech\\Watchdog\\config",
+  "scripts": "C:\\Program Files\\AIChatbot\\releases\\v1",
+  "runtime": "C:\\Program Files\\AIChatbot\\runtime\\b11609",
+  "executable": "C:\\Program Files\\AIChatbot\\runtime\\b11609\\llama-server.exe",
+  "config": "C:\\ProgramData\\AIChatbot\\config",
   "models": "C:\\ProtectedModels",
-  "logs": "C:\\ProgramData\\Renitech\\Watchdog\\state-and-logs"
+  "logs": "C:\\ProgramData\\AIChatbot\\state-and-logs"
 }
 ```
 

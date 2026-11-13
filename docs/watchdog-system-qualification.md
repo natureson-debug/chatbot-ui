@@ -19,7 +19,7 @@ Administrators/SYSTEM are trusted. No production permission is changed.
 $ErrorActionPreference = 'Stop'
 $repo = 'C:\AI\chatbot-ui'
 $id = [guid]::NewGuid().ToString('N')
-$qTask = 'Renitech-Watchdog-Observe-' + $id
+$qTask = 'AIChatbot-Watchdog-Observe-' + $id
 $qRoot = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) $qTask
 $qFiles = @('qualify-watchdog-system.ps1','chatbot-watchdog.ps1','chatbot-owned-backend.ps1','chatbot-backend-evidence.ps1')
 if (Test-Path -LiteralPath $qRoot) { throw 'Staging path already exists' }
@@ -105,7 +105,7 @@ refuses to terminate it. Run in the same session:
 
 ```powershell
 $expectedRoot = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) $qTask
-if ($qTask -notmatch '^Renitech-Watchdog-Observe-[0-9a-f]{32}$' -or $qRoot -cne $expectedRoot) { throw 'Cleanup path not verified' }
+if ($qTask -notmatch '^AIChatbot-Watchdog-Observe-[0-9a-f]{32}$' -or $qRoot -cne $expectedRoot) { throw 'Cleanup path not verified' }
 if ((Get-Item -LiteralPath $qRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unexpected staging reparse point' }
 $task = Get-ScheduledTask -TaskName $qTask -TaskPath '\' -ErrorAction SilentlyContinue
 if ($task) {

@@ -5,7 +5,7 @@ const { desktopEnvironment } = require('../desktop/environment.cjs');
 const { initialize } = require('../desktop/initialize.cjs');
 const { launchBackend } = require('../desktop/owned-backend.cjs');
 function fixture(t) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'renitech-desktop-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aichatbot-desktop-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     return root;
 }

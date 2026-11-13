@@ -30,7 +30,7 @@ function pdf(run){
  for(const [index,page] of pages.entries()){
   const id=objects.length;pageIds.push(id);
   objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${id+1} 0 R >>`);
-  const stream=`BT /F1 8 Tf 36 756 Td 14 TL (${escape('Renitech Benchmark report - '+(index+1))}) Tj T* `+page.map(s=>`(${escape(s)}) Tj T*`).join(' ')+' ET';
+  const stream=`BT /F1 8 Tf 36 756 Td 14 TL (${escape('AIChatbot Benchmark report - '+(index+1))}) Tj T* `+page.map(s=>`(${escape(s)}) Tj T*`).join(' ')+' ET';
   objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
  }
  // Four vector chart pages, using the same values and successful-measurement references.

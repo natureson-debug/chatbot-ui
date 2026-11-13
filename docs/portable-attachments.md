@@ -2,7 +2,7 @@
 
 ## Windows deployment policy (S4)
 
-Preferred data root: `%LOCALAPPDATA%\Renitech\Chatbot`, provisioned for and
+Preferred data root: `%LOCALAPPDATA%\AIChatbot`, provisioned for and
 owned/controlled by the intended application account. Unrelated local identities
 must have no write, delete, delete-child, WRITE_DAC or WRITE_OWNER authority on
 the root or ancestors that could permit replacement. Private attachment directories

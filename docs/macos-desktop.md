@@ -24,7 +24,7 @@ to recover a missing database: restore the intended data after review. Failed
 initialization may leave a reserved database requiring review; no automatic
 delete or retry occurs. Never run the initializer against legacy Windows data.
 
-Data lives at `~/Library/Application Support/Renitech/Chatbot`:
+Data lives at `~/Library/Application Support/AIChatbot`:
 SQLite in `data/chatbot.db`, attachments in `data/attachments`, provider and
 extension configuration in `config`. Electron also keeps its session files in
 this per-user directory. Nothing is copied from legacy storage. The desktop

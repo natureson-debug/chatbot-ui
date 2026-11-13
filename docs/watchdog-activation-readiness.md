@@ -43,7 +43,7 @@ if($task.Principal.UserId -notin @('SYSTEM','NT AUTHORITY\SYSTEM','S-1-5-18') -o
    $task.Actions[0].Arguments -cne '-NoProfile -ExecutionPolicy Bypass -File "C:\AI\scripts\chatbot-watchdog.ps1"') { throw 'Unexpected task definition' }
 if(@($task.Triggers).Count -ne 1 -or $task.Triggers[0].Repetition.Interval -ne 'PT2M') { throw 'Unexpected trigger' }
 if($task.Settings.RestartCount -ne 3 -or $task.Settings.RestartInterval -ne 'PT1M') { throw 'Retry settings differ; review before proceeding' }
-$checkpoint=Join-Path $env:LOCALAPPDATA ('Renitech\WatchdogCheckpoints\'+[guid]::NewGuid().ToString('N'))
+$checkpoint=Join-Path $env:LOCALAPPDATA ('AIChatbot\WatchdogCheckpoints\'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($checkpoint)
 $beforeXml=Export-ScheduledTask -TaskName $name -TaskPath '\'
 [IO.File]::WriteAllText((Join-Path $checkpoint 'task-before.xml'),$beforeXml)

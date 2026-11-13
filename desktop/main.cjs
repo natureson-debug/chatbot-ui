@@ -4,9 +4,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { launchBackend } = require('./owned-backend.cjs');
 let backend, window, quitting = false;
-app.setName('Renitech Chatbot');
+app.setName('AIChatbot');
 // Fixed identity before lock acquisition: no second owned backend for this desktop installation.
-app.setPath('userData', path.join(app.getPath('appData'), 'Renitech', 'Chatbot'));
+app.setPath('userData', path.join(app.getPath('appData'), 'AIChatbot'));
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
     app.on('second-instance', () => { window?.show(); window?.focus(); });

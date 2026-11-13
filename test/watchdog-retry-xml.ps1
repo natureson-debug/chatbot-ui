@@ -12,7 +12,7 @@ if((Remove-ChatbotTaskRetryPolicy $after) -cne $after){throw 'Transformation not
 Write-Output 'PASS: offline XML removal, preservation and idempotence.'
 if(-not $NativeTask){return}
 
-$name='Renitech-RetryXml-Test-'+[guid]::NewGuid().ToString('N')
+$name='AIChatbot-RetryXml-Test-'+[guid]::NewGuid().ToString('N')
 $created=$false; $running=$null
 try {
     $service=New-Object -ComObject 'Schedule.Service'; $service.Connect()

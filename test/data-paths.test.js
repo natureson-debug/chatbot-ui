@@ -31,12 +31,12 @@ test('existing CHATBOT_HOME does not relocate the legacy database or attachments
     assert.equal(result.models, 'D:\\existing\\models');
 });
 test('Windows per-user uses LOCALAPPDATA or explicit home', () => {
-    assert.equal(resolve({ ...windows, env: { LOCALAPPDATA: 'D:\\Local' } }).dataRoot, 'D:\\Local\\Renitech\\Chatbot');
-    assert.equal(resolve(windows).dataRoot, 'C:\\Users\\fixture\\AppData\\Local\\Renitech\\Chatbot');
+    assert.equal(resolve({ ...windows, env: { LOCALAPPDATA: 'D:\\Local' } }).dataRoot, 'D:\\Local\\AIChatbot');
+    assert.equal(resolve(windows).dataRoot, 'C:\\Users\\fixture\\AppData\\Local\\AIChatbot');
 });
 test('macOS uses Application Support, not Windows legacy paths', () => {
     const result = resolve({ ...linux, platform: 'darwin', home: '/Users/fixture' });
-    assert.equal(result.dataRoot, '/Users/fixture/Library/Application Support/Renitech/Chatbot');
+    assert.equal(result.dataRoot, '/Users/fixture/Library/Application Support/AIChatbot');
     assert.equal(result.database, result.dataRoot + '/data/chatbot.db');
 });
 test('Linux uses XDG_DATA_HOME or the standard per-user data directory', () => {

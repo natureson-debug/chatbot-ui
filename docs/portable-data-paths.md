@@ -35,11 +35,11 @@ There is deliberately no automatic installation detection or default mode.
 2. Existing absolute `CHATBOT_HOME` is the compatibility alias. If both are set,
    they must normalize to the same path (case-insensitive on Windows).
 3. Without an override, legacy Windows uses `C:\AI`. Per-user Windows uses
-   `LOCALAPPDATA\Renitech\Chatbot`, falling back to the supplied home directory's
-   `AppData\Local\Renitech\Chatbot` only when LOCALAPPDATA is absent.
-4. macOS uses `~/Library/Application Support/Renitech/Chatbot`.
-5. Linux uses `$XDG_DATA_HOME/renitech-chatbot`, or
-   `~/.local/share/renitech-chatbot` when XDG_DATA_HOME is absent.
+   `LOCALAPPDATA\AIChatbot`, falling back to the supplied home directory's
+   `AppData\Local\AIChatbot` only when LOCALAPPDATA is absent.
+4. macOS uses `~/Library/Application Support/AIChatbot`.
+5. Linux uses `$XDG_DATA_HOME/aichatbot`, or
+   `~/.local/share/aichatbot` when XDG_DATA_HOME is absent.
 6. Absolute `CHATBOT_DB_PATH` overrides the database path independently, including
    outside the selected root. It must never be silently ignored.
 

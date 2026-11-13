@@ -25,7 +25,7 @@ if (require.main === module) {
             process.stdout.write('Password (12+ characters, hidden): '); hidden = true;
             const password = await rl.question('');
             hidden = false; process.stdout.write('\n');
-            initialize(path.join(require('node:os').homedir(), 'Library', 'Application Support', 'Renitech', 'Chatbot'), username, password);
+            initialize(path.join(require('node:os').homedir(), 'Library', 'Application Support', 'AIChatbot'), username, password);
             console.log('Initialized new desktop database.');
         })().catch(() => { console.error('Initialization failed; existing files are never replaced. Review the data directory before retrying.'); process.exitCode = 1; }).finally(() => rl.close());
     }
