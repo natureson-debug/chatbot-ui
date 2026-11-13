@@ -40,8 +40,8 @@ test('macOS uses Application Support, not Windows legacy paths', () => {
     assert.equal(result.database, result.dataRoot + '/data/chatbot.db');
 });
 test('Linux uses XDG_DATA_HOME or the standard per-user data directory', () => {
-    assert.equal(resolve({ ...linux, env: { XDG_DATA_HOME: '/srv/user-data' } }).dataRoot, '/srv/user-data/renitech-chatbot');
-    assert.equal(resolve(linux).dataRoot, '/home/fixture/.local/share/renitech-chatbot');
+    assert.equal(resolve({ ...linux, env: { XDG_DATA_HOME: '/srv/user-data' } }).dataRoot, '/srv/user-data/aichatbot');
+    assert.equal(resolve(linux).dataRoot, '/home/fixture/.local/share/aichatbot');
 });
 test('ambiguous mode, unsupported platform and foreign legacy mode fail closed', () => {
     for (const options of [{ ...windows, mode: undefined }, { ...linux, mode: 'legacy-windows' }, { ...linux, platform: 'other' }]) {
