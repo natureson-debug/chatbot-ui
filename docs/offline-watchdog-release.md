@@ -77,6 +77,18 @@ Ownership validation retains the exact normalized key-file comparison. Marker
 creation, retention and deletion conditions remain unchanged. Evidence is a
 declared deployment resource only; no new producer or snapshot integration exists.
 
+V2 marker qualification (MP-GPU-03F-8D) requires exactly one approved assignment
+and a SHA-256 pin of the reviewed watchdog source skeleton (LF-normalized with
+that assignment replaced by a placeholder). This binds its executable context and
+CreateNew/Delete references, so comments, unrelated strings, suffixes, alternate
+filenames, duplicate assignments and changed references cannot satisfy the check.
+Other staged scripts may not introduce marker references. Any watchdog source
+layout change, even a comment change, needs explicit review and a deliberately
+updated skeleton pin; the builder never learns or updates the pin from input.
+V1 behavior is unchanged. For syntax-only qualification set
+`CHATBOT_RELEASE_PARSE_ONLY=1` when running the focused Node suite: three generated
+PowerShell behavior tests are skipped; parser-only checks still run.
+
 V1 manifests remain v1 and must have the legacy fields. V2 manifests require the
 new fields; changing only the schema number is rejected. No implicit conversion,
 live migration, directory creation or resource copying is performed. Manifest

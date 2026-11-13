@@ -37,7 +37,7 @@ test('transformed PowerShell scripts parse without execution',{skip:process.plat
  {env:{...process.env,RELEASE_TEST_ROOT:f.built.root},timeout:10000,windowsHide:true,encoding:'utf8'});
  assert.equal(r.status,0,'PowerShell parse failed');
 });
-test('actual staged enumeration guards enforce directory, executable, failures and restoration',{skip:process.platform!=='win32'},t=>{
+test('actual staged enumeration guards enforce directory, executable, failures and restoration',{skip:process.platform!=='win32'||process.env.CHATBOT_RELEASE_PARSE_ONLY==='1'},t=>{
  const f=fixture(t);
  const r=require('node:child_process').spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
  ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'staged-gpu-enumeration.ps1'),'-Release',f.built.root],
@@ -58,6 +58,27 @@ function v2plan(f){
  logsDirectory:'C:\\ProtectedData\\logs',stateDirectory:'C:\\ProtectedData\\state',evidenceDirectory:'C:\\ProtectedData\\evidence'}};
 }
 function resourceEvidence(r){return {...r,nativeVerified:true,nodeWriteDenied:true,ancestorsVerified:true,reparsePoint:false,replaceable:false,unauthorizedReadDenied:true};}
+for(const [name,change] of [
+ ['suffix',s=>s.replace('watchdog-recovery.pending\'','watchdog-recovery.pending.old\'')],
+ ['alternate',s=>s.replace('watchdog-recovery.pending','other.pending')],
+ ['comment-only',s=>s.replace('    $marker =','    # $marker =')],
+ ['missing',s=>s.replace(/^    \$marker = .*\r?\n/m,'')],
+ ['duplicate',s=>s.replace('    $timer =',"    $marker = 'C:\\AI\\logs\\watchdog-recovery.pending'\n    $timer =")],
+ ['conflicting',s=>s.replace('    $timer =',"    $marker = 'C:\\Other\\marker'\n    $timer =")],
+ ['block-comment',s=>'<#\n'+s+'\n#>'],
+ ['unrelated-string',s=>"$unrelated = @'\n"+s+"\n'@"],
+ ['changed-reference',s=>s.replace('[IO.File]::Delete($marker)','[IO.File]::Delete($other)')]
+]) test('v2 marker rejects '+name,t=>{
+ const f=fixture(t),p=v2plan(f),src=p.sources['chatbot-watchdog.ps1'];
+ fs.writeFileSync(src.path,change(fs.readFileSync(src.path,'utf8')));src.sha256=hash(fs.readFileSync(src.path));
+ assert.throws(()=>build(p,f.dir),/marker-source-unrecognized/);assert(!fs.existsSync(path.join(f.dir,'v2')));
+});
+test('marker strictness is v2 only; v1 manifest remains v1',t=>{
+ const f=fixture(t);assert.equal(JSON.parse(fs.readFileSync(path.join(f.built.root,'manifest.json'))).schemaVersion,1);
+ f.plan.releaseId='legacy';const src=f.plan.sources['chatbot-watchdog.ps1'];
+ fs.appendFileSync(src.path,'\n# legacy comment\n');src.sha256=hash(fs.readFileSync(src.path));
+ const b=build(f.plan,f.dir);assert(validate(b.root,b.manifestSha256,f.providers).valid);
+});
 test('v2 isolates every staged resource consumer and preserves source bytes',t=>{
  const f=fixture(t),p=v2plan(f),before=Object.values(p.sources).map(s=>hash(fs.readFileSync(s.path)));
  const b=build(p,f.dir),m=JSON.parse(fs.readFileSync(path.join(b.root,'manifest.json')));
@@ -98,7 +119,7 @@ test('v2 security evidence must attest exact role, type, SYSTEM rights and secre
  assert.equal(validate(b.root,b.manifestSha256,{...f.providers,inspectResourceSecurity}).reason,'security-unverified',field);
  }
 });
-test('v2 GPU enumeration and staged parsing remain compatible',{skip:process.platform!=='win32'},t=>{
+test('v2 GPU enumeration and staged parsing remain compatible',{skip:process.platform!=='win32'||process.env.CHATBOT_RELEASE_PARSE_ONLY==='1'},t=>{
  const f=fixture(t),b=build(v2plan(f),f.dir);
  const r=require('node:child_process').spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
  ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'staged-gpu-enumeration.ps1'),'-Release',b.root],{timeout:10000,windowsHide:true,encoding:'utf8'});
@@ -109,7 +130,7 @@ test('v2 missing resource consumer fails closed',t=>{
  fs.writeFileSync(s.path,fs.readFileSync(s.path,'utf8').replaceAll('c:\\ai\\config\\llama-api-key.txt','C:\\Unexpected\\key'));
  s.sha256=hash(fs.readFileSync(s.path));assert.throws(()=>build(p,f.dir),/resource-source-changed/);
 });
-test('v2 lifecycle ownership and recovery behavior remain compatible',{skip:process.platform!=='win32'},t=>{
+test('v2 lifecycle ownership and recovery behavior remain compatible',{skip:process.platform!=='win32'||process.env.CHATBOT_RELEASE_PARSE_ONLY==='1'},t=>{
  const f=fixture(t),p=v2plan(f),b=build(p,f.dir),dir=path.join(f.dir,'test');fs.mkdirSync(dir);
  const maps=[['C:\\AI\\config\\llama-api-key.txt',p.paths.apiKeyFile],['C:\\AI\\config\\chatbot-ai-config.json',p.paths.configFile],
  ['C:\\Users\\Admin\\Downloads\\Chatbot-upgrade-17E2-20261015\\llama-b11609-cuda12.4\\llama-server.exe',p.paths.executable],

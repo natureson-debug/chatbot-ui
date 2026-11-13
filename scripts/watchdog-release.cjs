@@ -58,6 +58,21 @@ function transformPaths(text,p,version) {
     return match===match.toLowerCase()?target.toLowerCase():target;
   });
 }
+function verifyMarkerSource(name,text) {
+  if(name!=='chatbot-watchdog.ps1') {
+    if(/watchdog-recovery|\$marker\b/i.test(text))fail('marker-source-unrecognized');
+    return;
+  }
+  const normalized=text.replace(/\r\n/g,'\n');
+  const assignment=/^    \$marker = 'C:\\AI\\logs\\watchdog-recovery\.pending'$/gm;
+  if(Array.from(normalized.matchAll(assignment)).length!==1)fail('marker-source-unrecognized');
+  // Reviewed source skeleton pins executable context, not just matching text.
+  // It binds the assignment to Invoke-ChatbotWatchdog and its CreateNew/Delete
+  // references. Comments/strings, extra assignments or changed layouts require
+  // explicit source review; never automatically regenerate this pin at build time.
+  const skeleton=normalized.replace(assignment,'    <APPROVED_MARKER_ASSIGNMENT>');
+  if(hash(skeleton)!=='fa0912fca0dcc74999f5e430523124461f9d7bb2f27cf4dae196845f48e4275f')fail('marker-source-unrecognized');
+}
 function dependencies(ds,p) {
   if(!Array.isArray(ds)||!ds.length||ds.length>128)fail('missing-runtime-dependency');
   const seen=new Set();
@@ -102,6 +117,7 @@ function build(plan, temporaryParent) {
     if(hash(b)!==src.sha256)fail('source-hash-mismatch');
     let text=b.toString('utf8');secretCheck(text);
     if(plan.schemaVersion===2){
+      verifyMarkerSource(name,text);
       const required={
         'chatbot-watchdog.ps1':['config\\chatbot-ai-config.json','config\\llama-api-key.txt','logs\\watchdog.log','logs\\watchdog-recovery.pending'],
         'Restart-ChatbotAI.ps1':['config\\chatbot-ai-config.json','config\\llama-api-key.txt'],
