@@ -1,13 +1,21 @@
 'use strict';
 // REL-01: offline development packaging only; never import application startup.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),cp=require('node:child_process');
-const repo=path.resolve(__dirname,'..'),dist=path.join(repo,'dist'),out=path.join(dist,'AIChatbot-1.0.0-win-x64');
+const optimized=process.argv.includes('--optimized');
+if(process.argv.slice(2).some(a=>a!=='--optimized'))throw Error('Usage: node scripts/build-windows-release.cjs [--optimized]');
+const repo=path.resolve(__dirname,'..'),dist=path.join(repo,'dist'),out=path.join(dist,'AIChatbot-1.0.0-win-x64'+(optimized?'-optimized':''));
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const git=(...args)=>cp.execFileSync('git',args,{cwd:repo,encoding:'utf8'}).trim();
 const excluded=new Set(['test','tests','__tests__','fixtures','__fixtures__','example','examples','benchmark','benchmarks','.git','.github','.cache','coverage','node_modules']);
 const forbidden=/(^|\/)(?:\.env(?:\..*)?|[^/]*\.(?:db|sqlite|sqlite3|gguf|log|pem|key|pfx|p12|bak|tmp)|chatbot-(?:ai-config|connections|extensions)\.json)$/i;
 const testFile=n=>/^(?:tests?|spec)(?:[.-]|$)|\.(?:test|spec)[.-]/i.test(n);
-const files=[],packages=[];
+const files=[],packages=[],omitted=[];
+function removable(name){
+ if(/\.d\.(ts|mts|cts)$/.test(name))return 'declarations';
+ if(/\.(?:js|mjs|cjs|d\.ts)\.map$/.test(name))return 'source maps';
+ if(/^(?:readme|changelog|changes|history|contributing|code_of_conduct)(?:\.|$)/i.test(name))return 'documentation';
+ return null;
+}
 function safe(p){if(fs.lstatSync(p).isSymbolicLink())throw Error('Symlink/reparse source refused: '+p);}
 function put(relative,bytes){
  if(forbidden.test(relative))throw Error('Forbidden payload file: '+relative);
@@ -16,10 +24,14 @@ function put(relative,bytes){
  fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes,{flag:'wx'});
  files.push({path:relative.replaceAll('\\','/'),bytes:bytes.length,sha256:hash(bytes)});
 }
-function copyTree(source,relative){safe(source);for(const e of fs.readdirSync(source,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en'))){
+function copyTree(source,relative,metadata=''){safe(source);for(const e of fs.readdirSync(source,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en'))){
  if(excluded.has(e.name.toLowerCase())||e.name.startsWith('.')||testFile(e.name))continue;
  const p=path.join(source,e.name),r=relative+'/'+e.name;safe(p);
- if(e.isDirectory())copyTree(p,r);else if(e.isFile()&&!forbidden.test(r))put(r,fs.readFileSync(p));
+ if(e.isDirectory())copyTree(p,r,metadata);else if(e.isFile()&&!forbidden.test(r)){
+ const category=optimized&&removable(e.name);
+ // Preserve explicit metadata references (including types/exports), notices and all runtime bytes.
+ if(category&&!metadata.includes(e.name)){omitted.push({path:r,category,bytes:fs.statSync(p).size});continue;}
+ put(r,fs.readFileSync(p));}
 }}
 function build(){
  if(process.platform!=='win32'||process.arch!=='x64')throw Error('Build requires Windows x64 dependency installation');
@@ -40,7 +52,7 @@ function build(){
   if(!loc.startsWith('node_modules/')||loc.includes('..')||entry.link)throw Error('Unsupported dependency layout');
   const dir=path.join(repo,loc);safe(dir);const installed=JSON.parse(fs.readFileSync(path.join(dir,'package.json')));
   if(installed.version!==entry.version)throw Error('Installed dependency version mismatch: '+loc);
-  copyTree(dir,loc);packages.push({path:loc,name:installed.name,version:installed.version,license:installed.license||'UNSPECIFIED',lockIntegrity:entry.integrity||null});
+  copyTree(dir,loc,JSON.stringify(installed));packages.push({path:loc,name:installed.name,version:installed.version,license:installed.license||'UNSPECIFIED',lockIntegrity:entry.integrity||null});
  }
  const readme=`# AIChatbot 1.0.0 — Windows x64 development payload
 
@@ -83,7 +95,9 @@ Cloud gates and credential behavior are unchanged. No runtime connectivity was t
 
 ## Reproducibility and limitations
 
-Build command: node scripts/build-windows-release.cjs in the source workspace.
+Build command: node scripts/build-windows-release.cjs${optimized?' --optimized':''} in the source workspace.
+Optimized mode removes dependency declarations, debugging maps and documentation only;
+explicit package-metadata filename references, licenses/notices and runtime assets remain.
 Requires installed lockfile-matching Windows x64 production dependencies; no network install
 or lifecycle scripts are run by packaging. Only compatible lock entries are copied; dependency
 tests/examples/cache are omitted. Installed bytes are hashed, not independently authenticated
@@ -97,6 +111,7 @@ not valid. Native module loading, first-run and browser acceptance require a lat
  for(const n of ['server.js','db.js','auth.js','setup-admin.js','scripts/initialize-database.cjs','core/database-schema.js','core/provider-presets.json','public/index.html','public/admin.html','public/app.js','public/style.css','node_modules/@modelcontextprotocol/sdk/package.json','node_modules/@napi-rs/canvas-win32-x64-msvc/package.json'])if(!fs.existsSync(path.join(out,n)))throw Error('Required asset missing: '+n);
  for(const f of files)if(forbidden.test(f.path)||testFile(path.basename(f.path))||f.path.split('/').some(x=>excluded.has(x.toLowerCase())&&x!=='node_modules'))throw Error('Excluded content present: '+f.path);
  const manifest={schemaVersion:1,name:'AIChatbot',version:'1.0.0',target:'win32-x64',developmentOnly:true,sourceCommit:git('rev-parse','HEAD'),sourceChanges:git('status','--porcelain','--',...application),nodePrerequisite:'24.x x64',nodeBundled:false,buildNode:process.version,dependencies:packages,checks:{build:'PASS',requiredAssets:'PASS',allowlistAndSecretPatternInspection:'PASS'},limitations:['Pattern scanning cannot prove absence of arbitrary secrets','Installed dependency contents are pinned by payload hashes, not npm archive authentication','No application startup or native module execution performed'],files:files.sort((a,b)=>a.path.localeCompare(b.path,'en'))};
+ manifest.optimized=optimized;manifest.omitted=omitted;
  fs.writeFileSync(path.join(out,'packaging-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
  console.log(JSON.stringify({directory:out,fileCount:files.length+1,bytes:files.reduce((n,f)=>n+f.bytes,0)+fs.statSync(path.join(out,'packaging-manifest.json')).size,productionPackages:packages.length,checks:manifest.checks},null,2));
 }
