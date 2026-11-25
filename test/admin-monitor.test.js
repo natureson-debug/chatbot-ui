@@ -18,3 +18,25 @@ test('authorization failure clears cached readings and stops polling',async()=>{
 test('network failure labels retained values historical; pause stops polling',async()=>{let ok=true;const f=setup(async()=>{if(!ok)throw Error('secret');return {ok:true,json:async()=>sample()};});await f.monitor.poll();ok=false;await f.monitor.poll();assert(f.nodes.monitorStatus.textContent.includes('historical'));assert(!f.nodes.monitorStatus.textContent.includes('secret'));f.nodes.monitorToggle.handlers.click();assert.equal(f.timers.size,0);f.monitor.dispose();});
 test('refresh-rate select is disabled while running and enabled while paused',async()=>{const f=setup(async()=>({ok:true,json:async()=>sample()}));assert.equal(f.nodes.monitorRefreshRate.disabled,true);f.nodes.monitorToggle.handlers.click();assert.equal(f.nodes.monitorRefreshRate.disabled,false);f.nodes.monitorToggle.handlers.click();assert.equal(f.nodes.monitorRefreshRate.disabled,true);f.monitor.dispose();});
 test('poll uses the selected refresh interval',async()=>{const f=setup(async()=>({ok:true,json:async()=>sample()}));f.nodes.monitorRefreshRate.value='10';await f.monitor.poll();const scheduled=[...f.timers.values()].map(timer=>timer.ms);assert(scheduled.includes(10000));f.monitor.dispose();});
+test('real-time chart formats the observation timestamp once and can return from history',async()=>{
+ class Node {
+  constructor(){this.children=[];this.handlers={};this.textContent='';this.style={};}
+  append(...nodes){this.children.push(...nodes);}
+  appendChild(node){this.append(node);}
+  replaceChildren(...nodes){this.children=nodes;}
+  addEventListener(name,fn){this.handlers[name]=fn;}
+  setAttribute(){}
+ }
+ const nodes=Object.fromEntries(['monitorStatus','monitorCards','monitorCharts','monitorToggle','monitorRefreshRate','monitorTimeRange'].map(id=>[id,new Node()]));
+ const find=(node,id)=>node.id===id?node:node.children.map(child=>find(child,id)).find(Boolean);
+ const document={hidden:false,getElementById:id=>nodes[id]||find(nodes.monitorCharts,id),createElement:()=>new Node(),createElementNS:()=>new Node(),addEventListener(){}};
+ const observation=sample(1);
+ const monitor=createAdminMonitor({document,fetch:async url=>({ok:true,json:async()=>url.includes('history')?{samples:[]}:{sample:observation,source:'test'}}),setTimer:()=>1,clearTimer(){}});
+ monitor.poll();await new Promise(setImmediate);
+ assert(text(nodes.monitorCharts).includes(new Date(observation.sampledAt).toLocaleTimeString()));
+ assert(!text(nodes.monitorCharts).includes('Invalid Date'));
+ nodes.monitorTimeRange.handlers.change({target:{value:'5m'}});await new Promise(setImmediate);
+ nodes.monitorTimeRange.handlers.change({target:{value:'realtime'}});await new Promise(setImmediate);
+ assert(text(nodes.monitorCharts).includes(new Date(observation.sampledAt).toLocaleTimeString()));
+ monitor.dispose();
+});

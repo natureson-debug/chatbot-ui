@@ -621,6 +621,29 @@
             </select>
         </label>
     </div>
+    <div class="field-group">
+        <label for="benchmarkYaml">Import a custom benchmark (YAML)</label>
+        <input id="benchmarkYaml" type="file" accept=".yaml,.yml,application/yaml,text/yaml">
+        <button id="benchmarkClearYaml" type="button" disabled>Clear custom prompts</button>
+        <p id="benchmarkYamlStatus" role="status">No custom prompts loaded.</p>
+        <details>
+            <summary>Example YAML</summary>
+            <pre>name: Custom benchmark
+target: local-llama
+promptTokenTarget: 256
+outputTokenLimit: 128
+repetitions: 2
+warmupRepetitions: 1
+concurrency: 1
+temperature: 0.2
+seed: null
+timeoutMs: 30000
+prompts:
+  - "Summarize how a database index works."
+  - "Explain the difference between latency and throughput."</pre>
+            <p>Up to 10 prompts, each at most 4,096 characters. Measurement repetitions must cover all prompts. Prompts are sent to the local model but are not saved.</p>
+        </details>
+    </div>
     <form id="benchmarkForm" class="benchmark-form">
         <div class="field-group">
             <label for="benchmarkName">Benchmark name</label>
@@ -635,7 +658,7 @@
         <div class="field-group">
             <label for="benchmarkPromptTokens">Prompt token target (32-2048)</label>
             <input id="benchmarkPromptTokens" name="promptTokenTarget" type="number" min="32" max="2048" step="1" value="256" required>
-            <small>The deterministic prompt is sized toward this target; actual server-reported input tokens are shown in results.</small>
+            <small>The generated prompt is sized toward this target. Custom prompts are used as written; actual server-reported input tokens are shown in results.</small>
         </div>
         <div class="field-group">
             <label for="benchmarkOutputTokens">Output token limit (1-1024)</label>
@@ -665,7 +688,7 @@
         </div>
         <div class="field-group">
             <label for="benchmarkTimeout">Per-request timeout (seconds)</label>
-            <input id="benchmarkTimeout" name="timeoutSeconds" type="number" min="1" max="120" step="1" value="30" required>
+            <input id="benchmarkTimeout" name="timeoutSeconds" type="number" min="1" max="120" step="0.001" value="30" required>
         </div>
         <div class="benchmark-form-actions">
             <button id="benchmarkStart" type="submit" class="primary-btn">Start benchmark</button>
@@ -677,7 +700,7 @@
         <progress id="benchmarkProgress" max="1" value="0">0%</progress>
         <span id="benchmarkProgressLabel">0 / 0 repetitions</span>
     </div>
-    <div class="benchmark-results" aria-live="polite">
+    <div id="benchmarkResultsPanel" class="benchmark-results" aria-live="polite" hidden>
         <h3>Results summary</h3>
         <dl id="benchmarkSummary" class="benchmark-summary">
             <div><dt>Model</dt><dd id="benchmarkModel">Unavailable</dd></div>
@@ -700,20 +723,24 @@
             <button id="benchmarkExportXlsx" type="button" disabled>Export Excel</button>
             <button id="benchmarkExportPdf" type="button" disabled>Export PDF</button>
         </div>
-        <section id="benchmarkAnalytics" aria-label="Benchmark analytics">
+    </div>
+    <section id="benchmarkAnalytics" aria-label="Benchmark analytics">
+        <div id="benchmarkCurrentAnalytics" hidden>
             <h3>Analytics</h3>
             <p>Measured successes determine averages and medians. Warm-ups are gray; measurements are blue. Dashed references show average and median. Missing values are unavailable.</p>
-            <label for="benchmarkMetric">Metric</label>
-            <select id="benchmarkMetric"></select>
-            <div id="benchmarkChart" aria-live="polite"></div>
-            <h3>Historical comparison</h3>
-            <label for="benchmarkCompareSelect">Select two to six saved runs (Ctrl/Command-click or Shift-click)</label>
-            <select id="benchmarkCompareSelect" multiple size="6"></select>
-            <p id="benchmarkCompareWarning" role="status"></p>
+        </div>
+        <label for="benchmarkMetric">Metric</label>
+        <select id="benchmarkMetric"></select>
+        <div id="benchmarkChart" aria-live="polite"></div>
+        <h3>Historical comparison</h3>
+        <label for="benchmarkCompareSelect">Select two to six saved runs (Ctrl/Command-click or Shift-click)</label>
+        <select id="benchmarkCompareSelect" multiple size="6"></select>
+        <p id="benchmarkCompareWarning" role="status"></p>
+        <div id="benchmarkComparisonReport" hidden>
             <div class="benchmark-table-wrap" tabindex="0" role="region" aria-label="Historical benchmark comparison"><table class="benchmark-table" id="benchmarkComparison"></table></div>
             <div id="benchmarkCompareChart" aria-live="polite"></div>
-        </section>
-    </div>
+        </div>
+    </section>
 </section>
 
 <section

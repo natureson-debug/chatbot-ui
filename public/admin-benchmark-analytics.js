@@ -10,6 +10,8 @@ function createBenchmarkAnalyticsUI(document) {
  const table=document.getElementById('benchmarkComparison');
  const comparisonChart=document.getElementById('benchmarkCompareChart');
  const warning=document.getElementById('benchmarkCompareWarning');
+ const currentAnalytics=document.getElementById('benchmarkCurrentAnalytics');
+ const comparisonReport=document.getElementById('benchmarkComparisonReport');
  const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
  for(const [key,label] of Object.entries(A.metrics)){const o=node('option',label);o.value=key;metric.append(o);}
  function bars(container,points,references={}){
@@ -27,9 +29,12 @@ function createBenchmarkAnalyticsUI(document) {
  }
  function draw(){
   const key=metric.value||Object.keys(A.metrics)[0];
+  currentAnalytics.hidden=!current;
   if(current)bars(chart,(current.results||[]).map(r=>({label:`${r.repetition}: ${r.phase} / ${r.status}`,value:r[key],warmup:r.phase==='warmup'})),A.stats(current,key));
+  else chart.replaceChildren();
   const selected=new Set(Array.from(choices.selectedOptions).map(o=>o.value));
   const compare=runs.filter(r=>selected.has(r.runId));table.replaceChildren();comparisonChart.replaceChildren();
+  comparisonReport.hidden=compare.length<2||compare.length>6;
   warning.textContent=compare.length<2?'Select two to six saved runs to compare.':A.warnings(compare).join(' ');
   if(compare.length<2)return;
   if(compare.length>6){warning.textContent='Select at most six runs for a readable comparison.';return;}
@@ -45,6 +50,6 @@ function createBenchmarkAnalyticsUI(document) {
   bars(comparisonChart,compare.map(r=>({label:r.name+' / '+r.runId,value:A.stats(r,key).average})));
  }
  metric.addEventListener('change',draw);choices.addEventListener('change',draw);
- return {render(run){current=run;draw();},setRuns(next){const selected=new Set(Array.from(choices.selectedOptions).map(o=>o.value));runs=next.filter(r=>!['running','queued'].includes(r.status));choices.replaceChildren();for(const r of runs){const o=node('option',r.name+' / '+r.createdAt+' / '+r.status);o.value=r.runId;o.selected=selected.has(r.runId);choices.append(o);}draw();}};
+ return {render(run){current=run;draw();},reset(){current=null;for(const option of choices.options)option.selected=false;draw();},setRuns(next){const selected=new Set(Array.from(choices.selectedOptions).map(o=>o.value));runs=next.filter(r=>!['running','queued'].includes(r.status));choices.replaceChildren();for(const r of runs){const o=node('option',r.name+' / '+r.createdAt+' / '+r.status);o.value=r.runId;o.selected=selected.has(r.runId);choices.append(o);}draw();}};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={createBenchmarkAnalyticsUI};

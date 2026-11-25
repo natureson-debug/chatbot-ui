@@ -38,11 +38,12 @@ test('history and all report formats reject anonymous/non-admin/revoked sessions
 });
 test('analytics UI switches metrics and compares history using text-only rendering',()=>{
  const {createBenchmarkAnalyticsUI}=require('../public/admin-benchmark-analytics');
- class Element {constructor(){this.children=[];this.style={};this.listeners={};this.value='';this.selected=false;} append(...x){this.children.push(...x)} replaceChildren(...x){this.children=x} addEventListener(n,fn){this.listeners[n]=fn} get selectedOptions(){return this.children.filter(o=>o.selected)} }
- const ids=['benchmarkAnalytics','benchmarkMetric','benchmarkCompareSelect','benchmarkChart','benchmarkComparison','benchmarkCompareChart','benchmarkCompareWarning'];
+ class Element {constructor(){this.children=[];this.style={};this.listeners={};this.value='';this.selected=false;} append(...x){this.children.push(...x)} replaceChildren(...x){this.children=x} addEventListener(n,fn){this.listeners[n]=fn} get options(){return this.children} get selectedOptions(){return this.children.filter(o=>o.selected)} }
+ const ids=['benchmarkAnalytics','benchmarkMetric','benchmarkCompareSelect','benchmarkChart','benchmarkComparison','benchmarkCompareChart','benchmarkCompareWarning','benchmarkCurrentAnalytics','benchmarkComparisonReport'];
  const elements=Object.fromEntries(ids.map(id=>[id,new Element()]));const document={getElementById:id=>elements[id],createElement:()=>new Element()};
  globalThis.BenchmarkAnalytics=A;
  try {const ui=createBenchmarkAnalyticsUI(document);ui.setRuns([run,{...run,runId:'other',model:'different'}]);ui.render(run);
+ assert.equal(elements.benchmarkComparisonReport.hidden,true);
  assert.equal(elements.benchmarkChart.children.length,run.results.length+1);
  elements.benchmarkMetric.value='durationMs';elements.benchmarkMetric.listeners.change();
  assert.match(elements.benchmarkChart.children[0].textContent,/200.00/);
@@ -52,8 +53,10 @@ test('analytics UI switches metrics and compares history using text-only renderi
  const refs=elements.benchmarkChart.children[2].children[1].children.slice(1);
  assert.equal(refs.length,2);assert(refs.every(r=>r.title.endsWith('200.00')));
  elements.benchmarkCompareSelect.children.forEach(o=>o.selected=true);elements.benchmarkCompareSelect.listeners.change();
+ assert.equal(elements.benchmarkComparisonReport.hidden,false);
  assert.equal(elements.benchmarkComparison.children.length,3);assert.match(elements.benchmarkCompareWarning.textContent,/tokenizers/);
  assert.match(elements.benchmarkComparison.children[1].children[0].textContent,/unsafe <name>/);
+ ui.reset();assert.equal(elements.benchmarkComparisonReport.hidden,true);assert.equal(elements.benchmarkChart.children.length,0);
  }finally{delete globalThis.BenchmarkAnalytics;}
 });
 test('XLSX worksheet XML has numeric summary values and complete results',async()=>{

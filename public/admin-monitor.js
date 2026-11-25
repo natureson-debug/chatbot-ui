@@ -6,7 +6,8 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
     let paused=false,stopped=false,inFlight=false,timer=null,controller=null,epoch=0,lastSampleTime=null;
     let currentTimeRange='realtime',historyData=[],gpuDevices=[];
     let realtimeData={},realtimeTimer=null;
-    const realtimeMaxSamples=60,realtimeBuffers={};
+    const realtimeMaxSamples=60;
+    let realtimeBuffers={};
     
     const format=(n,unit='')=>typeof n==='number'&&Number.isFinite(n)?`${n.toLocaleString(undefined,{maximumFractionDigits:1})}${unit}`:'Unavailable';
     const refreshMs=()=>{
@@ -157,7 +158,8 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             const text=document.createElementNS('http://www.w3.org/2000/svg','text');
             text.setAttribute('x',x);text.setAttribute('y',h+25);text.setAttribute('text-anchor','middle');
             text.setAttribute('font-size','11');text.setAttribute('fill','#666');
-            text.textContent=new Date(p.time).toLocaleTimeString();group.appendChild(text);
+            const date=new Date(p.time);
+            text.textContent=Number.isNaN(date.getTime())?'Unavailable':date.toLocaleTimeString();group.appendChild(text);
         });
         
         svg.appendChild(group);
@@ -166,7 +168,7 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
     
     function addRealtimeSample(sample){
         if(!sample||!sample.gpu||!sample.gpu.devices)return;
-        const now=Date.now();
+        const now=Date.parse(sample.sampledAt);
         for(const gpu of sample.gpu.devices){
             const key=`gpu_${gpu.uuid||gpu.name||'unknown'}`;
             if(!realtimeBuffers[key]){
@@ -199,25 +201,25 @@ function createAdminMonitor({document,fetch,setTimer=setTimeout,clearTimer=clear
             if(buf.util.length>0){
                 const div=document.createElement('div');div.id=`rt-util-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
-                containerDivs.push({id:div.id,title:`${buf.name} Utilization`,data:buf.util.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:100,fmt:n=>`${n}%`,yLabel:'%'});
+                containerDivs.push({id:div.id,title:`${buf.name} Utilization`,data:buf.util.map(p=>({time:p.t,value:p.v})),yMax:100,fmt:n=>`${n}%`,yLabel:'%'});
             }
             if(buf.temp.length>0){
                 const div=document.createElement('div');div.id=`rt-temp-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxTemp=Math.max(...buf.temp.map(p=>p.v||0),100);
-                containerDivs.push({id:div.id,title:`${buf.name} Temperature`,data:buf.temp.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxTemp,fmt:n=>`${n}°C`,yLabel:'°C'});
+                containerDivs.push({id:div.id,title:`${buf.name} Temperature`,data:buf.temp.map(p=>({time:p.t,value:p.v})),yMax:maxTemp,fmt:n=>`${n}°C`,yLabel:'°C'});
             }
             if(buf.power.length>0){
                 const div=document.createElement('div');div.id=`rt-power-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxPower=Math.max(...buf.power.map(p=>p.v||0),500);
-                containerDivs.push({id:div.id,title:`${buf.name} Power`,data:buf.power.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxPower,fmt:n=>`${n}W`,yLabel:'W'});
+                containerDivs.push({id:div.id,title:`${buf.name} Power`,data:buf.power.map(p=>({time:p.t,value:p.v})),yMax:maxPower,fmt:n=>`${n}W`,yLabel:'W'});
             }
             if(buf.vram.length>0){
                 const div=document.createElement('div');div.id=`rt-vram-${key}`;div.className='monitor-chart-container';
                 gpuSection.appendChild(div);
                 const maxVram=Math.max(...buf.vram.map(p=>p.v||0),24576);
-                containerDivs.push({id:div.id,title:`${buf.name} VRAM`,data:buf.vram.map(p=>({time:new Date(p.t).toLocaleTimeString(),value:p.v})),yMax:maxVram,fmt:n=>`${(n/1024).toFixed(1)}GiB`,yLabel:'GiB'});
+                containerDivs.push({id:div.id,title:`${buf.name} VRAM`,data:buf.vram.map(p=>({time:p.t,value:p.v})),yMax:maxVram,fmt:n=>`${(n/1024).toFixed(1)}GiB`,yLabel:'GiB'});
             }
             chartsContainer.appendChild(gpuSection);
             containerDivs.forEach(c=>renderChart(c.id,c.title,c.data,c.yLabel,c.yMax,c.fmt));

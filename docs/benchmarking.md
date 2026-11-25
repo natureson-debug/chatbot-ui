@@ -19,10 +19,45 @@ the Prometheus `/metrics` endpoint.
   request; it never terminates llama.cpp.
 - Limits are 32–2,048 prompt target tokens, 1–1,024 output tokens, 1–20
   measurement repetitions, 0–5 warm-ups, concurrency 1, and 1–120 seconds per
-  request. The bounded prompt is deterministic and contains no user content.
+  request. The default prompt is deterministic; imported YAML can instead
+  supply bounded custom prompts.
 - Prompts, generated responses, API keys, and raw upstream errors are not
   persisted. Only configuration, sanitized run metadata, and measurements are
   stored.
+
+## Import a custom test
+
+Select a `.yaml` or `.yml` file in the Benchmark tab. Import validates the file
+and fills the form; it does not start a run. Review the settings and click
+Start benchmark. Clear custom prompts to return to the generated prompt.
+Files are limited to 64 KiB. The following example shows the supported fields
+(`seed` may be omitted):
+
+```yaml
+name: Custom benchmark
+target: local-llama
+promptTokenTarget: 256
+outputTokenLimit: 128
+repetitions: 2
+warmupRepetitions: 1
+concurrency: 1
+temperature: 0.2
+seed: null
+timeoutMs: 30000
+prompts:
+  - "Summarize how a database index works."
+  - "Explain the difference between latency and throughput."
+```
+
+Provide 1–10 nonempty prompts of at most 4,096 characters each; their JSON
+encoding must not exceed 48,000 bytes. Measurement repetitions must be at least
+the number of prompts. Warm-ups and measurements each cycle independently
+through the prompts in order; one request is sent per repetition. With custom
+prompts, `promptTokenTarget` does not truncate or size the prompt; actual token
+counts depend on the model. The same execution and cancellation limits apply.
+Prompt text is sent to the local inference server but is not saved in benchmark
+storage or reports. Only the custom-prompt mode and count are recorded, so
+historical comparisons cannot establish that two custom workloads were equal.
 
 ## Measurements
 

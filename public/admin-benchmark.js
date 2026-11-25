@@ -14,6 +14,10 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
     const exportCsv = document.getElementById('benchmarkExportCsv');
     const exportXlsx = document.getElementById('benchmarkExportXlsx');
     const exportPdf = document.getElementById('benchmarkExportPdf');
+    const resultsPanel = document.getElementById('benchmarkResultsPanel');
+    const yamlInput = document.getElementById('benchmarkYaml');
+    const yamlStatus = document.getElementById('benchmarkYamlStatus');
+    const clearYaml = document.getElementById('benchmarkClearYaml');
     const analytics = typeof createBenchmarkAnalyticsUI === 'function' ? createBenchmarkAnalyticsUI(document) : null;
     let activeRunId = null;
     let selectedRunId = null;
@@ -21,6 +25,11 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
     let timer = null;
     let loading = false;
     let stopped = false;
+    let selectionVersion = 0;
+    let importVersion = 0;
+    let customPrompts = null;
+    let importBlocked = false;
+    let benchmarkTabOpen = !panel.hidden;
     const observedRuns = new Set();
 
     function notify(severity, title, message) {
@@ -78,11 +87,14 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
 
     function render(run) {
         if (!run) return;
+        if (resultsPanel) resultsPanel.hidden = false;
+        let finishedObservedRun = false;
         selectedRunId = run.runId;
         activeRunId = ['queued', 'running'].includes(run.status) ? run.runId : null;
         if (activeRunId) observedRuns.add(run.runId);
         else if (observedRuns.has(run.runId) && ['completed', 'failed', 'cancelled'].includes(run.status)) {
             observedRuns.delete(run.runId);
+            finishedObservedRun = true;
             const outcomes = {
                 completed: ['success', 'Benchmark completed', 'Benchmark completed. Results are available in the Benchmark tab.'],
                 failed: ['error', 'Benchmark failed', 'Benchmark failed. Review the repetition error categories.'],
@@ -142,8 +154,29 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
         if (exportXlsx) exportXlsx.disabled = run.status !== 'completed';
         if (exportPdf) exportPdf.disabled = run.status !== 'completed';
         analytics?.render(run);
+        if (finishedObservedRun && active()) {
+            void loadRuns().catch(() => {
+                if (active()) setStatus('Benchmark finished, but history could not be refreshed.');
+            });
+        }
         if (activeRunId && active()) schedulePoll();
         else clearPoll();
+    }
+
+    function clearSelection() {
+        selectionVersion++;
+        selectedRunId = null;
+        runSelect.value = '';
+        resultsBody.replaceChildren();
+        if (resultsPanel) resultsPanel.hidden = true;
+        exportJson.disabled = true;
+        exportCsv.disabled = true;
+        if (exportXlsx) exportXlsx.disabled = true;
+        if (exportPdf) exportPdf.disabled = true;
+        progress.value = 0;
+        progressLabel.textContent = '0 / 0 repetitions';
+        analytics?.render(null);
+        setStatus('No benchmark selected.');
     }
 
     function schedulePoll() {
@@ -163,9 +196,11 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
     async function refreshRun() {
         if (!active() || loading || !selectedRunId) return;
         loading = true;
+        const runId = selectedRunId;
+        const version = selectionVersion;
         try {
-            const data = await request(`/api/admin/benchmarks/${encodeURIComponent(selectedRunId)}`);
-            if (active()) render(data.run);
+            const data = await request(`/api/admin/benchmarks/${encodeURIComponent(runId)}`);
+            if (active() && version === selectionVersion && selectedRunId === runId) render(data.run);
         } catch (error) {
             if (active()) {
                 if (error.status === 401) {
@@ -185,7 +220,7 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
         }
     }
 
-    async function loadRuns(selectLatest = false, preferredRunId = null) {
+    async function loadRuns(preferredRunId = null) {
         const data = await request('/api/admin/benchmarks?limit=50');
         analytics?.setRuns(data.runs || []);
         const current = runSelect.value;
@@ -200,7 +235,7 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
             option.textContent = `${run.name} · ${new Date(run.createdAt).toLocaleString()} · ${run.status}`;
             runSelect.append(option);
         }
-        const chosen = preferredRunId || (selectLatest ? data.runs?.[0]?.runId : current || selectedRunId);
+        const chosen = preferredRunId || current || selectedRunId;
         if (chosen) {
             runSelect.value = chosen;
             const run = (data.runs || []).find(item => item.runId === chosen);
@@ -212,7 +247,7 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
         if (!active() || initialized) return;
         initialized = true;
         try {
-            await loadRuns(true);
+            await loadRuns();
             if (!selectedRunId) setStatus('Ready. Starting a benchmark will send requests to the local inference server.');
         } catch (error) {
             initialized = false;
@@ -220,9 +255,66 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
         }
     }
 
+    if (yamlInput && yamlStatus && clearYaml) {
+        yamlInput.addEventListener('change', async () => {
+            const version = ++importVersion;
+            customPrompts = null;
+            const file = yamlInput.files?.[0];
+            importBlocked = !!file;
+            clearYaml.disabled = !file;
+            if (!file) {
+                yamlStatus.textContent = 'No custom prompts loaded.';
+                return;
+            }
+            if (!/\.ya?ml$/i.test(file.name) || file.size > 65536) {
+                yamlStatus.textContent = 'Select a YAML file no larger than 64 KiB.';
+                return;
+            }
+            yamlStatus.textContent = 'Validating benchmark file...';
+            try {
+                const text = await file.text();
+                const data = await request('/api/admin/benchmarks/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/yaml' },
+                    body: text
+                });
+                if (version !== importVersion) return;
+                const config = data.configuration;
+                const fields = {
+                    benchmarkName: config.name, benchmarkTarget: config.target,
+                    benchmarkPromptTokens: config.promptTokenTarget, benchmarkOutputTokens: config.outputTokenLimit,
+                    benchmarkRepetitions: config.repetitions, benchmarkWarmups: config.warmupRepetitions,
+                    benchmarkConcurrency: config.concurrency, benchmarkTemperature: config.temperature,
+                    benchmarkSeed: config.seed ?? '', benchmarkTimeout: config.timeoutMs / 1000
+                };
+                for (const [id, value] of Object.entries(fields)) document.getElementById(id).value = String(value);
+                customPrompts = config.prompts;
+                importBlocked = false;
+                clearYaml.disabled = false;
+                yamlStatus.textContent = `${customPrompts.length} custom prompt(s) loaded. Review the settings before starting.`;
+            } catch (error) {
+                if (version !== importVersion) return;
+                yamlStatus.textContent = error.status === 401 ? error.message :
+                    'Could not import benchmark. Check the YAML example and field limits.';
+            }
+        });
+        clearYaml.addEventListener('click', () => {
+            importVersion++;
+            customPrompts = null;
+            importBlocked = false;
+            yamlInput.value = '';
+            clearYaml.disabled = true;
+            yamlStatus.textContent = 'No custom prompts loaded.';
+        });
+    }
+
     form.addEventListener('submit', async event => {
         event.preventDefault();
         if (!active() || activeRunId) return;
+        if (importBlocked) {
+            setStatus('Complete or clear the YAML import before starting.');
+            return;
+        }
         startButton.disabled = true;
         setStatus('Checking local server availability…');
         const value = id => document.getElementById(id).value;
@@ -237,8 +329,16 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
             concurrency: Number(value('benchmarkConcurrency')),
             temperature: Number(value('benchmarkTemperature')),
             seed: seedValue === '' ? null : Number(seedValue),
-            timeoutMs: Number(value('benchmarkTimeout')) * 1000
+            timeoutMs: Math.round(Number(value('benchmarkTimeout')) * 1000)
         };
+        if (customPrompts) {
+            if (body.repetitions < customPrompts.length) {
+                startButton.disabled = false;
+                setStatus('Measurement repetitions must be at least the number of custom prompts.');
+                return;
+            }
+            body.prompts = customPrompts;
+        }
         let started = false;
         try {
             const data = await request('/api/admin/benchmarks/start', {
@@ -248,8 +348,16 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
             });
             started = true;
             observedRuns.add(data.run.runId);
+            selectionVersion++;
+            if (!Array.from(runSelect.children).some(option => option.value === data.run.runId)) {
+                const option = document.createElement('option');
+                option.value = data.run.runId;
+                option.textContent = `${data.run.name} · ${data.run.status}`;
+                runSelect.append(option);
+            }
+            runSelect.value = data.run.runId;
             render(data.run);
-            await loadRuns(false, data.run.runId);
+            await loadRuns(data.run.runId);
         } catch (error) {
             if (!started) {
                 startButton.disabled = false;
@@ -274,9 +382,20 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
     });
 
     runSelect.addEventListener('change', async () => {
-        if (!runSelect.value) return;
+        if (!runSelect.value) {
+            clearSelection();
+            return;
+        }
+        const version = ++selectionVersion;
         selectedRunId = runSelect.value;
-        await refreshRun();
+        if (resultsPanel) resultsPanel.hidden = true;
+        analytics?.render(null);
+        try {
+            const data = await request(`/api/admin/benchmarks/${encodeURIComponent(selectedRunId)}`);
+            if (active() && version === selectionVersion) render(data.run);
+        } catch (error) {
+            if (version === selectionVersion) operationError(error, 'Benchmark load failed');
+        }
     });
 
     for (const [button, format] of [[exportJson, 'json'], [exportCsv, 'csv'], [exportXlsx, 'xlsx'], [exportPdf, 'pdf']]) {
@@ -291,9 +410,15 @@ function createAdminBenchmark({ document, fetch, setTimer = setTimeout, clearTim
 
     document.addEventListener('click', event => {
         if (event.target.closest?.('.admin-tab')) {
+            const entering = !panel.hidden && !benchmarkTabOpen;
+            benchmarkTabOpen = !panel.hidden;
             clearPoll();
             setTimer(() => {
                 if (active()) {
+                    if (entering && !activeRunId) {
+                        clearSelection();
+                        analytics?.reset();
+                    }
                     if (!initialized) void initialize();
                     else if (activeRunId) schedulePoll();
                 }

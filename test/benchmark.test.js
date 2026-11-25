@@ -120,6 +120,68 @@ test('runner persists actual streamed measurements and never stores prompt or re
     assert.doesNotMatch(exportCsv(run), /Continue this deterministic|Bearer/i);
 });
 
+test('custom prompts cycle independently in warmups and measurements without being persisted', async t => {
+    const prompts = ['PRIVATE custom prompt A', 'PRIVATE custom prompt B'];
+    const seen = [];
+    const { db, runner } = setup(t, {
+        createChatCompletion: async body => { seen.push(body.messages[0].content); return response(); }
+    });
+    const started = await runner.start('admin', configuration({ prompts, repetitions: 3, warmupRepetitions: 1 }));
+    const run = await waitForStatus(runner, started.runId, 'completed');
+    assert.deepEqual(seen, [prompts[0], prompts[0], prompts[1], prompts[0]]);
+    assert.equal(run.configuration.promptMode, 'custom');
+    assert.equal(run.configuration.promptCount, 2);
+    assert.doesNotMatch(JSON.stringify(run) + JSON.stringify(db.prepare('SELECT * FROM llm_benchmarks').all()) + exportCsv(run), /PRIVATE custom prompt/);
+    assert.throws(() => validateBenchmark(configuration({ prompts, repetitions: 1 })));
+    assert.throws(() => validateBenchmark(configuration({ prompts: [''] })));
+    assert.throws(() => validateBenchmark(configuration({ prompts: ['a'.repeat(4097)] })));
+});
+
+test('YAML import validates schema, rejects aliases and requires an authorized admin', async () => {
+    const admin = { id: 'admin', is_admin: 1 };
+    let authorized = true;
+    const route = createBenchmarkRoutes({
+        runner: { start() {}, cancel() {}, listRuns() {}, getRun() {} },
+        authenticate: req => req.admin,
+        revalidate: req => authorized ? req.admin : null
+    });
+    async function request(body, user = admin) {
+        let response;
+        const req = { url: '/api/admin/benchmarks/import', method: 'POST', admin: user,
+            async *[Symbol.asyncIterator]() { for (const chunk of Array.isArray(body) ? body : [body]) yield chunk; } };
+        await route(req, { writeHead(status) { response = { status }; }, end(value) { response.body = value; } });
+        return response;
+    }
+    const yaml = `name: Test
+target: local-llama
+promptTokenTarget: 64
+outputTokenLimit: 32
+repetitions: 2
+warmupRepetitions: 1
+concurrency: 1
+temperature: 0.2
+seed: null
+timeoutMs: 5000
+prompts:
+  - First prompt
+  - Second prompt
+`;
+    assert.equal((await request(yaml, null)).status, 401);
+    assert.equal((await request(yaml, { id: 'user', is_admin: 0 })).status, 403);
+    const valid = await request(yaml);
+    assert.equal(valid.status, 200);
+    assert.deepEqual(JSON.parse(valid.body).configuration.prompts, ['First prompt', 'Second prompt']);
+    const unicode = Buffer.from(yaml.replace('First prompt', 'Test café'));
+    const split = unicode.indexOf(Buffer.from('é')) + 1;
+    const splitResult = await request([unicode.subarray(0, split), unicode.subarray(split)]);
+    assert.equal(JSON.parse(splitResult.body).configuration.prompts[0], 'Test café');
+    assert.equal((await request(yaml + 'unknown: 1\n')).status, 400);
+    assert.equal((await request(yaml.replace('  - First prompt', '  - &p First prompt').replace('  - Second prompt', '  - *p'))).status, 400);
+    assert.equal((await request('x'.repeat(65537))).status, 413);
+    authorized = false;
+    assert.equal((await request(yaml)).status, 401);
+});
+
 test('prompt processing speed is unavailable unless per-request timing evidence exists', async t => {
     const { runner } = setup(t, {
         createChatCompletion: async () => response({

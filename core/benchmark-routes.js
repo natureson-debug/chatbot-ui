@@ -2,6 +2,20 @@
 
 const { validateBenchmark, exportCsv } = require('./benchmark-runner');
 const reports = require('./benchmark-reports');
+const YAML = require('yaml');
+const { StringDecoder } = require('node:string_decoder');
+
+async function readBody(req, limit) {
+    const decoder = new StringDecoder('utf8');
+    let body = '', bytes = 0;
+    for await (const chunk of req) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        bytes += buffer.length;
+        if (bytes > limit) throw Object.assign(new Error('Body too large'), { code: 'BODY_TOO_LARGE' });
+        body += decoder.write(buffer);
+    }
+    return body + decoder.end();
+}
 
 function createBenchmarkRoutes({ runner, authenticate, revalidate, logAdminAccessDenied = () => {} }) {
     if (!runner || typeof runner.start !== 'function' || typeof runner.getRun !== 'function' ||
@@ -38,6 +52,32 @@ function createBenchmarkRoutes({ runner, authenticate, revalidate, logAdminAcces
             return !!current && current.id === admin.id && current.is_admin === 1;
         };
         const route = url.pathname.slice('/api/admin/benchmarks'.length);
+        if (req.method === 'POST' && route === '/import') {
+            let configuration;
+            try {
+                const body = await readBody(req, 65536);
+                const document = YAML.parseDocument(body, { uniqueKeys: true });
+                if (document.errors.length || document.warnings.length) throw new Error('Invalid YAML');
+                const input = document.toJS({ maxAliasCount: 0 });
+                configuration = validateBenchmark(input);
+                if (!configuration.prompts) throw new TypeError('Custom prompts are required');
+            } catch (error) {
+                reply(error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: error.code === 'BODY_TOO_LARGE'
+                    ? 'Benchmark file is too large' : 'Invalid benchmark YAML or configuration. Check the example and field limits.' });
+                return true;
+            }
+            try {
+                if (!stillAdmin()) {
+                    reply(401, { error: 'Session no longer authorized' });
+                    return true;
+                }
+            } catch {
+                reply(500, { error: 'Benchmark service unavailable' });
+                return true;
+            }
+            reply(200, { configuration });
+            return true;
+        }
         if (req.method === 'GET' && route === '') {
             if ([...url.searchParams.keys()].some(key => key !== 'limit') || url.searchParams.getAll('limit').length > 1) {
                 reply(400, { error: 'Invalid benchmark query' });
@@ -67,17 +107,12 @@ function createBenchmarkRoutes({ runner, authenticate, revalidate, logAdminAcces
             return true;
         }
         if (req.method === 'POST' && route === '/start') {
-            let body = '';
+            let body;
             try {
-                for await (const chunk of req) {
-                    body += chunk;
-                    if (Buffer.byteLength(body) > 8192) {
-                        reply(413, { error: 'Benchmark configuration too large' });
-                        return true;
-                    }
-                }
-            } catch {
-                reply(400, { error: 'Invalid benchmark configuration' });
+                body = await readBody(req, 65536);
+            } catch (error) {
+                reply(error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: error.code === 'BODY_TOO_LARGE'
+                    ? 'Benchmark configuration too large' : 'Invalid benchmark configuration' });
                 return true;
             }
             let input;

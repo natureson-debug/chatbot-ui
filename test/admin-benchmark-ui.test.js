@@ -47,10 +47,12 @@ function fixture(fetch) {
         'benchmarkThroughput', 'benchmarkTtft', 'benchmarkPromptSpeed', 'benchmarkName',
         'benchmarkTarget', 'benchmarkPromptTokens', 'benchmarkOutputTokens',
         'benchmarkRepetitions', 'benchmarkWarmups', 'benchmarkConcurrency',
-        'benchmarkTemperature', 'benchmarkSeed', 'benchmarkTimeout'
+        'benchmarkTemperature', 'benchmarkSeed', 'benchmarkTimeout', 'benchmarkResultsPanel',
+        'benchmarkYaml', 'benchmarkYamlStatus', 'benchmarkClearYaml'
     ];
     const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
     elements['tab-benchmark'].hidden = false;
+    elements.benchmarkResultsPanel.hidden = true;
     Object.assign(elements, {
         benchmarkName: Object.assign(elements.benchmarkName, { value: 'UI benchmark' }),
         benchmarkTarget: Object.assign(elements.benchmarkTarget, { value: 'local-llama' }),
@@ -65,19 +67,20 @@ function fixture(fetch) {
     });
     const document = {
         hidden: false,
+        listeners: {},
         getElementById: id => elements[id],
         createElement: tag => Object.assign(new Element(), { tagName: tag }),
-        addEventListener() {}
+        addEventListener(name, callback) { this.listeners[name] = callback; }
     };
     const assigned = [];
     const app = createAdminBenchmark({
         document,
         fetch,
-        setTimer: () => 1,
+        setTimer: (callback, ms) => { if (ms === 0) callback(); return 1; },
         clearTimer() {},
         windowObject: { location: { assign: url => assigned.push(url) } }
     });
-    return { app, elements, assigned };
+    return { app, elements, assigned, document };
 }
 
 const run = {
@@ -145,6 +148,78 @@ test('benchmark UI submits bounded configuration, displays results, and offers e
     assert.match(assigned[0], /format=json/);
     await elements.benchmarkExportCsv.emit('click');
     assert.match(assigned[1], /format=csv/);
+});
+
+test('history remains hidden until a run is selected and is hidden again when cleared', async () => {
+    const { app, elements } = fixture(async url => ({
+        ok: true, json: async () => url.includes('?limit=') ? { runs: [run] } : { run }
+    }));
+    await app.initialize();
+    assert.equal(elements.benchmarkRunSelect.value, '');
+    assert.equal(elements.benchmarkResultsPanel.hidden, true);
+    elements.benchmarkRunSelect.value = run.runId;
+    await elements.benchmarkRunSelect.emit('change');
+    assert.equal(elements.benchmarkResultsPanel.hidden, false);
+    elements.benchmarkRunSelect.value = '';
+    await elements.benchmarkRunSelect.emit('change');
+    assert.equal(elements.benchmarkResultsPanel.hidden, true);
+    assert.equal(elements.benchmarkResults.children.length, 0);
+    assert.equal(elements.benchmarkExportJson.disabled, true);
+});
+
+test('returning to the benchmark tab clears an earlier historical selection', async () => {
+    const { app, elements, document } = fixture(async url => ({
+        ok: true, json: async () => url.includes('?limit=') ? { runs: [run] } : { run }
+    }));
+    await app.initialize();
+    elements.benchmarkRunSelect.value = run.runId;
+    await elements.benchmarkRunSelect.emit('change');
+    const click = { target: { closest: () => ({}) } };
+    elements['tab-benchmark'].hidden = true;
+    document.listeners.click(click);
+    elements['tab-benchmark'].hidden = false;
+    document.listeners.click(click);
+    assert.equal(elements.benchmarkRunSelect.value, '');
+    assert.equal(elements.benchmarkResultsPanel.hidden, true);
+});
+
+test('YAML import populates the form and supplies custom prompts only until cleared', async () => {
+    const configuration = { name: 'Imported', target: 'local-llama', promptTokenTarget: 64,
+        outputTokenLimit: 16, repetitions: 2, warmupRepetitions: 1, concurrency: 1,
+        temperature: 0.2, seed: null, timeoutMs: 30000, prompts: ['one', 'two'] };
+    const bodies = [];
+    const { app, elements } = fixture(async (url, options = {}) => {
+        if (url.endsWith('/import')) return { ok: true, json: async () => ({ configuration }) };
+        if (url.endsWith('/start')) { bodies.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ run }) }; }
+        return { ok: true, json: async () => ({ runs: [run] }) };
+    });
+    await app.initialize();
+    elements.benchmarkYaml.files = [{ name: 'test.yaml', size: 12, text: async () => 'example yaml' }];
+    await elements.benchmarkYaml.emit('change');
+    assert.match(elements.benchmarkYamlStatus.textContent, /2 custom prompt/);
+    await elements.benchmarkForm.emit('submit', { preventDefault() {} });
+    assert.deepEqual(bodies[0].prompts, ['one', 'two']);
+    await elements.benchmarkClearYaml.emit('click');
+    await elements.benchmarkForm.emit('submit', { preventDefault() {} });
+    assert.equal(bodies[1].prompts, undefined);
+});
+
+test('an invalid or unfinished import cannot silently run the generated benchmark', async () => {
+    let starts = 0;
+    const { app, elements } = fixture(async url => {
+        if (url.endsWith('/import')) return { ok: false, status: 400 };
+        if (url.endsWith('/start')) { starts++; return { ok: true, json: async () => ({ run }) }; }
+        return { ok: true, json: async () => ({ runs: [] }) };
+    });
+    await app.initialize();
+    elements.benchmarkYaml.files = [{ name: 'invalid.yaml', size: 12, text: async () => 'bad' }];
+    await elements.benchmarkYaml.emit('change');
+    await elements.benchmarkForm.emit('submit', { preventDefault() {} });
+    assert.equal(starts, 0);
+    assert.match(elements.benchmarkStatus.textContent, /clear the YAML import/);
+    await elements.benchmarkClearYaml.emit('click');
+    await elements.benchmarkForm.emit('submit', { preventDefault() {} });
+    assert.equal(starts, 1);
 });
 
 test('benchmark UI uses text-only rendering and theme semantic tokens', () => {

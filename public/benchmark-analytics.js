@@ -17,6 +17,7 @@
   const warnings=[];
   const fields=['target','promptTokenTarget','outputTokenLimit','concurrency','temperature','seed','timeoutMs','warmupRepetitions','repetitions'];
   if(runs.length>1 && fields.some(k=>new Set(runs.map(r=>JSON.stringify(k==='target'?r.target:r.configuration?.[k]))).size>1)) warnings.push('Workloads differ: token targets, generation settings, warm-ups or repetition counts are not identical. Do not interpret this as a controlled comparison.');
+  if(runs.some(r=>r.configuration?.promptMode==='custom')) warnings.push('Custom prompt contents are not saved; workload equivalence cannot be verified from these results.');
   if(runs.some(r=>!valid(r.configuration?.contextSize))) warnings.push('Runtime context was not recorded for one or more runs; workload equivalence cannot be verified.');
   if(runs.length>1 && new Set(runs.map(r=>r.model)).size>1) warnings.push('Models/tokenizers differ; equal prompt targets do not guarantee equal actual token counts.');
   return warnings;

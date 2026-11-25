@@ -19,7 +19,7 @@ function validateBenchmark(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) ||
         Object.keys(input).some(key => ![
             'name', 'target', 'promptTokenTarget', 'outputTokenLimit', 'repetitions',
-            'warmupRepetitions', 'concurrency', 'temperature', 'seed', 'timeoutMs'
+            'warmupRepetitions', 'concurrency', 'temperature', 'seed', 'timeoutMs', 'prompts'
         ].includes(key))) throw new TypeError('Invalid benchmark configuration');
     const name = typeof input.name === 'string' ? input.name.trim() : '';
     if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
@@ -44,10 +44,18 @@ function validateBenchmark(input) {
         (!Number.isSafeInteger(input.seed) || input.seed < 0 || input.seed > 2147483647)) {
         throw new TypeError('Invalid seed');
     }
+    if (input.prompts !== undefined &&
+        (!Array.isArray(input.prompts) || input.prompts.length < 1 || input.prompts.length > 10 ||
+         input.prompts.length > repetitions ||
+         input.prompts.some(prompt => typeof prompt !== 'string' || !prompt.trim() || prompt.length > 4096) ||
+         Buffer.byteLength(JSON.stringify(input.prompts)) > 48000)) {
+        throw new TypeError('Invalid custom prompts');
+    }
     return Object.freeze({
         name, target: 'local-llama', promptTokenTarget, outputTokenLimit, repetitions,
         warmupRepetitions, concurrency: 1, temperature: input.temperature,
-        seed: input.seed ?? null, timeoutMs
+        seed: input.seed ?? null, timeoutMs,
+        ...(input.prompts ? { prompts: [...input.prompts] } : {})
     });
 }
 
@@ -170,7 +178,7 @@ function createBenchmarkRunner({
         }
     }
 
-    async function requestMeasurement(configuration, model, signal) {
+    async function requestMeasurement(configuration, model, signal, prompt) {
         const controller = new AbortController();
         const timeout = AbortSignal.timeout(configuration.timeoutMs);
         const combined = AbortSignal.any([signal, controller.signal, timeout]);
@@ -182,7 +190,7 @@ function createBenchmarkRunner({
         try {
             response = await createChatCompletion({
                 model,
-                messages: [{ role: 'user', content: deterministicPrompt(configuration.promptTokenTarget) }],
+                messages: [{ role: 'user', content: prompt }],
                 stream: true,
                 stream_options: { include_usage: true },
                 max_tokens: configuration.outputTokenLimit,
@@ -334,7 +342,11 @@ function createBenchmarkRunner({
                 let result;
                 try {
                     await waitUntilIdle(controller.signal);
-                    result = await requestMeasurement(configuration, model, controller.signal);
+                    const phaseIndex = phase === 'warmup' ? index : index - configuration.warmupRepetitions;
+                    const prompt = configuration.prompts
+                        ? configuration.prompts[phaseIndex % configuration.prompts.length]
+                        : deterministicPrompt(configuration.promptTokenTarget);
+                    result = await requestMeasurement(configuration, model, controller.signal, prompt);
                 } catch (error) {
                     result = {
                         status: controller.signal.aborted ? 'cancelled' : 'failed',
@@ -393,13 +405,18 @@ function createBenchmarkRunner({
             const createdAt = now().toISOString();
             const total = configuration.repetitions + configuration.warmupRepetitions;
             const hardwareJson = hardware === null ? null : JSON.stringify(hardware);
+            const { prompts, ...storedConfiguration } = configuration;
+            if (prompts) {
+                storedConfiguration.promptMode = 'custom';
+                storedConfiguration.promptCount = prompts.length;
+            }
             db.exec('BEGIN IMMEDIATE');
             try {
                 db.prepare(`INSERT INTO llm_benchmarks (
                     benchmark_id, owner_id, name, target, configuration_json, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?)`).run(
                     benchmarkId, ownerId, configuration.name, configuration.target,
-                    JSON.stringify(configuration), createdAt
+                    JSON.stringify(storedConfiguration), createdAt
                 );
                 db.prepare(`INSERT INTO llm_benchmark_runs (
                     run_id, benchmark_id, status, created_at, total_repetitions, model
