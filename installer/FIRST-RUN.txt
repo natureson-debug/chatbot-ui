@@ -1,0 +1,35 @@
+AIChatbot 1.0.0 - Windows 11 x64
+
+Install official Node.js 24 x64 at Program Files\nodejs first. Node.js and its
+license/third-party notices are supplied separately. No inference engines,
+models, accounts, secrets, TLS proxy, services or scheduled tasks are installed.
+
+FIRST USE (normal, non-elevated Windows PowerShell; only for a NEW data directory):
+& "$env:ProgramFiles\AIChatbot\Start-AIChatbot.ps1" -InitializeNew
+
+This explicitly creates %LOCALAPPDATA%\AIChatbot and asks for a new administrator
+username/password. Password input is masked and passed only to the setup child
+through its environment. No plaintext credential file is created. Initialization
+refuses any existing data directory. On failure, preserve it and seek recovery
+instructions rather than deleting or reinitializing it.
+
+Then select Start Menu -> AIChatbot. It runs Node explicitly in a visible console,
+using the current user's data directory. Keep the console open. Ctrl+C requests
+graceful shutdown. No autostart or automatic restart is configured.
+
+The backend binds only 127.0.0.1:3000. Existing Secure session cookies require a
+trusted HTTPS reverse proxy for browser login; this installer does not configure
+TLS or change firewall rules. Arrange HTTPS separately; do not disable authentication
+or cookie security. A standalone HTTP browser experience is not qualified here.
+
+Open the configured HTTPS URL, log in, and use Admin -> AI Providers to configure
+an already running Ollama or llama.cpp server. Provider addresses/model names are
+not preconfigured. Local lifecycle/task-management controls are not provisioned.
+
+Each Windows account has separate data. Run first-use setup under the intended
+normal account, not a different administrator account. Existing user data is never
+imported, migrated or reset by the installer/launcher. No upgrade support yet.
+
+Before uninstall, stop your owned AIChatbot console with Ctrl+C. Uninstall removes
+installed application files and shortcuts, preserving %LOCALAPPDATA%\AIChatbot.
+Do not manually delete that directory unless you intentionally want to erase data.
