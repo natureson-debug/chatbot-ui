@@ -10,6 +10,34 @@
  let state={version:1,revision:0,defaultId:'legacy-local',connections:[]};
  let editingId=null;
  let presets=[],modelDraft=[];
+ const capabilityPanel=createCapabilityPanel({document,api,notify:message=>globalThis.ChatbotNotifications?.show(message)});
+ editor.appendChild(capabilityPanel.root);
+
+ function createCapabilityPanel({document,api,notify}){
+  const root=document.createElement('section'),heading=document.createElement('h3'),label=document.createElement('label'),select=document.createElement('select'),refresh=document.createElement('button'),details=document.createElement('div');
+  heading.textContent='Model Capabilities';label.textContent='Saved model ';label.appendChild(select);
+  refresh.type='button';refresh.className='action-btn';refresh.textContent='Refresh Capabilities';
+  details.setAttribute('aria-live','polite');root.append(heading,label,refresh,details);
+  let provider=null,epoch=0;
+  const clear=()=>{details.textContent='Not checked. Save provider/model changes before refreshing. Discovery does not change inference settings.';};
+  select.addEventListener('change',()=>{epoch++;refresh.disabled=!provider;clear();});
+  refresh.addEventListener('click',async()=>{
+   if(!provider)return;const version=++epoch,id=provider.id,model=select.value;refresh.disabled=true;clear();
+   try{
+    const result=await api('/api/admin/ai/connections/'+encodeURIComponent(id)+'/capabilities',{method:'POST',body:JSON.stringify({model})});
+    if(version!==epoch)return;
+    details.replaceChildren();
+    for(const [key,name] of [['text','Text'],['vision','Vision'],['tools','Tool calling'],['documents','Document processing (application text extraction)']]){
+     const value=result.capabilities?.[key],row=document.createElement('p');
+     row.textContent=`${name}: ${['verified','unsupported','unknown'].includes(value?.state)?value.state:'unknown'} | Detection source: ${value?.method||'unavailable'}`;details.appendChild(row);
+    }
+    const checked=document.createElement('p');checked.textContent='Last checked: '+(Number.isFinite(Date.parse(result.checkedAt))?new Date(result.checkedAt).toLocaleString():'Unavailable');details.appendChild(checked);
+    notify({severity:'success',title:'Capabilities refreshed',message:'Metadata checked. Verified means provider-declared, not inference-tested. Documents use application text extraction.'});
+   }catch{if(version===epoch){details.textContent='Capabilities unavailable; no current metadata.';notify({severity:'error',title:'Capability discovery failed',message:'Metadata unavailable. Check the saved provider connection.'});}}
+   finally{if(version===epoch)refresh.disabled=false;}
+  });
+  return {root,reset(c){epoch++;provider=c;select.replaceChildren();for(const m of c?.models|| (c?[{id:c.model,name:c.model}]:[])){const option=document.createElement('option');option.value=m.id;option.textContent=m.name||m.id;select.appendChild(option);}select.value=c?.model||'';refresh.disabled=!c;clear();}};
+ }
 
  function setStatus(message,isError=false){
   status.textContent=message||'';
@@ -87,6 +115,7 @@
  }
 
  function openForm(provider=null){
+  capabilityPanel.reset(provider);
   editingId=provider?provider.id:null;
   editor.hidden=false;
   document.getElementById('providerId').value=provider?provider.id:'';
@@ -115,6 +144,7 @@
  }
 
  function closeForm(){
+  capabilityPanel.reset(null);
   editor.hidden=true;
   editingId=null;document.getElementById('providerApiKey').value='';globalThis.AdminProviderUI?.select(null);
  }

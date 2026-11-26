@@ -26,6 +26,8 @@ function usable(c){
 }
 
 function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
+ const discover=require('./model-capabilities').createDiscovery();
+ const capabilities=(c,model,options={})=>discover(c,model,{fetchImpl:transport(c),secret,signal:options.signal});
  const transport=c=>fetchImpl||createCloudFetch({allowPrivate:c.privateNetwork===true,allowLoopback:require('./connections').isLoopback(new URL(c.endpoint).hostname),allowHttp:new URL(c.endpoint).protocol==='http:'&&(c.allowInsecureHttp===true||require('./connections').isLoopback(new URL(c.endpoint).hostname))});
  function validateMessages(c,input){
   if(!Array.isArray(input.messages))throw Error('Unsupported message content');
@@ -129,7 +131,7 @@ function createAdapter({fetchImpl,secret=credential,onDiagnostics}={}){
   return {ok:true,models:discovered,capabilities:usable(c)};
  }
 
- return {usable,chat,complete,models,testConnection};
+ return {usable,chat,complete,models,testConnection,capabilities};
 }
 
 module.exports={...createAdapter(),createAdapter,usable};

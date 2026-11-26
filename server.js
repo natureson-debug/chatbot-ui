@@ -1664,7 +1664,7 @@ if(/^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/(credential|test)$/.test(req.url
   log:(code,fields)=>logSystemEvent(req,code,fields)});return;
 }
 // Named connection administration; credentials are references, never values.
-if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/check$/.test(req.url)) {
+if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/ai/connections" || /^\/api\/admin\/ai\/connections\/[a-z0-9-]+\/(check|capabilities)$/.test(req.url)) {
     const token = getSessionToken(req), admin = getAuthenticatedUser(req);
     const reply = (status, data) => {res.writeHead(status,{"Content-Type":"application/json","Cache-Control":"no-store"});res.end(JSON.stringify(data));};
     if (!admin || admin.is_admin !== 1) {logAdminAccessDenied(req,admin);reply(admin?403:401,{error:"Administrator access required"});return;}
@@ -1696,6 +1696,15 @@ if (req.url === "/api/admin/ai/connections/presets" || req.url === "/api/admin/a
             reply(200,saved);return;}
             const id=req.url.split('/')[5],config=await connections.read(),c=config.connections.find(c=>c.id===id);
             if(!c){reply(404,{error:"Connection not found"});return;}
+            if(req.url.endsWith('/capabilities')){
+                const input=JSON.parse(text);
+                const result=await providers.capabilities(c,input.model,{signal:AbortSignal.timeout(5000)});
+                const verified=getSessionUser(db,token);
+                if(!verified||verified.id!==admin.id||verified.is_admin!==1){reply(401,{error:'Session no longer authorized'});return;}
+                const latest=await connections.read();
+                if(latest.revision!==config.revision){reply(409,{error:'Configuration changed; refresh again.'});return;}
+                reply(200,result);return;
+            }
             const startedAt=Date.now();
             logSystemEvent(req,'PROVIDER_CONNECTION_TEST_STARTED',{actorId:admin.id,providerId:c.id,metadata:{diagnostic:false}});
             let result;
