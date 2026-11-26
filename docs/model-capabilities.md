@@ -34,3 +34,31 @@ Protocol references: https://github.com/ollama/ollama/blob/main/docs/api.md
 and https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-context.cpp
 (`get_res_props`, explicit modalities). Backend versions may omit these fields.
 Focused mocked tests do not establish live provider or real-browser acceptance.
+
+## MP-08A.2 Chat presentation
+
+The existing model selector retrieves authenticated GET `/api/ai/capabilities`
+with `providerId` and `model` query parameters after load or model changes, including
+Application default. Only enabled, approved chat selections under existing provider
+gates are allowed. This endpoint reads recent MP-08A.1 observations, never credentials
+or provider endpoints. Unknown is returned until an administrator refreshes metadata
+in the same server process. Results expire after five minutes; configuration changes
+and failed refresh invalidate them. Results do not establish current reachability.
+
+Only capability states, fixed methods, timestamps, selected IDs and image-path
+availability reach the browser; no browser persistence is added. Late responses,
+logout, expiry and failures clear image allowance. Text requests and tools are
+unchanged; tool verification is informational, not authorization.
+
+The composer shows Text, Vision, Documents (app), Tools and an image affordance.
+The existing picker permits images only for verified vision plus the configured
+adapter's existing image path. No upload implementation or formats are added.
+Unverified images are excluded from the picker and refused before the existing
+upload step; a selected image is cleared when allowance is lost. TXT/PDF/DOCX
+handling is preserved. Theme tokens, wrapping and a mobile breakpoint are reused.
+
+Validation: focused mocked endpoint, selector and capability tests cover authorization,
+model switching, unavailable/stale metadata and image-path gating. Real authenticated
+desktop/mobile acceptance remains unverified: the browser connector was unavailable
+and the native helper reported the Chrome window minimized. No production restart
+or live capability refresh was performed for this milestone.

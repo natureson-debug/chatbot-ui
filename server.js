@@ -303,6 +303,15 @@ if (req.method === "GET" && req.url === "/api/ai/runtime") {
 }
 
 // Authenticated catalog: only administrator-configured chat models, no secrets.
+if(req.method==='GET' && req.url.split('?')[0]==='/api/ai/capabilities'){
+ const token=getSessionToken(req),user=getSessionUser(db,token);
+ await require('./core/chat-capabilities').handle(req,res,{
+  user,authenticate:()=>getSessionUser(db,token),read:()=>connections.read(),
+  legacy:()=>buildLegacyProvider(),
+  permitted:c=>!['openai-responses','deepseek-chat'].includes(c.adapter)||require('./core/openai-usage').forProvider(c.adapter==='deepseek-chat'?'deepseek':'openai').settings(db).enabled===1,
+  imagePath:c=>providers.usable(c).vision
+ });return;
+}
 if (req.method === "GET" && req.url === "/api/ai/models") {
  const user=getAuthenticatedUser(req);if(!user){res.writeHead(401);res.end();return;}
  try{const config=await connections.read();const legacy=config.defaultId==='legacy-local'?buildLegacyProvider():null;

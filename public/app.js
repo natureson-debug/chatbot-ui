@@ -73,6 +73,7 @@ removeAttachmentButton.addEventListener("click", () => {
 async function readSelectedAttachment() {
     const file = attachmentInput.files[0];
     if (!file) return null;
+    if (/\.(png|jpe?g)$/i.test(file.name) && !globalThis.chatCapabilities?.imageAllowed()) throw Error('Image capability unavailable or unverified');
 
     if (/\.txt$/i.test(file.name)) return {name:file.name,content:await file.text()};
     const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error('Attachment read failed'));reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(file);});

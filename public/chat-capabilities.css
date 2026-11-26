@@ -1,0 +1,9 @@
+.chat-capabilities { display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem; padding:0.4rem 0.75rem; color:var(--theme-text, inherit); font-size:0.75rem; }
+.chat-capabilities span { border:1px solid currentColor; border-radius:0.35rem; padding:0.2rem 0.4rem; }
+.chat-capabilities [data-state="unknown"] { border-style:dashed; }
+.chat-capabilities [data-state="unsupported"] { border-style:dotted; }
+.chat-capabilities button { color:inherit; background:transparent; border:1px solid currentColor; border-radius:0.35rem; padding:0.2rem 0.4rem; font:inherit; }
+.chat-capabilities button:disabled { opacity:0.6; cursor:not-allowed; }
+.chat-capabilities button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.chat-capabilities small { flex-basis:100%; overflow-wrap:anywhere; }
+@media(max-width:600px) { .chat-capabilities { gap:0.25rem; padding:0.3rem 0.5rem; font-size:0.7rem; } }

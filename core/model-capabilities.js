@@ -1,5 +1,11 @@
 'use strict';
 const {resourceUrl}=require('./context-telemetry');
+const observations=new Map();
+function cachedCapabilities(c,model,now=Date.now()){
+ const value=observations.get(JSON.stringify([c,model]));
+ if(!value||now-Date.parse(value.checkedAt)>300000||now<Date.parse(value.checkedAt))return null;
+ return structuredClone(value);
+}
 function classify(c,model,data,checkedAt){
  const entry=(state='unknown',method='not-declared',scope='native')=>({state,method,verifiedAt:state==='unknown'?null:checkedAt,scope});
  const capabilities={text:entry(),vision:entry(),tools:entry(),documents:entry('verified','application-document-to-text','application')};
@@ -40,11 +46,13 @@ function createDiscovery(){
     }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
    }
    const value=classify(c,model,data,new Date().toISOString());
+   if(observations.size>=100)observations.delete(observations.keys().next().value);
+   observations.set(key,value);
    if(cache.size>=100)cache.delete(cache.keys().next().value);
    cache.set(key,{time:Date.now(),value});return value;
   })();
   pending.set(key,operation);
-  try{return structuredClone(await operation);}catch{throw Error('Model capability metadata unavailable');}finally{pending.delete(key);}
+  try{return structuredClone(await operation);}catch{observations.delete(key);throw Error('Model capability metadata unavailable');}finally{pending.delete(key);}
  };
 }
-module.exports={classify,createDiscovery};
+module.exports={classify,createDiscovery,cachedCapabilities};
