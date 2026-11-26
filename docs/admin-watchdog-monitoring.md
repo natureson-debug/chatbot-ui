@@ -47,6 +47,34 @@ visibility pause/abort and page-exit disposal. Authentication failure clears
 displayed data and stops polling. Fetch/parse failures clear current readings.
 No database schema or persistent telemetry collection changes are involved.
 
+## WD-MON-01: usable partial monitoring
+
+The API also supplies `recent`, a summary of the at-most-12 recognized log
+records: latest reported state, last healthy check, last `recovery-verified`
+record, recovery-attempt count and last unhealthy/uncertain record. Summaries
+are withheld if the sample is missing, empty or malformed. The UI explicitly
+labels these as unverified historical reports, not current health or ownership.
+Counts describe only the retained sample, never all-time restart counts. No
+matching record means unavailable, not proof that no failure/restart occurred.
+File modification time is not used as a check or restart timestamp.
+
+Read-only diagnosis on 2026-11-26 found the configured log and marker paths
+readable: the marker was absent and the retained log had 12 `health-healthy`
+records. Task collection returned `task-access-denied`; CIM ownership evidence
+and listener PID were unavailable in the inspection account. These findings do
+not establish the effective permissions of the running Node account. The
+collector completed in approximately 1.4 seconds, within its eight-second cap.
+No parsing/path defect was observed. Existing records were already exposed in
+history, but not summarized as supervision information. No signed snapshot
+consumer is connected to this endpoint; none is activated by this change.
+
+Exact last-success, last-restart and last-failure timestamps remain unavailable
+because the producer records no event timestamps. Task state, schedule and
+current verified process identity still require readable native task/CIM
+evidence. Resolving those permissions or connecting a qualified evidence source
+is separate work; this monitoring change does neither. An absent recovery
+marker alone does not prove backend health or watchdog execution.
+
 Focused automated validation uses injected authorization/transport, mocked DOM,
 and an isolated Windows collector with temporary log/marker files and fake
 task/backend/listener observations. Native production-account access, real-browser

@@ -12,6 +12,17 @@ function normalize(raw, now) {
     const log = raw?.log;
     const updatedAt = date(log?.updatedAt);
     const observations = Array.isArray(log?.observations) ? log.observations.slice(-12).filter(o => states.includes(o?.state) && reasons.includes(o?.reason) && typeof o.recoveryAttempted === 'boolean').map(o => ({state:o.state,reason:o.reason,recoveryAttempted:o.recoveryAttempted})) : [];
+    // These are untimed log reports, never current ownership/health evidence.
+    const completeSample = updatedAt && observations.length > 0 && log.malformed === false && observations.length === log.observations?.length;
+    const last = predicate => observations.filter(predicate).at(-1) || null;
+    const recent = completeSample ? {
+        sampleSize: observations.length,
+        latest: observations.at(-1),
+        lastSuccessfulCheck: last(o => o.state === 'healthy'),
+        lastVerifiedRecovery: last(o => o.reason === 'recovery-verified'),
+        recoveryAttempts: observations.filter(o => o.recoveryAttempted).length,
+        lastFailure: last(o => ['unhealthy','uncertain'].includes(o.state))
+    } : null;
     const taskValid = task && ['Disabled','Ready','Running','Queued','Unknown'].includes(task.state) && typeof task.enabled === 'boolean' && Number.isSafeInteger(task.lastResult);
     const backendVerified = backend?.verified === true && Number.isSafeInteger(backend.pid) && backend.pid>0 &&
         ((backend.reason === 'verified' && backend.configurationMatched === true) ||
@@ -25,6 +36,7 @@ function normalize(raw, now) {
             : {verified:null,configurationMatched:null,pid:null,reason:backendReasons.includes(backend.reason) ? backend.reason : 'evidence-unavailable'} : null,
         observedListenerPid:Number.isSafeInteger(raw?.observedListenerPid) && raw.observedListenerPid>0 ? raw.observedListenerPid : null,
         marker:['present','absent'].includes(raw?.marker) ? raw.marker : 'unavailable',
+        recent,
         log:log && updatedAt ? {updatedAt,stale:now-Date.parse(updatedAt)>300000 || Date.parse(updatedAt)>now+5000,observations,malformed:log.malformed!==false || observations.length!==(log.observations?.length ?? 0)} : null
     };
 }

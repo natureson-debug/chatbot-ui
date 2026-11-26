@@ -27,6 +27,16 @@ function createWatchdogMonitor({document,fetch,setTimer=setTimeout,clearTimer=cl
             ['Saved configuration',b?.verified===true && b.configurationMatched===true?'Matched':b?.verified===true && b.configurationMatched===false?'Mismatch (verified comparison)':'Unavailable (not verified)'],
             ['Recovery marker',data.marker||'unavailable'],['Log last modified',date(log?.updatedAt)]
         ]) values.append(el('p',`${label}: ${value}`));
+        const recent=data.recent;
+        const reported=o=>o?`${o.state} (${o.reason}); event time unavailable`:'Unavailable (not found in retained sample)';
+        values.append(el('p','Log reports are unverified historical observations, not current backend health or task execution status.'));
+        for(const [label,value] of [
+            ['Last reported supervised state',reported(recent?.latest)],
+            ['Last successful check in sample',reported(recent?.lastSuccessfulCheck)],
+            ['Last verified automatic recovery in sample',reported(recent?.lastVerifiedRecovery)],
+            ['Recovery attempts in retained sample',recent?`${recent.recoveryAttempts} across ${recent.sampleSize} records (not a lifetime total)`:'Unavailable'],
+            ['Last failure in sample',reported(recent?.lastFailure)]
+        ]) values.append(el('p',`${label}: ${value}`));
         if(!log) history.append(el('li','Log unavailable.'));
         else {
             history.append(el('li',`${log.stale?'Stale log. ':''}${log.malformed?'Some records could not be read. ':''}Records have no individual timestamps; file modification time is not an event timestamp.`));

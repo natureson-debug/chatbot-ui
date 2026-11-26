@@ -59,6 +59,39 @@ const {createWatchdogMonitor}=require('../public/admin-watchdog');
 class Node {constructor(){this.children=[];this.textContent='';}append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=nodes;}setAttribute(){}}
 function ui(fetch){const host=new Node(),listeners={},timers=new Map();let id=0;const document={hidden:false,getElementById:()=>host,createElement:()=>new Node(),addEventListener:(n,f)=>listeners[n]=f,removeEventListener:n=>delete listeners[n]};const monitor=createWatchdogMonitor({document,fetch,now:()=>Date.parse('2026-11-12T00:10:00Z'),setTimer:(f,ms)=>{timers.set(++id,{f,ms});return id;},clearTimer:id=>timers.delete(id)});return {host,document,listeners,timers,monitor};}
 const text=n=>n.textContent+n.children.map(text).join(' ');
+
+test('readable log restores scoped summaries despite unavailable task and CIM evidence',async()=>{
+    const r=raw();r.task=null;r.taskReason='task-access-denied';r.backend=null;
+    r.log.observations=[
+        {state:'uncertain',reason:'recovery-timeout',recoveryAttempted:true},
+        {state:'healthy',reason:'recovery-verified',recoveryAttempted:true},
+        {state:'healthy',reason:'health-healthy',recoveryAttempted:false}
+    ];
+    const sample={...normalize(r,Date.parse('2026-11-12T00:10:00Z')),availability:'observed'};
+    assert.equal(sample.task,null);assert.equal(sample.backend,null);
+    assert.equal(sample.recent.recoveryAttempts,2);assert.equal(sample.recent.sampleSize,3);
+    assert.equal(sample.recent.lastFailure.reason,'recovery-timeout');
+    assert.equal(sample.recent.lastVerifiedRecovery.reason,'recovery-verified');
+    assert.equal(sample.recent.lastSuccessfulCheck.reason,'health-healthy');
+    const f=ui(async()=>({ok:true,json:async()=>sample}));await f.monitor.poll();
+    const output=text(f.host);
+    assert(output.includes('Task: Unavailable (access denied)'));
+    assert(output.includes('Last reported supervised state: healthy (health-healthy); event time unavailable'));
+    assert(output.includes('2 across 3 records (not a lifetime total)'));
+    assert(output.includes('unverified historical observations'));assert(output.includes('Stale log'));
+    f.monitor.dispose();
+});
+
+test('missing, malformed and bounded logs do not invent success or lifetime counts',()=>{
+    assert.equal(normalize(null,0).recent,null);
+    const r=raw();r.log.malformed=true;assert.equal(normalize(r,0).recent,null);
+    r.log.malformed=false;r.log.observations=[];assert.equal(normalize(r,0).recent,null);
+    r.log.observations=[{state:'starting',reason:'health-starting',recoveryAttempted:false}];
+    const summary=normalize(r,0).recent;
+    assert.equal(summary.lastSuccessfulCheck,null);assert.equal(summary.lastVerifiedRecovery,null);
+    assert.equal(summary.lastFailure,null);assert.equal(summary.recoveryAttempts,0);
+    r.log.observations=Array(13).fill(r.log.observations[0]);assert.equal(normalize(r,0).recent,null);
+});
 test('UI renders bounded real values and stale/untimed log labels',async()=>{
     const f=ui(async()=>({ok:true,json:async()=>normalize(raw(),Date.parse('2026-11-12T00:00:00Z'))}));await f.monitor.poll();const output=text(f.host);
     assert(output.includes('Disabled'));assert(output.includes('100'));assert(output.includes('Stale snapshot'));assert(output.includes('no individual timestamps'));
