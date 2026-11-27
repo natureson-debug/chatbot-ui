@@ -93,6 +93,10 @@ if (!userSettingsSql.includes("'normal-dark'")) {
     `);
 }
 
+if (!db.prepare('PRAGMA table_info(user_settings)').all().some(c => c.name === 'routing_preferences')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN routing_preferences TEXT');
+}
+
 const chatColumns = db.prepare(`
     PRAGMA table_info(chats)
 `).all();

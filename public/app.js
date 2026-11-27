@@ -7,6 +7,7 @@ const newChatButton = document.getElementById("newChat");
 const deleteChatButton = document.getElementById("deleteChat");
 const settingsToggle = document.getElementById("settingsToggle");
 const settingsPanel = document.getElementById("settingsPanel");
+const routingPreferencesScript=document.createElement('script');routingPreferencesScript.src='/routing-preferences.js';document.head.appendChild(routingPreferencesScript);
 const thinkingToggle = document.getElementById("thinking");
 const systemPromptBox = document.getElementById("systemPrompt");
 const themeSelect = document.getElementById("theme");
@@ -292,6 +293,7 @@ function invalidateGeneration(chatId = null) {
 }
 function replaceSession() {
     sessionEpoch++;
+    globalThis.chatRoutingPreferences?.reset();
     globalThis.chatModelSelector?.reset();
     invalidateGeneration();
     return sessionEpoch;

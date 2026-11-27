@@ -329,6 +329,20 @@ if (req.method === "GET" && req.url === "/api/ai/models") {
  }catch{res.writeHead(503);res.end(JSON.stringify({error:'Model list unavailable'}));}return;
 }
 
+if(req.url==='/api/routing-preferences'){
+ const token=getSessionToken(req),user=getSessionUser(db,token);
+ await require('./core/routing-preferences').handle(req,res,{db,user,authenticate:()=>getSessionUser(db,token),catalog:async()=>{
+  const config=await connections.read(),legacy=config.defaultId==='legacy-local'?buildLegacyProvider():null;
+  return require('./core/chat-models').choices(config,legacy).filter(entry=>{
+   const c=config.connections.find(c=>c.id===entry.providerId)||legacy;
+   return !['openai-responses','deepseek-chat'].includes(c.adapter)||require('./core/openai-usage').forProvider(c.adapter==='deepseek-chat'?'deepseek':'openai').settings(db).enabled===1;
+  }).map(entry=>{const c=config.connections.find(c=>c.id===entry.providerId)||legacy;
+   const profile=require('./core/model-capabilities').cachedCapabilities(c,entry.model);
+   return {providerId:entry.providerId,model:entry.model,name:entry.name,providerName:entry.providerName,adapter:c.adapter,toolPath:providers.usable(require('./core/chat-models').resolve(config,entry,legacy)).tools,capabilities:profile?.capabilities??null};
+  });
+ }});return;
+}
+
 // Authenticated user settings
 if (req.method === "GET" && req.url === "/api/settings") {
     const user = getAuthenticatedUser(req);
