@@ -37,6 +37,12 @@ Focused mocked tests do not establish live provider or real-browser acceptance.
 
 ## MP-08A.2 Chat presentation
 
+MP-08B.2B update: the endpoint now refreshes missing Ollama observations through
+the existing bounded metadata discovery mechanism. Verified Ollama vision enables
+the secure single-image path described in `secure-image-attachments.md`; saved
+provider flags remain unchanged. The cache-only/no-upload description below records
+the earlier MP-08A.2 milestone and is superseded for this path.
+
 The existing model selector retrieves authenticated GET `/api/ai/capabilities`
 with `providerId` and `model` query parameters after load or model changes, including
 Application default. Only enabled, approved chat selections under existing provider

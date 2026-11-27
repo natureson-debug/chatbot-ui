@@ -13,6 +13,7 @@ const {
 const sessionCookie = require('./core/session-cookie').createSessionCookiePolicy(HOST);
 const connections = require("./core/connections");
 const providers = require("./core/provider-adapter");
+require('./core/image-attachments').getImages(db);
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const { createChatCompletion, getHealth, getReportedModel, readTelemetryResource } = require("./core/llama-client");
@@ -235,9 +236,14 @@ if (req.method === "GET" && req.url === "/api/chats") {
     return;
 }
 
+if(req.url==='/api/images'||req.url.startsWith('/api/images/')){
+ const token=getSessionToken(req),user=getAuthenticatedUser(req);
+ const images=require('./core/image-attachments').getImages(db);
+ await require('./core/image-routes').handle(req,res,{user,authorize:()=>!!user&&getSessionUser(db,token)?.id===user.id,images,vision:s=>require('./core/image-routes').authorizeVision(connections,providers,s)});return;
+}
 if (req.url.startsWith('/api/attachments') || req.url.startsWith('/api/admin/extensions') || req.url === '/api/extensions') {
     const originalToken=getSessionToken(req), user=getAuthenticatedUser(req);
-    if(await require('./core/extension-routes').handle(req,res,{user,revalidate:()=>{const current=getSessionUser(db,originalToken);return !!current&&current.id===user?.id&&current.is_admin===user?.is_admin;}}))return;
+    if(await require('./core/extension-routes').handle(req,res,{user,imageManaged:id=>!!db.prepare('SELECT id FROM image_attachments WHERE id=?').get(id),revalidate:()=>{const current=getSessionUser(db,originalToken);return !!current&&current.id===user?.id&&current.is_admin===user?.is_admin;}}))return;
 }
 
 // Authenticated AI runtime information
@@ -631,6 +637,7 @@ if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+\/messages$/.test(req.url))
         }
 
         const result = clearChatMessages(chatId, user.id);
+        void require('./core/image-attachments').getImages(db).cleanup().catch(()=>{});
 
         res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
@@ -664,6 +671,7 @@ if (req.method === "DELETE" && /^\/api\/chats\/[^/?]+$/.test(req.url)) {
         const chatId = decodeURIComponent(match[1]);
 
         const deletedChats = deleteChat(chatId, user.id);
+        void require('./core/image-attachments').getImages(db).cleanup().catch(()=>{});
 
         if (deletedChats === 0) {
             res.writeHead(404, {
@@ -875,7 +883,15 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
                 return;
             }
 
-            if (clientRequest.messages.some(m=>typeof m?.content==='string'&&m.content.includes('[Chatbot attachment:'))) clientRequest.messages=await require('./core/attachments').expand(user.id,clientRequest.messages,selectedConnection?providers.usable(selectedConnection).vision:false);
+            if(clientRequest.messages.some(m=>typeof m?.content!=='string'))throw Error('Use authorized image references');
+            if(clientRequest.messages.some(m=>require('./core/image-attachments').references(m.content).length)){
+                if(clientRequest.useTools)throw Error('Image tool execution is not qualified');
+                provider=await require('./core/image-routes').authorizeVision(connections,providers,clientRequest.selection);
+                selectedConnection=provider;
+                clientRequest.messages=await require('./core/image-attachments').getImages(db).expand(user.id,clientRequest.chatId,clientRequest.messages);
+                if(getAuthenticatedUser(req)?.id!==user.id)throw Error('Session expired');
+            }
+            if (clientRequest.messages.some(m=>typeof m?.content==='string'&&m.content.includes('[Chatbot attachment:'))) clientRequest.messages=await require('./core/attachments').expand(user.id,clientRequest.messages,false);
             let extensionConfig;
             if(clientRequest.skillIds?.length || clientRequest.useTools){
                 const extensions=require('./core/extensions');extensionConfig=await extensions.read();

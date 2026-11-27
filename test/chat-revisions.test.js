@@ -15,6 +15,7 @@ function load(db) {
             openExistingDatabase() { require('../core/database-schema').initializeSchema(db); return db; }
         };
         if (name === './auth') return { hashPassword() { throw Error('Unused in tests'); } };
+        if (name === './core/image-attachments') return require('../core/image-attachments');
         return require(name);
     } };
     vm.runInNewContext(source, context, { filename: 'db.js' });

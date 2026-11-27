@@ -246,6 +246,7 @@ if (!messageColumns.some((column) => column.name === "display_content")) {
  );
  CREATE INDEX IF NOT EXISTS gpu_telemetry_time_idx ON gpu_telemetry(sampled_at_unix_ms DESC);
  CREATE INDEX IF NOT EXISTS gpu_telemetry_gpu_time_idx ON gpu_telemetry(gpu_index, sampled_at_unix_ms DESC);`);
+ require('./image-schema').migrate(db);
  db.exec('COMMIT');
  } catch(error) { if(db.isTransaction)db.exec('ROLLBACK'); throw error; }
 }

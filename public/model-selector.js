@@ -4,13 +4,14 @@ function createChatCapabilities({document,fetch,setTimer=setTimeout,clearTimer=c
  const root=document.createElement('div');root.className='chat-capabilities';root.setAttribute('role','status');root.setAttribute('aria-label','Selected model capabilities');
  footer.before(root);
  const css=document.createElement('link');css.rel='stylesheet';css.href='/chat-capabilities.css';document.head.appendChild(css);
- let sequence=0,controller=null,timer=null,imageAllowed=false;
+ let sequence=0,controller=null,timer=null,imageAllowed=false,imageMax=10*1024*1024;
  const state=v=>['verified','unsupported','unknown'].includes(v)?v:'unknown';
  function render(data){
   root.replaceChildren();imageAllowed=data?.imageInputAvailable===true&&data?.capabilities?.vision?.state==='verified';
-  input.accept=imageAllowed?'.txt,.pdf,.docx,.png,.jpg,.jpeg':'.txt,.pdf,.docx';
-  const label=document.querySelector('label[for="attachment"]');if(label)label.title=imageAllowed?'Attach text, PDF, DOCX, PNG or JPEG':'Attach text, PDF or DOCX; image input unavailable or unverified';
-  if(!imageAllowed&&/\.(png|jpe?g)$/i.test(input.files?.[0]?.name||''))document.getElementById('removeAttachment').click();
+  imageMax=Number.isSafeInteger(data?.imageMaxBytes)?data.imageMaxBytes:10*1024*1024;
+  input.accept=imageAllowed?'.txt,.pdf,.docx,.png,.jpg,.jpeg,.webp':'.txt,.pdf,.docx';
+  const label=document.querySelector('label[for="attachment"]');if(label)label.title=imageAllowed?'Attach text, PDF, DOCX, PNG, JPEG or WebP':'Attach text, PDF or DOCX; image input unavailable or unverified';
+  if(!imageAllowed&&/\.(png|jpe?g|webp)$/i.test(input.files?.[0]?.name||''))document.getElementById('removeAttachment').click();
   for(const [key,name] of [['text','Text'],['vision','Vision'],['documents','Documents (app)'],['tools','Tools']]){
    const badge=document.createElement('span'),value=state(data?.capabilities?.[key]?.state);badge.dataset.state=value;badge.textContent=`${name}: ${value}`;
    badge.title=key==='documents'?'Application document-to-text processing; not native vision':key==='tools'?'Model declaration only. Existing tool permissions and behavior remain unchanged.':'Provider-declared metadata; not an inference test.';root.appendChild(badge);
@@ -21,7 +22,7 @@ function createChatCapabilities({document,fetch,setTimer=setTimeout,clearTimer=c
   const note=document.createElement('small');note.textContent=data?.checkedAt?'Metadata checked '+new Date(data.checkedAt).toLocaleString():'Metadata unavailable or not checked. An administrator can refresh capabilities.';root.appendChild(note);
  }
  render(null);
- return {imageAllowed:()=>imageAllowed,async update(selection){
+ return {imageAllowed:()=>imageAllowed,imageMaxBytes:()=>imageMax,async update(selection){
   const ticket=++sequence;controller?.abort();clearTimer(timer);render(null);if(!selection)return;
   controller=new AbortController();const requestController=controller;const deadline=setTimer(()=>requestController.abort(),5000);
   try{const response=await fetch('/api/ai/capabilities?'+new URLSearchParams(selection),{credentials:'same-origin',cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();const data=await response.json();

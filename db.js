@@ -108,6 +108,7 @@ function createMessage(chatId, role, content, telemetry = null, userId, displayC
     displayContent
 );
 
+    require('./core/image-attachments').bind(db,userId,chatId,result.lastInsertRowid,role,content);
     return result.lastInsertRowid;
     });
 }

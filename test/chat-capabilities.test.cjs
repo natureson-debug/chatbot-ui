@@ -3,11 +3,11 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {handle}=require('../core/chat-capabilities');
 const {createDiscovery,cachedCapabilities}=require('../core/model-capabilities');
 const c={id:'chatfixture',name:'Fixture',adapter:'ollama',model:'fixture',endpoint:'http://127.0.0.1:9999',credentialRef:null,parameters:[],enabled:true,capabilities:{streaming:true,vision:true,tools:true},contextLimit:null};
-test('cache-only endpoint filters selection, sessions and image path',async()=>{
+test('capability endpoint filters selection, sessions and supported image adapter',async()=>{
  await createDiscovery()(c,c.model,{secret:async()=>null,fetchImpl:async()=>Response.json({capabilities:['completion','vision','tools']})});
  for(const mode of ['ok','anonymous','revoked','disabled','removed','gate','no-image-path']){
   const res={writeHead(n){this.status=n;},end(b){this.body=JSON.parse(b);}};
-  await handle({url:'/api/ai/capabilities?providerId=chatfixture&model=fixture'},res,{user:mode==='anonymous'?null:{id:'test'},authenticate:()=>mode==='revoked'?null:{id:'test'},read:async()=>({defaultId:c.id,connections:mode==='removed'?[]:[mode==='disabled'?{...c,enabled:false}:c]}),legacy:()=>{throw Error();},permitted:()=>mode!=='gate',imagePath:()=>mode!=='no-image-path'});
+  await handle({url:'/api/ai/capabilities?providerId=chatfixture&model=fixture'},res,{user:mode==='anonymous'?null:{id:'test'},authenticate:()=>mode==='revoked'?null:{id:'test'},read:async()=>({defaultId:c.id,connections:mode==='removed'?[]:[mode==='disabled'?{...c,enabled:false}:mode==='no-image-path'?{...c,adapter:'openai-compatible'}:c]}),legacy:()=>{throw Error();},permitted:()=>mode!=='gate',imagePath:()=>mode!=='no-image-path'});
   assert.equal(res.status,['ok','no-image-path'].includes(mode)?200:['anonymous','revoked'].includes(mode)?401:404);
   if(res.status===200){assert.equal(res.body.imageInputAvailable,mode==='ok');assert(!JSON.stringify(res.body).includes('endpoint'));}
  }

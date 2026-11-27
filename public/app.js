@@ -23,6 +23,11 @@ const chatActionsToggle = document.getElementById("chatActionsToggle");
 const attachmentInput = document.getElementById("attachment");
 const attachmentName = document.getElementById("attachmentName");
 const removeAttachmentButton = document.getElementById("removeAttachment");
+const imagePreview=document.createElement('img');imagePreview.alt='Selected image preview';imagePreview.hidden=true;imagePreview.style.cssText='max-width:96px;max-height:72px;object-fit:contain';attachmentName.before(imagePreview);
+let previewUrl=null;
+function clearImagePreview(){if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=null;imagePreview.removeAttribute('src');imagePreview.hidden=true;}
+attachmentInput.addEventListener('change',()=>{clearImagePreview();const file=attachmentInput.files[0];if(file&&/\.(png|jpe?g|webp)$/i.test(file.name)){previewUrl=URL.createObjectURL(file);imagePreview.src=previewUrl;imagePreview.hidden=false;}});
+window.addEventListener('pagehide',clearImagePreview);
 
 async function notifyChatOperation(severity, title, message) {
     try {
@@ -43,14 +48,10 @@ attachmentInput.addEventListener("change", () => {
     const file = attachmentInput.files[0];
 
     if (file && (
-        ! /\.(txt|pdf|docx|png|jpe?g)$/i.test(file.name) ||
-        file.size > (/\.txt$/i.test(file.name) ? 100 * 1024 : 8 * 1024 * 1024)
+        ! /\.(txt|pdf|docx|png|jpe?g|webp)$/i.test(file.name) ||
+        file.size > (/\.txt$/i.test(file.name) ? 100 * 1024 : /\.(png|jpe?g|webp)$/i.test(file.name)?(globalThis.chatCapabilities?.imageMaxBytes()||10*1024*1024):8*1024*1024)
     )) {
-        if (typeof terminalAlert === "function") {
-            terminalAlert("Please select a .txt file no larger than 100 KB.", "ATTACHMENT ERROR");
-        } else {
-            alert("Please select a .txt file no larger than 100 KB.");
-        }
+        void notifyChatOperation('error','Attachment rejected','Unsupported format or upload size exceeded. Images support PNG, JPEG and WebP up to the server limit.');clearImagePreview();
         attachmentInput.value = "";
         attachmentName.textContent = "";
         attachmentName.hidden = true;
@@ -64,22 +65,24 @@ attachmentInput.addEventListener("change", () => {
 });
 
 removeAttachmentButton.addEventListener("click", () => {
+    clearImagePreview();
     attachmentInput.value = "";
     attachmentName.textContent = "";
     attachmentName.hidden = true;
     removeAttachmentButton.hidden = true;
 });
 
-async function readSelectedAttachment() {
+async function readSelectedAttachment(chatId,selection) {
     const file = attachmentInput.files[0];
     if (!file) return null;
-    if (/\.(png|jpe?g)$/i.test(file.name) && !globalThis.chatCapabilities?.imageAllowed()) throw Error('Image capability unavailable or unverified');
+    const isImage=/\.(png|jpe?g|webp)$/i.test(file.name);
+    if (isImage && !globalThis.chatCapabilities?.imageAllowed()) throw Error('Image capability unavailable or unverified');
 
     if (/\.txt$/i.test(file.name)) return {name:file.name,content:await file.text()};
     const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error('Attachment read failed'));reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(file);});
-    const response=await fetch('/api/attachments',{method:'POST',headers:{'Content-Type':'application/json','X-Chatbot-Action':'extensions'},body:JSON.stringify({name:file.name,base64})});
-    if(!response.ok)throw Error('Unsupported attachment or extraction failed');const item=await response.json();
-    return {name:item.name,content:'[Chatbot attachment: '+item.id+']'};
+    const response=await fetch(isImage?'/api/images':'/api/attachments',{method:'POST',headers:{'Content-Type':'application/json','X-Chatbot-Action':'extensions'},body:JSON.stringify({name:file.name,base64,...(isImage?{chatId,selection}: {})})});
+    if(!response.ok)throw Error(isImage?'Image upload failed. Check format, size, quota and verified model vision support.':'Unsupported attachment or extraction failed');const item=await response.json();
+    return {name:item.name,content:'[Chatbot '+(isImage?'image':'attachment')+': '+item.id+']'};
 }
 
 chatActionsToggle.addEventListener("click", (event) => {
@@ -448,6 +451,7 @@ function restoreChat() {
         message.displayContent ?? message.content
     );
 
+        if(message.role==='user'){const refs=[...message.content.matchAll(/\[Chatbot image: ([a-f0-9-]{36})\]/g)];if(refs.length===1){const thumbnail=document.createElement('img');thumbnail.src='/api/images/'+refs[0][1];thumbnail.alt='Attached image';thumbnail.loading='lazy';thumbnail.style.cssText='max-width:min(100%,240px);max-height:180px;object-fit:contain;display:block';thumbnail.addEventListener('error',()=>{thumbnail.alt='Image unavailable';});restoredMessage.text.appendChild(thumbnail);}}
         if (message.role === "assistant") {
             restoredMessage.text.innerHTML =
                 DOMPurify.sanitize(
@@ -784,7 +788,7 @@ async function sendMessage() {
     stopButton.disabled = false;
     let attachment;
     try {
-        attachment = await readSelectedAttachment();
+        attachment = await readSelectedAttachment(responseChatId,selectedModel);
         if (!generationIsValid(generation)) return;
     } catch (error) {
         if (!generationIsValid(generation)) return;
@@ -797,17 +801,11 @@ async function sendMessage() {
         globalThis.ChatbotNotifications?.show({
             severity: "error",
             title: "Attachment unavailable",
-            message: "The selected attachment could not be read. Choose it again or continue without it."
+            message: error.message || "The selected attachment could not be read. Choose it again or continue without it."
         });
         return;
     }
 
-    if (attachment) {
-        console.log("Attachment ready:", {
-            name: attachment.name,
-            characters: attachment.content.length
-    });
-}
 
 const messageContent = attachment
     ? `${prompt}\n\nAttached file: ${attachment.name}\n\n${attachment.content}`
@@ -821,6 +819,7 @@ const messageContent = attachment
         });
         promptBox.value = "";
         attachmentInput.value = "";
+        clearImagePreview();
         attachmentName.textContent = "";
         attachmentName.hidden = true;
         removeAttachmentButton.hidden = true;

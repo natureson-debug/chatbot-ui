@@ -1,11 +1,12 @@
 'use strict';
-async function handle(req,res,{user,revalidate,extensions:extensionService,credentials:credentialStore}={}){
+async function handle(req,res,{user,revalidate,extensions:extensionService,credentials:credentialStore,imageManaged=()=>false}={}){
  const url=req.url;
  if(!url.startsWith('/api/attachments')&&!url.startsWith('/api/admin/extensions')&&url!=='/api/extensions')return false;
  const reply=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
  if(!user){reply(401,{error:'Authentication required'});return true;}
  const admin=url.startsWith('/api/admin/');if(admin&&user.is_admin!==1){reply(403,{error:'Administrator required'});return true;}
  try{
+ const imageId=/^\/api\/attachments\/([a-f0-9-]{36})$/.exec(url)?.[1];if(imageId&&imageManaged(imageId))throw Error('Use image route');
  const extensions=extensionService||require('./extensions'),credentials=credentialStore||require('./protected-credentials'),attachments=require('./attachments');
  if(req.method==='GET'){
   if(url==='/api/extensions'){const c=await extensions.read();reply(200,{skills:c.skills.filter(s=>s.users.includes('*')||s.users.includes(user.id)).map(s=>({id:s.id,name:s.name})),toolsAvailable:!!c.search?.enabled||c.mcp.some(s=>s.tools.some(t=>t.enabled))});return true;}
@@ -22,7 +23,7 @@ async function handle(req,res,{user,revalidate,extensions:extensionService,crede
  if(!require('./restart-request').validRestartRequest({...req,headers:{...req.headers,'x-chatbot-action':req.headers['x-chatbot-action']==='extensions'?'restart-ai':null}})){reply(403,{error:'Same-origin request required'});return true;}
  let body='';for await(const b of req){body+=b;if(body.length>(url==='/api/attachments'?12*1024*1024:url==='/api/admin/extensions/brave-credential'?8192:512*1024))throw Error();}
  if(!revalidate()){reply(401,{error:'Session expired'});return true;}
- if(req.method==='POST'&&url==='/api/attachments'){const a=await attachments.save(user.id,JSON.parse(body));reply(201,a);return true;}
+ if(req.method==='POST'&&url==='/api/attachments'){const input=JSON.parse(body);if(/\.(png|jpe?g|webp)$/i.test(input?.name||''))throw Error('Use image upload');const a=await attachments.save(user.id,input);reply(201,a);return true;}
  if(req.method==='DELETE'&&/^\/api\/attachments\/[a-f0-9-]{36}$/.test(url)){await attachments.remove(user.id,url.split('/')[3]);reply(200,{deleted:true});return true;}
  if(admin&&req.method==='POST'&&url==='/api/admin/extensions/brave-credential'){
   const input=JSON.parse(body);

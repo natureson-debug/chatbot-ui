@@ -8,10 +8,12 @@ async function handle(req,res,{user,authenticate,read,legacy,permitted,imagePath
   const selected=require('./chat-models').resolve(config,selection,c?.id==='legacy-local'?c:null);
   if(!permitted(selected))throw Error();
   const current=authenticate();if(!current||current.id!==user.id){reply(401,{error:'Session no longer authorized'});return;}
-  const observation=require('./model-capabilities').cachedCapabilities(c,selection.model);
+  let observation=require('./model-capabilities').cachedCapabilities(c,selection.model);
+  if(!observation&&c.adapter==='ollama'){try{observation=await require('./provider-adapter').capabilities(c,selection.model);}catch{}}
+  const finalUser=authenticate();if(!finalUser||finalUser.id!==user.id){reply(401,{error:'Session no longer authorized'});return;}
   reply(200,{...selection,checkedAt:observation?.checkedAt??null,
    capabilities:observation?.capabilities??Object.fromEntries(['text','vision','documents','tools'].map(k=>[k,{state:'unknown',scope:k==='documents'?'application':'native',method:'not-checked',verifiedAt:null}])),
-   imageInputAvailable:observation?.capabilities.vision.state==='verified'&&imagePath(selected)===true});
+   imageInputAvailable:observation?.capabilities.vision.state==='verified'&&selected.adapter==='ollama',imageMaxBytes:require('./image-attachments').limits().max});
  }catch{reply(404,{error:'Model capabilities unavailable'});}
 }
 module.exports={handle};
