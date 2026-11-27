@@ -23,7 +23,7 @@ async function handle(req,res,{db,user,authenticate,catalog}){
   }
   const models=await catalog();if(authenticate()?.id!==user.id){reply(401,{error:'Session expired'});return;}
   const preferences=req.method==='POST'?save(db,user.id,input,models):load(db,user.id,models);
-  reply(200,{preferences,models,active:false});
+  reply(200,{preferences,models,active:preferences.enabled&&require('./vision-routing').freeProviders().size>0,implementedTasks:['vision']});
  }catch{reply(400,{error:'Routing preferences unavailable or invalid'});}
 }
 module.exports={defaults,validate,load,save,handle};

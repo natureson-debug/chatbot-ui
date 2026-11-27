@@ -929,6 +929,7 @@ try {
         if (!generationIsValid(generation)) return;
         const requestModel = response.headers?.get?.("X-Chat-Model");
         serverPersistence=response.headers?.get?.('X-Chat-Persistence')==='server';
+        if(response.headers?.get?.('X-Chat-Routing')==='post-task-preference-deferred-default-preserved')void notifyChatOperation('info','Temporary vision model','Your selected model is preserved. Keep-specialized and post-task confirmation behavior are not implemented yet.');
         if (requestModel) { try { assistantMessage.roleLabel.textContent = decodeURIComponent(requestModel); } catch {} }
         const requestProvider = response.headers?.get?.("X-Chat-Provider");
         if(requestModel){try{responseIdentity={model:decodeURIComponent(requestModel),provider:requestProvider?decodeURIComponent(requestProvider):''};assistantMessage.roleLabel.textContent=[responseIdentity.provider,responseIdentity.model].filter(Boolean).join(' / ');}catch{}}

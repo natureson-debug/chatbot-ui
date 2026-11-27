@@ -239,7 +239,8 @@ if (req.method === "GET" && req.url === "/api/chats") {
 if(req.url==='/api/images'||req.url.startsWith('/api/images/')){
  const token=getSessionToken(req),user=getAuthenticatedUser(req);
  const images=require('./core/image-attachments').getImages(db);
- await require('./core/image-routes').handle(req,res,{user,authorize:()=>!!user&&getSessionUser(db,token)?.id===user.id,images,vision:s=>require('./core/image-routes').authorizeVision(connections,providers,s)});return;
+ const authorize=()=>!!user&&getSessionUser(db,token)?.id===user.id;
+ await require('./core/image-routes').handle(req,res,{user,authorize,images,vision:async s=>(await require('./core/vision-routing').select({db,user:user.id,connections,providers,selection:s,authorize}))?.provider||require('./core/image-routes').authorizeVision(connections,providers,s)});return;
 }
 if (req.url.startsWith('/api/attachments') || req.url.startsWith('/api/admin/extensions') || req.url === '/api/extensions') {
     const originalToken=getSessionToken(req), user=getAuthenticatedUser(req);
@@ -315,7 +316,8 @@ if(req.method==='GET' && req.url.split('?')[0]==='/api/ai/capabilities'){
   user,authenticate:()=>getSessionUser(db,token),read:()=>connections.read(),
   legacy:()=>buildLegacyProvider(),
   permitted:c=>!['openai-responses','deepseek-chat'].includes(c.adapter)||require('./core/openai-usage').forProvider(c.adapter==='deepseek-chat'?'deepseek':'openai').settings(db).enabled===1,
-  imagePath:c=>providers.usable(c).vision
+  imagePath:c=>providers.usable(c).vision,
+  automaticVision:selection=>require('./core/vision-routing').select({db,user:user.id,connections,providers,selection,authorize:()=>getSessionUser(db,token)?.id===user.id})
  });return;
 }
 if (req.method === "GET" && req.url === "/api/ai/models") {
@@ -863,6 +865,21 @@ if (req.method === "PATCH" && /^\/api\/chats\/[^/?]+\/scroll$/.test(req.url)) {
             }
 
             const clientRequest = JSON.parse(body);
+            if(require('./core/vision-routing').currentImage(clientRequest)&&require('./core/vision-routing').preferences(db,user.id).enabled){
+                const token=getSessionToken(req),authorize=()=>getSessionUser(db,token)?.id===user.id;
+                const controller=new AbortController(),disconnect=()=>controller.abort();res.once('close',disconnect);
+                try{
+                    if(clientRequest.useTools||!Array.isArray(clientRequest.messages)||clientRequest.messages.some(m=>typeof m?.content!=='string'))throw require('./core/vision-routing').failure('VISION_TOOLS_OR_INPUT_UNSUPPORTED');
+                    const images=require('./core/image-attachments').getImages(db);
+                    await images.expand(user.id,clientRequest.chatId,clientRequest.messages);
+                    const routed=await require('./core/vision-routing').select({db,user:user.id,connections,providers,selection:clientRequest.selection,authorize,signal:controller.signal});
+                    if(!routed||controller.signal.aborted)throw require('./core/vision-routing').failure('VISION_ROUTING_CHANGED');
+                    let skills;
+                    if(clientRequest.skillIds?.length){const extensions=require('./core/extensions');skills=extensions.activateSkills((await extensions.read()).skills,clientRequest.skillIds,user.id);}
+                    await require('./core/vision-response').serve({db,req,res,user:user.id,input:clientRequest,routed,providers,authorize,images,skills});
+                }catch(e){if(!res.destroyed){res.writeHead(409,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Automatic vision routing unavailable. Check preferences or manually select a verified vision model. Fallback requiring confirmation is not performed.',code:/^(VISION_|NO_ELIGIBLE_|SESSION_)/.test(e.code||'')?e.code:'VISION_ROUTING_UNAVAILABLE'}));}}
+                finally{controller.abort();res.off('close',disconnect);}return;
+            }
             if (clientRequest.selection !== undefined) {
                 try {
                     const registry=await connections.read();

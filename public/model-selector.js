@@ -7,7 +7,7 @@ function createChatCapabilities({document,fetch,setTimer=setTimeout,clearTimer=c
  let sequence=0,controller=null,timer=null,imageAllowed=false,imageMax=10*1024*1024,last=null;
  const state=v=>['verified','unsupported','unknown'].includes(v)?v:'unknown';
  function render(data){
-  root.replaceChildren();imageAllowed=data?.freshness!=='stale'&&data?.imageInputAvailable===true&&data?.capabilities?.vision?.state==='verified';
+  root.replaceChildren();imageAllowed=data?.freshness!=='stale'&&(data?.automaticImageInput===true||data?.imageInputAvailable===true&&data?.capabilities?.vision?.state==='verified');
   imageMax=Number.isSafeInteger(data?.imageMaxBytes)?data.imageMaxBytes:10*1024*1024;
   input.accept=imageAllowed?'.txt,.pdf,.docx,.png,.jpg,.jpeg,.webp':'.txt,.pdf,.docx';
   const label=document.querySelector('label[for="attachment"]');if(label)label.title=imageAllowed?'Attach text, PDF, DOCX, PNG, JPEG or WebP':'Attach text, PDF or DOCX; image input unavailable or unverified';
@@ -16,7 +16,7 @@ function createChatCapabilities({document,fetch,setTimer=setTimeout,clearTimer=c
    const badge=document.createElement('span'),value=state(data?.capabilities?.[key]?.state);badge.dataset.state=value;badge.textContent=`${name}: ${value}`;
    badge.title=key==='documents'?'Application document-to-text processing; not native vision':key==='tools'?'Model declaration only. Existing tool permissions and behavior remain unchanged.':'Provider-declared metadata; not an inference test.';root.appendChild(badge);
   }
-  const image=document.createElement('button');image.type='button';image.textContent=imageAllowed?'Image':'Image unavailable';image.disabled=!imageAllowed;
+  const image=document.createElement('button');image.type='button';image.textContent=imageAllowed?(data?.automaticImageInput?'Image (automatic vision)':'Image'):'Image unavailable';image.disabled=!imageAllowed;
   image.title=imageAllowed?'Use the existing attachment picker':'Image input unavailable: vision must be verified and the configured adapter must support images.';
   image.addEventListener('click',()=>{if(imageAllowed)input.click();});root.appendChild(image);
   const note=document.createElement('small');note.textContent=data?.checkedAt?(data.freshness==='stale'?'Metadata stale; refreshing. Last checked ':'Metadata checked ')+new Date(data.checkedAt).toLocaleString():'Metadata unavailable or not checked. Automatic refresh will retry.';root.appendChild(note);

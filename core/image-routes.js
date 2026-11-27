@@ -10,7 +10,7 @@ async function handle(req,res,{user,authorize,images,vision}){
   if(req.method!=='POST'||req.url!=='/api/images'){reply(405,{error:'Method unavailable'});return;}
   let body='';for await(const chunk of req){body+=chunk;if(body.length>Math.ceil(require('./image-attachments').limits().max/3)*4+4096)throw Error();}
   const input=JSON.parse(body);await vision(input.selection);if(!authorize())throw Error();reply(201,await images.save(user.id,input,authorize));
- }catch{reply(400,{error:'Image unavailable: check format, size, quota, conversation and verified vision support.'});}
+ }catch(e){const routing=/^(VISION_|NO_ELIGIBLE_)/.test(e.code||'');reply(400,{error:routing?'Automatic vision routing unavailable. Fallback needs permission or no eligible model exists; review preferences or select a verified vision model manually.':'Image unavailable: check format, size, quota, conversation and verified vision support.',...(routing?{code:e.code}:{})});}
 }
 async function authorizeVision(connections,providers,selection){
  const config=await connections.read();const chosen=selection??require('./chat-models').defaultChoice(config,null);
