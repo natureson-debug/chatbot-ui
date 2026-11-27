@@ -40,3 +40,24 @@ test('expiry removes selected image and fails closed',async()=>{
 test('theme/mobile styles and existing text/tools workflow preserved',()=>{
  const fs=require('node:fs'),css=fs.readFileSync('public/chat-capabilities.css','utf8'),js=fs.readFileSync('public/model-selector.js','utf8');assert(css.includes('--theme-text'));assert(css.includes('flex-wrap:wrap'));assert(css.includes('@media(max-width:600px)'));assert(css.includes(':focus-visible'));assert(!js.includes('skillIds'));assert(!js.includes('allowTools'));assert(!js.includes('localStorage'));assert(js.includes('saveUserSettings()'));
 });
+
+test('expiry refresh succeeds, transient failure retains labels but disables images',async()=>{
+ let calls=0,fail=false;const f=fixture(async()=>{calls++;if(fail)throw Error();return {ok:true,json:async()=>data('refresh')};});
+ const selection={providerId:'fixture',model:'refresh'};await f.monitor.update(selection);assert.equal(calls,1);
+ await f.monitor.update(selection,true);assert.equal(calls,2);assert(f.monitor.imageAllowed());
+ fail=true;await f.monitor.update(selection,true);assert(output(f).includes('Vision: verified'));assert(output(f).includes('Metadata stale'));assert(!f.monitor.imageAllowed());assert(f.root.children[4].disabled);assert([...f.timers.values()].some(t=>t.ms===30000));
+ await f.monitor.update({...selection,model:'different'});assert(output(f).includes('Vision: unknown'));
+});
+test('server rediscovers empty cache and retains expired profile without image authorization',async()=>{
+ const connection={...c,id:'restartfixture'};const config={revision:1,defaultId:connection.id,connections:[connection]};let calls=0;
+ const discover=createDiscovery();const original=Date.now;let clock=original();Date.now=()=>clock;
+ const run=async(discovery)=>{const res={writeHead(n){this.status=n;},end(b){this.body=JSON.parse(b);}};await handle({url:'/api/ai/capabilities?providerId=restartfixture&model=fixture'},res,{user:{id:'u'},authenticate:()=>({id:'u'}),read:async()=>config,permitted:()=>true,discover:discovery});return res.body;};
+ try{
+ const success=()=>discover(connection,'fixture',{secret:async()=>null,fetchImpl:async()=>{calls++;return Response.json({capabilities:['completion','vision']});}});
+ assert.equal((await run(success)).freshness,'fresh');assert.equal(calls,1);
+ clock=Date.parse(cachedCapabilities(connection,'fixture',clock,true).checkedAt)+300001;assert.equal(cachedCapabilities(connection,'fixture'),null);
+ const failure=()=>discover(connection,'fixture',{secret:async()=>null,fetchImpl:async()=>{calls++;throw Error('private diagnostic');}});
+ const stale=await run(failure);assert.equal(stale.freshness,'stale');assert.equal(stale.capabilities.vision.state,'verified');assert.equal(stale.imageInputAvailable,false);
+ await run(failure);assert.equal(calls,2);assert(!JSON.stringify(stale).includes('private diagnostic'));
+ }finally{Date.now=original;}
+});

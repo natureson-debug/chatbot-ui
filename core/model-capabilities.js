@@ -1,9 +1,9 @@
 'use strict';
 const {resourceUrl}=require('./context-telemetry');
 const observations=new Map();
-function cachedCapabilities(c,model,now=Date.now()){
+function cachedCapabilities(c,model,now=Date.now(),allowStale=false){
  const value=observations.get(JSON.stringify([c,model]));
- if(!value||now-Date.parse(value.checkedAt)>300000||now<Date.parse(value.checkedAt))return null;
+ if(!value||(!allowStale&&(now-Date.parse(value.checkedAt)>300000||now<Date.parse(value.checkedAt))))return null;
  return structuredClone(value);
 }
 function classify(c,model,data,checkedAt){
@@ -21,10 +21,11 @@ function classify(c,model,data,checkedAt){
  return {providerId:c.id,model,checkedAt,capabilities};
 }
 function createDiscovery(){
- const cache=new Map(),pending=new Map();
+ const cache=new Map(),pending=new Map(),failures=new Map();
  return async function discover(c,model,{fetchImpl,secret,signal}={}){
   if(!require('./provider-models').list(c).some(m=>m.id===model))throw Error('Configured model required');
   const key=JSON.stringify([c,model]);
+  if(failures.has(key)&&Date.now()-failures.get(key)<30000)throw Error("Model capability metadata unavailable");
   const old=cache.get(key);if(old&&Date.now()-old.time<15000)return structuredClone(old.value);
   if(pending.has(key))return structuredClone(await pending.get(key));
   if(pending.size>=4)throw Error('Capability discovery busy');
@@ -52,7 +53,7 @@ function createDiscovery(){
    cache.set(key,{time:Date.now(),value});return value;
   })();
   pending.set(key,operation);
-  try{return structuredClone(await operation);}catch{observations.delete(key);throw Error('Model capability metadata unavailable');}finally{pending.delete(key);}
+  try{return structuredClone(await operation);}catch{if(failures.size>=100)failures.delete(failures.keys().next().value);failures.set(key,Date.now());throw Error('Model capability metadata unavailable');}finally{pending.delete(key);}
  };
 }
 module.exports={classify,createDiscovery,cachedCapabilities};
